@@ -1,0 +1,50 @@
+[project]
+name = "analog"
+version = "0.1.0"
+description = "A shared canvas for one human and their agents."
+requires-python = ">=3.11"
+
+# Pinned exactly. Resolved 2026-08-28 against Python 3.14.
+dependencies = [
+  "fastapi==0.141.1",
+  "starlette==1.6.0",
+  "uvicorn[standard]==0.52.4",
+  "pydantic==2.13.5",
+  "sse-starlette==3.4.8",
+  "python-multipart==0.0.32",
+  "python-ulid==4.0.1",
+  "httpx==0.28.1",
+  "typer==0.27.2",
+]
+
+[project.optional-dependencies]
+mcp = ["fastmcp==3.4.7"]
+dev = [
+  "pytest==9.1.1",
+  "pytest-asyncio==1.4.0",
+  "jsonschema==4.26.0",
+  "openapi-spec-validator==0.9.0",
+  "openjsoncanvas==3.0.0",
+]
+
+[project.scripts]
+analog = "cli.main:main"
+analog-mcp = "mcp_server.server:main"
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["server", "client", "cli", "mcp_server"]
+
+[tool.setuptools.package-data]
+server = ["schema.sql"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+filterwarnings = ["error::DeprecationWarning:analog.*"]
+markers = [
+  "contract: asserts behaviour pinned by contracts/ or SPEC.md",
+]

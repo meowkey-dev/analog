@@ -1,0 +1,573 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Analog API",
+    "version": "0.1.0",
+    "description": "Shared canvas for a human and their agents. FROZEN CONTRACT — amendments go through WP0 only. Every mutating operation requires actor and actor_kind and emits exactly one event."
+  },
+  "servers": [{ "url": "http://127.0.0.1:8787/api" }],
+  "components": {
+    "parameters": {
+      "slug": {
+        "name": "slug", "in": "path", "required": true,
+        "schema": { "type": "string", "pattern": "^[a-z0-9-]{1,64}$" }
+      },
+      "actor": {
+        "name": "actor", "in": "query", "required": true,
+        "description": "'human' for UI writes, otherwise the agent's name. No default: an unconfigured agent must fail loudly.",
+        "schema": { "type": "string", "minLength": 1, "maxLength": 64 }
+      },
+      "actorKind": {
+        "name": "actor_kind", "in": "query", "required": true,
+        "schema": { "type": "string", "enum": ["human", "agent"] }
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "required": ["error", "message"],
+        "properties": {
+          "error": { "type": "string", "enum": [
+            "not_found", "conflict", "validation_failed", "actor_required", "unsupported_kind"
+          ]},
+          "message": { "type": "string" },
+          "detail": { "type": "object", "additionalProperties": true }
+        }
+      },
+      "Space": {
+        "type": "object",
+        "required": ["id", "slug", "title", "revision_mode", "seq", "created_at"],
+        "properties": {
+          "id": { "type": "string" },
+          "slug": { "type": "string" },
+          "title": { "type": "string" },
+          "revision_mode": { "type": "string", "enum": ["replace", "branch"] },
+          "seq": { "type": "integer" },
+          "created_at": { "type": "string", "format": "date-time" },
+          "counts": {
+            "type": "object",
+            "properties": {
+              "cards": { "type": "integer" },
+              "links": { "type": "integer" },
+              "open_annotations": { "type": "integer" }
+            }
+          }
+        }
+      },
+      "Node": {
+        "type": "object",
+        "description": "JSON Canvas 1.0 node plus sp_* extensions. Additional properties are permitted and preserved verbatim.",
+        "additionalProperties": true,
+        "required": ["id", "type", "x", "y", "width", "height"],
+        "properties": {
+          "id": { "type": "string" },
+          "type": { "type": "string", "enum": ["text", "file", "link", "group"] },
+          "x": { "type": "number" },
+          "y": { "type": "number" },
+          "width": { "type": "number" },
+          "height": { "type": "number" },
+          "color": { "type": "string" },
+          "text": { "type": "string", "description": "Present when type=text." },
+          "file": { "type": "string", "description": "Present when type=file. URL from POST /media." },
+          "sp_kind": {
+            "type": "string",
+            "enum": ["md", "html", "svg", "plain"],
+            "description": "How to render `text`. Meaningful only on text nodes."
+          },
+          "sp_title": { "type": "string" },
+          "sp_created_by": { "type": "string" },
+          "sp_rev": { "type": "integer" },
+          "sp_superseded_by": { "type": "string", "description": "Set in branch mode; points at the replacement card." },
+          "sp_meta": { "type": "object", "additionalProperties": true }
+        }
+      },
+      "Edge": {
+        "type": "object",
+        "description": "JSON Canvas 1.0 edge.",
+        "additionalProperties": true,
+        "required": ["id", "fromNode", "toNode"],
+        "properties": {
+          "id": { "type": "string" },
+          "fromNode": { "type": "string" },
+          "fromSide": { "type": "string", "enum": ["top", "right", "bottom", "left"] },
+          "toNode": { "type": "string" },
+          "toSide": { "type": "string", "enum": ["top", "right", "bottom", "left"] },
+          "label": { "type": "string" },
+          "color": { "type": "string" },
+          "sp_created_by": { "type": "string" }
+        }
+      },
+      "Canvas": {
+        "type": "object",
+        "required": ["nodes", "edges"],
+        "properties": {
+          "nodes": { "type": "array", "items": { "$ref": "#/components/schemas/Node" } },
+          "edges": { "type": "array", "items": { "$ref": "#/components/schemas/Edge" } }
+        }
+      },
+      "CardDraft": {
+        "type": "object",
+        "description": "Agent-friendly card input. Geometry is optional; the server auto-places when x/y are omitted.",
+        "required": ["title", "content"],
+        "properties": {
+          "title": { "type": "string" },
+          "content": { "type": "string" },
+          "kind": { "type": "string", "enum": ["md", "html", "svg", "plain"], "default": "md" },
+          "x": { "type": "number" }, "y": { "type": "number" },
+          "width": { "type": "number" }, "height": { "type": "number" },
+          "color": { "type": "string" },
+          "meta": { "type": "object", "additionalProperties": true }
+        }
+      },
+      "Selector": {
+        "description": "Normalized fractions of the card box. null means the whole card.",
+        "oneOf": [
+          { "type": "null" },
+          {
+            "type": "object", "required": ["type", "x", "y"],
+            "properties": {
+              "type": { "const": "point" },
+              "x": { "type": "number", "minimum": 0, "maximum": 1 },
+              "y": { "type": "number", "minimum": 0, "maximum": 1 }
+            }
+          },
+          {
+            "type": "object", "required": ["type", "x", "y", "w", "h"],
+            "properties": {
+              "type": { "const": "rect" },
+              "x": { "type": "number" }, "y": { "type": "number" },
+              "w": { "type": "number" }, "h": { "type": "number" }
+            }
+          }
+        ]
+      },
+      "Annotation": {
+        "type": "object",
+        "required": ["id", "card_id", "card_rev", "body", "motivation", "creator", "creator_kind", "resolved", "stale", "created_at"],
+        "properties": {
+          "id": { "type": "string" },
+          "card_id": { "type": "string" },
+          "card_title": { "type": "string" },
+          "card_rev": { "type": "integer" },
+          "selector": { "$ref": "#/components/schemas/Selector" },
+          "body": { "type": "string" },
+          "motivation": { "type": "string", "enum": ["commenting", "assessing", "editing"] },
+          "creator": { "type": "string" },
+          "creator_kind": { "type": "string", "enum": ["human", "agent"] },
+          "resolved": { "type": "boolean" },
+          "resolved_reply": { "type": ["string", "null"] },
+          "stale": { "type": "boolean", "description": "Computed: card_rev < current card rev." },
+          "created_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "Event": {
+        "type": "object",
+        "required": ["seq", "ts", "type", "subject_id", "actor", "actor_kind"],
+        "properties": {
+          "seq": { "type": "integer" },
+          "ts": { "type": "string", "format": "date-time" },
+          "type": { "type": "string", "enum": [
+            "card.created", "card.updated", "card.moved", "card.deleted",
+            "link.created", "link.deleted",
+            "annotation.created", "annotation.resolved"
+          ]},
+          "subject_id": { "type": "string" },
+          "actor": { "type": "string" },
+          "actor_kind": { "type": "string", "enum": ["human", "agent"] },
+          "payload": { "type": "object", "additionalProperties": true }
+        }
+      },
+      "Feedback": {
+        "type": "object",
+        "description": "Annotations are cursor-independent: all unresolved ones are returned every call. Card and link deltas are cursor-governed and exclude events authored by the calling actor.",
+        "required": ["cursor", "annotations", "cards_edited", "cards_deleted", "cards_moved", "links_added", "links_removed", "summary"],
+        "properties": {
+          "cursor": { "type": "integer" },
+          "annotations": { "type": "array", "items": { "$ref": "#/components/schemas/Annotation" } },
+          "cards_edited": { "type": "array", "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" }, "title": { "type": "string" },
+              "changed": { "type": "array", "items": { "type": "string" } },
+              "actor": { "type": "string" }
+            }
+          }},
+          "cards_deleted": { "type": "array", "items": {
+            "type": "object",
+            "properties": { "id": { "type": "string" }, "title": { "type": "string" }, "actor": { "type": "string" } }
+          }},
+          "cards_moved": { "type": "array", "items": {
+            "type": "object",
+            "properties": { "id": { "type": "string" }, "title": { "type": "string" }, "actor": { "type": "string" } }
+          }},
+          "links_added": { "type": "array", "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" }, "from": { "type": "string" }, "to": { "type": "string" },
+              "label": { "type": "string" }, "actor": { "type": "string" }
+            }
+          }},
+          "links_removed": { "type": "array", "items": {
+            "type": "object",
+            "properties": { "id": { "type": "string" }, "actor": { "type": "string" } }
+          }},
+          "summary": { "type": "string", "description": "One human-readable line. Empty string when nothing changed." }
+        }
+      }
+    },
+    "responses": {
+      "NotFound": {
+        "description": "No such space, card, link or annotation.",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+      },
+      "ActorRequired": {
+        "description": "actor or actor_kind missing.",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+      }
+    }
+  },
+  "paths": {
+    "/spaces": {
+      "get": {
+        "operationId": "listSpaces",
+        "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": {
+          "type": "array", "items": { "$ref": "#/components/schemas/Space" } } } } } }
+      },
+      "post": {
+        "operationId": "createSpace",
+        "parameters": [
+          { "$ref": "#/components/parameters/actor" },
+          { "$ref": "#/components/parameters/actorKind" }
+        ],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": {
+          "type": "object", "required": ["slug", "title"],
+          "properties": {
+            "slug": { "type": "string", "pattern": "^[a-z0-9-]{1,64}$" },
+            "title": { "type": "string" },
+            "revision_mode": { "type": "string", "enum": ["replace", "branch"], "default": "replace" }
+          }
+        } } } },
+        "responses": {
+          "201": { "description": "Created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Space" } } } },
+          "400": { "$ref": "#/components/responses/ActorRequired" },
+          "409": { "description": "Slug already exists.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/spaces/{slug}": {
+      "parameters": [{ "$ref": "#/components/parameters/slug" }],
+      "get": {
+        "operationId": "getSpace",
+        "responses": {
+          "200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Space" } } } },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      },
+      "patch": {
+        "operationId": "updateSpace",
+        "parameters": [
+          { "$ref": "#/components/parameters/actor" },
+          { "$ref": "#/components/parameters/actorKind" }
+        ],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": {
+          "type": "object",
+          "properties": {
+            "title": { "type": "string" },
+            "revision_mode": { "type": "string", "enum": ["replace", "branch"] }
+          }
+        } } } },
+        "responses": {
+          "200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Space" } } } },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      },
+      "delete": {
+        "operationId": "deleteSpace",
+        "parameters": [
+          { "$ref": "#/components/parameters/actor" },
+          { "$ref": "#/components/parameters/actorKind" }
+        ],
+        "responses": { "204": { "description": "Deleted" }, "404": { "$ref": "#/components/responses/NotFound" } }
+      }
+    },
+    "/spaces/{slug}/canvas": {
+      "parameters": [{ "$ref": "#/components/parameters/slug" }],
+      "get": {
+        "operationId": "getCanvas",
+        "description": "Live cards and links. Soft-deleted rows are excluded. Valid JSON Canvas 1.0.",
+        "parameters": [{
+          "name": "include_deleted", "in": "query", "required": false,
+          "schema": { "type": "boolean", "default": false }
+        }],
+        "responses": {
+          "200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Canvas" } } } },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/spaces/{slug}/import": {
+      "parameters": [{ "$ref": "#/components/parameters/slug" }],
+      "post": {
+        "operationId": "importCanvas",
+        "description": "Additive only. Creates cards and links; never updates or deletes. Incoming ids are remapped to fresh ones. Emits one card.created / link.created event per item.",
+        "parameters": [
+          { "$ref": "#/components/parameters/actor" },
+          { "$ref": "#/components/parameters/actorKind" }
+        ],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Canvas" } } } },
+        "responses": {
+          "201": { "description": "Imported", "content": { "application/json": { "schema": {
+            "type": "object",
+            "properties": {
+              "id_map": { "type": "object", "additionalProperties": { "type": "string" } },
+              "canvas": { "$ref": "#/components/schemas/Canvas" }
+            }
+          } } } },
+          "400": { "$ref": "#/components/responses/ActorRequired" }
+        }
+      }
+    },
+    "/spaces/{slug}/cards": {
+      "parameters": [{ "$ref": "#/components/parameters/slug" }],
+      "post": {
+        "operationId": "createCards",
+        "description": "Bulk create. Accepts either agent-friendly drafts or raw JSON Canvas nodes.",
+        "parameters": [
+          { "$ref": "#/components/parameters/actor" },
+          { "$ref": "#/components/parameters/actorKind" }
+        ],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": {
+          "type": "object",
+          "oneOf": [
+            { "required": ["cards"], "properties": { "cards": { "type": "array", "items": { "$ref": "#/components/schemas/CardDraft" } } } },
+            { "required": ["nodes"], "properties": { "nodes": { "type": "array", "items": { "$ref": "#/components/schemas/Node" } } } }
+          ]
+        } } } },
+        "responses": {
+          "201": { "description": "Created", "content": { "application/json": { "schema": {
+            "type": "array", "items": { "$ref": "#/components/schemas/Node" } } } } },
+          "400": { "$ref": "#/components/responses/ActorRequired" }
+        }
+      }
+    },
+    "/spaces/{slug}/cards/{card_id}": {
+      "parameters": [
+        { "$ref": "#/components/parameters/slug" },
+        { "name": "card_id", "in": "path", "required": true, "schema": { "type": "string" } }
+      ],
+      "patch": {
+        "operationId": "updateCard",
+        "description": "Partial node update. Geometry-only changes emit card.moved and do NOT bump sp_rev. Any other change emits card.updated and bumps sp_rev.",
+        "parameters": [
+          { "$ref": "#/components/parameters/actor" },
+          { "$ref": "#/components/parameters/actorKind" },
+          {
+            "name": "mode", "in": "query", "required": false,
+            "description": "Overrides the space's revision_mode for this call.",
+            "schema": { "type": "string", "enum": ["replace", "branch"] }
+          },
+          {
+            "name": "If-Match", "in": "header", "required": false,
+            "description": "Expected sp_rev. On mismatch returns 409 with the current node.",
+            "schema": { "type": "integer" }
+          }
+        ],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": {
+          "type": "object", "additionalProperties": true,
+          "description": "Any subset of Node properties."
+        } } } },
+        "responses": {
+          "200": { "description": "Updated. In branch mode this is the NEW card; the superseded one carries sp_superseded_by.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Node" } } } },
+          "400": { "$ref": "#/components/responses/ActorRequired" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "description": "If-Match did not match current sp_rev.", "content": { "application/json": { "schema": {
+            "type": "object",
+            "properties": {
+              "error": { "const": "conflict" },
+              "message": { "type": "string" },
+              "current": { "$ref": "#/components/schemas/Node" }
+            }
+          } } } }
+        }
+      },
+      "delete": {
+        "operationId": "deleteCard",
+        "description": "Soft delete. The row is retained and appears in feedback as cards_deleted.",
+        "parameters": [
+          { "$ref": "#/components/parameters/actor" },
+          { "$ref": "#/components/parameters/actorKind" }
+        ],
+        "responses": { "204": { "description": "Deleted" }, "404": { "$ref": "#/components/responses/NotFound" } }
+      }
+    },
+    "/spaces/{slug}/links": {
+      "parameters": [{ "$ref": "#/components/parameters/slug" }],
+      "post": {
+        "operationId": "createLinks",
+        "parameters": [
+          { "$ref": "#/components/parameters/actor" },
+          { "$ref": "#/components/parameters/actorKind" }
+        ],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": {
+          "type": "object", "required": ["edges"],
+          "properties": { "edges": { "type": "array", "items": {
+            "type": "object", "required": ["fromNode", "toNode"],
+            "properties": {
+              "fromNode": { "type": "string" }, "toNode": { "type": "string" },
+              "fromSide": { "type": "string" }, "toSide": { "type": "string" },
+              "label": { "type": "string" }, "color": { "type": "string" }
+            }
+          } } }
+        } } } },
+        "responses": {
+          "201": { "description": "Created", "content": { "application/json": { "schema": {
+            "type": "array", "items": { "$ref": "#/components/schemas/Edge" } } } } },
+          "400": { "$ref": "#/components/responses/ActorRequired" },
+          "404": { "description": "fromNode or toNode does not exist.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/spaces/{slug}/links/{link_id}": {
+      "parameters": [
+        { "$ref": "#/components/parameters/slug" },
+        { "name": "link_id", "in": "path", "required": true, "schema": { "type": "string" } }
+      ],
+      "delete": {
+        "operationId": "deleteLink",
+        "parameters": [
+          { "$ref": "#/components/parameters/actor" },
+          { "$ref": "#/components/parameters/actorKind" }
+        ],
+        "responses": { "204": { "description": "Deleted" }, "404": { "$ref": "#/components/responses/NotFound" } }
+      }
+    },
+    "/spaces/{slug}/annotations": {
+      "parameters": [{ "$ref": "#/components/parameters/slug" }],
+      "get": {
+        "operationId": "listAnnotations",
+        "parameters": [
+          { "name": "resolved", "in": "query", "schema": { "type": "boolean" } },
+          { "name": "card_id", "in": "query", "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": {
+          "type": "array", "items": { "$ref": "#/components/schemas/Annotation" } } } } } }
+      },
+      "post": {
+        "operationId": "createAnnotation",
+        "parameters": [
+          { "$ref": "#/components/parameters/actor" },
+          { "$ref": "#/components/parameters/actorKind" }
+        ],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": {
+          "type": "object", "required": ["card_id", "body"],
+          "properties": {
+            "card_id": { "type": "string" },
+            "selector": { "$ref": "#/components/schemas/Selector" },
+            "body": { "type": "string" },
+            "motivation": { "type": "string", "enum": ["commenting", "assessing", "editing"], "default": "commenting" }
+          }
+        } } } },
+        "responses": {
+          "201": { "description": "Created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Annotation" } } } },
+          "400": { "$ref": "#/components/responses/ActorRequired" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/spaces/{slug}/annotations/{annotation_id}": {
+      "parameters": [
+        { "$ref": "#/components/parameters/slug" },
+        { "name": "annotation_id", "in": "path", "required": true, "schema": { "type": "string" } }
+      ],
+      "patch": {
+        "operationId": "resolveAnnotation",
+        "parameters": [
+          { "$ref": "#/components/parameters/actor" },
+          { "$ref": "#/components/parameters/actorKind" }
+        ],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": {
+          "type": "object",
+          "properties": { "resolved": { "type": "boolean" }, "reply": { "type": "string" } }
+        } } } },
+        "responses": {
+          "200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Annotation" } } } },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/spaces/{slug}/feedback": {
+      "parameters": [{ "$ref": "#/components/parameters/slug" }],
+      "get": {
+        "operationId": "getFeedback",
+        "description": "The delta an agent reads at the start of a turn. Delta computation lives here, not in the clients — MCP and CLI are thin proxies over this endpoint.",
+        "parameters": [
+          { "$ref": "#/components/parameters/actor" },
+          {
+            "name": "since", "in": "query", "required": false,
+            "description": "Overrides the stored per-actor cursor. For replay and debugging.",
+            "schema": { "type": "integer" }
+          },
+          {
+            "name": "advance", "in": "query", "required": false,
+            "description": "Whether to advance the stored cursor. false lets a client peek without consuming.",
+            "schema": { "type": "boolean", "default": true }
+          }
+        ],
+        "responses": {
+          "200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Feedback" } } } },
+          "400": { "$ref": "#/components/responses/ActorRequired" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/spaces/{slug}/events": {
+      "parameters": [{ "$ref": "#/components/parameters/slug" }],
+      "get": {
+        "operationId": "listEvents",
+        "description": "Raw event log, ascending by seq. Powers the activity sidebar.",
+        "parameters": [
+          { "name": "since", "in": "query", "schema": { "type": "integer", "default": 0 } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 200, "maximum": 1000 } }
+        ],
+        "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": {
+          "type": "object", "required": ["events", "cursor"],
+          "properties": {
+            "events": { "type": "array", "items": { "$ref": "#/components/schemas/Event" } },
+            "cursor": { "type": "integer" }
+          }
+        } } } } }
+      }
+    },
+    "/spaces/{slug}/events/stream": {
+      "parameters": [{ "$ref": "#/components/parameters/slug" }],
+      "get": {
+        "operationId": "streamEvents",
+        "description": "SSE. One Event object per message, event name equals the event type. Reconnect with Last-Event-ID set to the last seq received.",
+        "responses": { "200": { "description": "text/event-stream", "content": { "text/event-stream": { "schema": { "type": "string" } } } } }
+      }
+    },
+    "/spaces/{slug}/media": {
+      "parameters": [{ "$ref": "#/components/parameters/slug" }],
+      "post": {
+        "operationId": "uploadMedia",
+        "description": "Upload binary content. The returned URL goes in a JSON Canvas file node.",
+        "parameters": [
+          { "$ref": "#/components/parameters/actor" },
+          { "$ref": "#/components/parameters/actorKind" }
+        ],
+        "requestBody": { "required": true, "content": { "multipart/form-data": { "schema": {
+          "type": "object", "properties": { "file": { "type": "string", "format": "binary" } }
+        } } } },
+        "responses": {
+          "201": { "description": "Created", "content": { "application/json": { "schema": {
+            "type": "object",
+            "properties": {
+              "url": { "type": "string" }, "content_type": { "type": "string" }, "bytes": { "type": "integer" }
+            }
+          } } } }
+        }
+      }
+    }
+  }
+}

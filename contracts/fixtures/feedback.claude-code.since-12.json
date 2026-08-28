@@ -1,0 +1,74 @@
+{
+  "cursor": 19,
+  "annotations": [
+    {
+      "id": "a_1",
+      "card_id": "c_chart",
+      "card_title": "Render time by option",
+      "card_rev": 1,
+      "selector": {
+        "type": "point",
+        "x": 0.3,
+        "y": 0.6
+      },
+      "body": "y-axis starts at 40, this overstates the gap",
+      "motivation": "editing",
+      "creator": "human",
+      "creator_kind": "human",
+      "resolved": false,
+      "resolved_reply": null,
+      "stale": true,
+      "created_at": "2026-08-28T12:00:00Z"
+    },
+    {
+      "id": "a_2",
+      "card_id": "c_opt_b",
+      "card_title": "Option B",
+      "card_rev": 2,
+      "selector": null,
+      "body": "rewrite cost is understated, we tried this in March",
+      "motivation": "assessing",
+      "creator": "human",
+      "creator_kind": "human",
+      "resolved": false,
+      "resolved_reply": null,
+      "stale": false,
+      "created_at": "2026-08-28T14:00:00Z"
+    }
+  ],
+  "cards_edited": [
+    {
+      "id": "c_opt_b",
+      "title": "Option B",
+      "changed": [
+        "text"
+      ],
+      "actor": "human"
+    }
+  ],
+  "cards_deleted": [
+    {
+      "id": "c_opt_d",
+      "title": "Option D",
+      "actor": "human"
+    }
+  ],
+  "cards_moved": [
+    {
+      "id": "c_opt_a",
+      "title": "Option A",
+      "actor": "human"
+    }
+  ],
+  "links_added": [
+    {
+      "id": "l_1",
+      "from": "c_opt_a",
+      "to": "c_opt_c",
+      "label": "depends on",
+      "actor": "human"
+    }
+  ],
+  "links_removed": [],
+  "summary": "2 open comments (1 stale), 1 card edited, 1 deleted, 1 moved, 1 new link."
+}

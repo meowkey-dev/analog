@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+web/dist/
+*.tsbuildinfo
+
+# Runtime data (SQLite DB + uploaded media)
+data/
+!data/.gitkeep
+
+# Local config
+.analog.toml
+.env
+.DS_Store

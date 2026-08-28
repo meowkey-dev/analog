@@ -1,0 +1,57 @@
+[
+  {
+    "id": "a_1",
+    "card_id": "c_chart",
+    "card_title": "Render time by option",
+    "card_rev": 1,
+    "selector": {
+      "type": "point",
+      "x": 0.3,
+      "y": 0.6
+    },
+    "body": "y-axis starts at 40, this overstates the gap",
+    "motivation": "editing",
+    "creator": "human",
+    "creator_kind": "human",
+    "resolved": false,
+    "resolved_reply": null,
+    "stale": true,
+    "created_at": "2026-08-28T12:00:00Z"
+  },
+  {
+    "id": "a_2",
+    "card_id": "c_opt_b",
+    "card_title": "Option B",
+    "card_rev": 2,
+    "selector": null,
+    "body": "rewrite cost is understated, we tried this in March",
+    "motivation": "assessing",
+    "creator": "human",
+    "creator_kind": "human",
+    "resolved": false,
+    "resolved_reply": null,
+    "stale": false,
+    "created_at": "2026-08-28T14:00:00Z"
+  },
+  {
+    "id": "a_3",
+    "card_id": "c_proto",
+    "card_title": "Prototype",
+    "card_rev": 1,
+    "selector": {
+      "type": "rect",
+      "x": 0.05,
+      "y": 0.1,
+      "w": 0.9,
+      "h": 0.25
+    },
+    "body": "header should be sticky",
+    "motivation": "editing",
+    "creator": "human",
+    "creator_kind": "human",
+    "resolved": true,
+    "resolved_reply": "added position:sticky",
+    "stale": false,
+    "created_at": "2026-08-28T11:00:00Z"
+  }
+]

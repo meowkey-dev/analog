@@ -1,0 +1,68 @@
+# contracts/ — frozen
+
+This directory is owned by WP0. **No other work package may edit it.**
+
+Everything else in the repo is generated from or tested against these files. If you
+are working on WP1–WP6 and you need something that isn't here, stop and request an
+amendment — do not add it locally. A field invented in one work package and not in
+another is the exact failure this directory exists to prevent.
+
+## Contents
+
+| File | What it is |
+|---|---|
+| `openapi.json` | Every endpoint. Validated 3.1.0. The frontend generates `web/src/api.ts` from it; `client/` generates its types from it. |
+| `../server/schema.sql` | Storage. Field names and types settled. |
+| `fixtures/space.json` | Space metadata for slug `redesign`. |
+| `fixtures/canvas.json` | 6 live cards, 4 links. Valid JSON Canvas 1.0. |
+| `fixtures/canvas.with-deleted.json` | Same plus the soft-deleted card. |
+| `fixtures/annotations.json` | 3 annotations: one stale, one current, one resolved. |
+| `fixtures/events.json` | 19 events, contiguous seq. |
+| `fixtures/feedback.claude-code.since-12.json` | Expected `GET /feedback` for actor `claude-code`. |
+
+## What the fixtures deliberately exercise
+
+The `redesign` fixture is not decorative — each piece pins down a rule that is easy
+to get wrong:
+
+- **Own-event filtering.** Events 18 and 19 are authored by `claude-code`. Neither
+  appears in that actor's feedback. An agent must never read its own writes back.
+- **Cursor-independent annotations.** `a_1` was created at seq 12, before the cursor.
+  It still appears, because unresolved annotations ignore the cursor entirely.
+- **Resolved exclusion.** `a_3` is resolved and therefore absent.
+- **Staleness.** `a_1` has `card_rev: 1`; `c_chart` is now `sp_rev: 2` (event 19), so
+  `stale: true`. `a_2` matches its card's rev, so `stale: false`.
+- **`card.moved` vs `card.updated`.** Event 15 moved `c_opt_a` without bumping its
+  rev, and lands in `cards_moved`, not `cards_edited`.
+- **Soft delete.** `c_opt_d` is absent from `canvas.json`, present in
+  `canvas.with-deleted.json`, and reported in `cards_deleted`.
+- **All four render paths.** `md`, `svg`, `html` text nodes plus one `file` node.
+  The `html` card contains a `<script>` — it must render inside the sandbox and must
+  not execute in the parent frame.
+
+## Working without a server
+
+That's the point. WP2b asserts its `get_feedback` output equals
+`feedback.claude-code.since-12.json` with a mocked client. WP3 renders
+`canvas.json` with no database. WP4 tests stale marking against `annotations.json`.
+Nothing waits on WP1.
+
+## Amendments
+
+1. Open an issue describing the gap and which work packages it affects.
+2. WP0 edits `openapi.json` / `schema.sql` / fixtures together — never one alone.
+3. Bump `info.version`.
+4. Everyone re-generates clients.
+
+A contract that stops describing the running system is worse than no contract,
+because people still trust it.
+
+## One correction to the spec
+
+`GET /spaces/{slug}/feedback` is in `openapi.json` but was not in §3 of the build
+spec, where `get_feedback` appeared only as an MCP tool. Delta computation is
+business logic and belongs in the server; MCP and the CLI are thin proxies over this
+endpoint. Otherwise the rule would have to be implemented twice and would drift.
+
+`advance=false` was added at the same time so a client can peek without consuming the
+cursor — useful for the CLI's `--watch` and for debugging.

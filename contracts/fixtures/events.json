@@ -1,0 +1,199 @@
+{
+  "events": [
+    {
+      "seq": 1,
+      "ts": "2026-08-28T10:00:00Z",
+      "type": "card.created",
+      "subject_id": "c_opt_a",
+      "actor": "claude-code",
+      "actor_kind": "agent"
+    },
+    {
+      "seq": 2,
+      "ts": "2026-08-28T10:00:00Z",
+      "type": "card.created",
+      "subject_id": "c_opt_b",
+      "actor": "claude-code",
+      "actor_kind": "agent"
+    },
+    {
+      "seq": 3,
+      "ts": "2026-08-28T11:00:00Z",
+      "type": "card.created",
+      "subject_id": "c_opt_c",
+      "actor": "claude-code",
+      "actor_kind": "agent"
+    },
+    {
+      "seq": 4,
+      "ts": "2026-08-28T11:00:00Z",
+      "type": "card.created",
+      "subject_id": "c_opt_d",
+      "actor": "claude-code",
+      "actor_kind": "agent"
+    },
+    {
+      "seq": 5,
+      "ts": "2026-08-28T11:00:00Z",
+      "type": "card.created",
+      "subject_id": "c_chart",
+      "actor": "claude-code",
+      "actor_kind": "agent"
+    },
+    {
+      "seq": 6,
+      "ts": "2026-08-28T12:00:00Z",
+      "type": "card.created",
+      "subject_id": "c_proto",
+      "actor": "claude-code",
+      "actor_kind": "agent"
+    },
+    {
+      "seq": 7,
+      "ts": "2026-08-28T12:00:00Z",
+      "type": "card.created",
+      "subject_id": "c_shot",
+      "actor": "claude-code",
+      "actor_kind": "agent"
+    },
+    {
+      "seq": 8,
+      "ts": "2026-08-28T12:00:00Z",
+      "type": "link.created",
+      "subject_id": "l_2",
+      "actor": "claude-code",
+      "actor_kind": "agent"
+    },
+    {
+      "seq": 9,
+      "ts": "2026-08-28T13:00:00Z",
+      "type": "link.created",
+      "subject_id": "l_3",
+      "actor": "claude-code",
+      "actor_kind": "agent"
+    },
+    {
+      "seq": 10,
+      "ts": "2026-08-28T13:00:00Z",
+      "type": "link.created",
+      "subject_id": "l_4",
+      "actor": "claude-code",
+      "actor_kind": "agent"
+    },
+    {
+      "seq": 11,
+      "ts": "2026-08-28T13:00:00Z",
+      "type": "annotation.created",
+      "subject_id": "a_3",
+      "actor": "human",
+      "actor_kind": "human",
+      "payload": {
+        "card_id": "c_proto"
+      }
+    },
+    {
+      "seq": 12,
+      "ts": "2026-08-28T14:00:00Z",
+      "type": "annotation.created",
+      "subject_id": "a_1",
+      "actor": "human",
+      "actor_kind": "human",
+      "payload": {
+        "card_id": "c_chart"
+      }
+    },
+    {
+      "seq": 13,
+      "ts": "2026-08-28T14:00:00Z",
+      "type": "card.updated",
+      "subject_id": "c_opt_b",
+      "actor": "human",
+      "actor_kind": "human",
+      "payload": {
+        "changed": [
+          "text"
+        ],
+        "rev": 2
+      }
+    },
+    {
+      "seq": 14,
+      "ts": "2026-08-28T14:00:00Z",
+      "type": "card.deleted",
+      "subject_id": "c_opt_d",
+      "actor": "human",
+      "actor_kind": "human",
+      "payload": {
+        "title": "Option D"
+      }
+    },
+    {
+      "seq": 15,
+      "ts": "2026-08-28T15:00:00Z",
+      "type": "card.moved",
+      "subject_id": "c_opt_a",
+      "actor": "human",
+      "actor_kind": "human",
+      "payload": {
+        "from": [
+          0,
+          0
+        ],
+        "to": [
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "seq": 16,
+      "ts": "2026-08-28T15:00:00Z",
+      "type": "link.created",
+      "subject_id": "l_1",
+      "actor": "human",
+      "actor_kind": "human",
+      "payload": {
+        "from": "c_opt_a",
+        "to": "c_opt_c",
+        "label": "depends on"
+      }
+    },
+    {
+      "seq": 17,
+      "ts": "2026-08-28T15:00:00Z",
+      "type": "annotation.created",
+      "subject_id": "a_2",
+      "actor": "human",
+      "actor_kind": "human",
+      "payload": {
+        "card_id": "c_opt_b"
+      }
+    },
+    {
+      "seq": 18,
+      "ts": "2026-08-28T16:00:00Z",
+      "type": "annotation.resolved",
+      "subject_id": "a_3",
+      "actor": "claude-code",
+      "actor_kind": "agent",
+      "payload": {
+        "reply": "added position:sticky"
+      }
+    },
+    {
+      "seq": 19,
+      "ts": "2026-08-28T16:00:00Z",
+      "type": "card.updated",
+      "subject_id": "c_chart",
+      "actor": "claude-code",
+      "actor_kind": "agent",
+      "payload": {
+        "changed": [
+          "text"
+        ],
+        "rev": 2
+      }
+    }
+  ],
+  "cursor": 19
+}
