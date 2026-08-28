@@ -151,12 +151,78 @@ def test_events_for_an_unknown_space_is_404(client):
     assert client.get("/api/spaces/nope/events").status_code == 404
 
 
-def test_stream_endpoint_serves_sse(space):
-    """SPEC §5 falls back to polling, but the stream must exist and be event-stream."""
-    one_card(space, "demo")
-    with space.stream("GET", "/api/spaces/demo/events/stream",
-                      headers={"Last-Event-ID": "0"}) as r:
+# --- SSE (openapi streamEvents) ---------------------------------------------
+
+def _frames(lines, want: int, timeout_at):
+    """Collect `want` SSE frames from an iterator of lines."""
+    import json as _json
+    import time
+
+    out, current = [], {}
+    for line in lines:
+        if time.monotonic() > timeout_at:
+            break
+        if line.startswith("id:"):
+            current["id"] = int(line[3:].strip())
+        elif line.startswith("event:"):
+            current["event"] = line[6:].strip()
+        elif line.startswith("data:"):
+            current["data"] = _json.loads(line[5:].strip())
+        elif line == "":
+            if current.get("data"):
+                out.append(current)
+                if len(out) >= want:
+                    return out
+            current = {}
+    return out
+
+
+def test_stream_replays_the_backlog_then_pushes_live_events(live_server):
+    import threading
+    import time
+
+    import httpx
+
+    base = live_server
+    httpx.post(f"{base}/api/spaces", params=HUMAN, json={"slug": "demo", "title": "D"})
+    card = httpx.post(f"{base}/api/spaces/demo/cards", params=AGENT,
+                      json={"cards": [{"title": "A", "content": "a"}]}).json()[0]
+
+    with httpx.stream("GET", f"{base}/api/spaces/demo/events/stream",
+                      headers={"Last-Event-ID": "0"}, timeout=15) as r:
         assert r.status_code == 200
         assert r.headers["content-type"].startswith("text/event-stream")
-        chunk = next(r.iter_lines())
-        assert chunk is not None
+        assert r.headers["cache-control"] == "no-cache"
+
+        lines = r.iter_lines()
+        backlog = _frames(lines, 1, time.monotonic() + 10)
+        assert [f["event"] for f in backlog] == ["card.created"]
+        assert backlog[0]["id"] == 1
+        assert backlog[0]["data"]["subject_id"] == card["id"]
+
+        def later():
+            time.sleep(0.3)
+            httpx.patch(f"{base}/api/spaces/demo/cards/{card['id']}", params=HUMAN,
+                        json={"text": "v2"})
+
+        threading.Thread(target=later, daemon=True).start()
+        live = _frames(lines, 1, time.monotonic() + 10)
+        assert [f["event"] for f in live] == ["card.updated"]
+        assert live[0]["id"] == 2
+        assert live[0]["data"]["actor"] == "human"
+
+
+def test_stream_resumes_from_last_event_id(live_server):
+    import time
+
+    import httpx
+
+    base = live_server
+    httpx.post(f"{base}/api/spaces", params=HUMAN, json={"slug": "demo", "title": "D"})
+    httpx.post(f"{base}/api/spaces/demo/cards", params=AGENT,
+               json={"cards": [{"title": t, "content": t} for t in "ABC"]})
+
+    with httpx.stream("GET", f"{base}/api/spaces/demo/events/stream",
+                      headers={"Last-Event-ID": "2"}, timeout=15) as r:
+        frames = _frames(r.iter_lines(), 1, time.monotonic() + 10)
+        assert [f["id"] for f in frames] == [3], "events 1 and 2 were already delivered"

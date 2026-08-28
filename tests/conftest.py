@@ -108,6 +108,42 @@ def seeded(data_root):
         yield c
 
 
+@pytest.fixture
+def live_server(data_root):
+    """A real uvicorn server on an ephemeral port.
+
+    Needed for SSE only: starlette's TestClient buffers the whole response body, so
+    it can never observe an open stream.
+    """
+    pytest.importorskip("server.main", reason="WP1 not implemented yet")
+    import socket
+    import threading
+    import time
+
+    import uvicorn
+
+    from server.main import create_app
+
+    probe = socket.socket()
+    probe.bind(("127.0.0.1", 0))
+    port = probe.getsockname()[1]
+    probe.close()
+
+    server = uvicorn.Server(uvicorn.Config(
+        create_app(), host="127.0.0.1", port=port, log_level="warning"))
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+    deadline = time.monotonic() + 10
+    while not server.started and time.monotonic() < deadline:
+        time.sleep(0.02)
+    assert server.started, "uvicorn did not start"
+    try:
+        yield f"http://127.0.0.1:{port}"
+    finally:
+        server.should_exit = True
+        thread.join(timeout=5)
+
+
 # --- request helpers ---------------------------------------------------------
 # openapi.json puts actor/actor_kind in the query string. SPEC §3 also permits
 # headers; the contract form is what these tests assert.
