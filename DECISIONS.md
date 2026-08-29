@@ -106,11 +106,13 @@ touches the filesystem. Accepted types: PNG, JPEG, GIF, WebP, SVG, PDF. 25 MB ca
   serves both the same-origin browser and the Tauri shell.
 - **The Tauri app has no Rust-side API client.** It loads the same bundle the server
   serves. A second implementation of the auth rules is a second thing to get wrong.
-- **Two build-environment pins, both kept inside the repo** rather than fixed on the
-  machine: `app/src-tauri/rust-toolchain.toml` (Tauri 2 needs ≥1.88, and this repo
-  should not decide what `rustup default` points at), and
-  `app/src-tauri/.cargo/config.toml`, which points the linker at `/usr/bin/cc`
-  because `~/bin/cc` on this machine is a shim that execs `claude`.
+- **The Rust toolchain is pinned in `app/src-tauri/rust-toolchain.toml`** (Tauri 2
+  needs ≥1.88) rather than deciding what `rustup default` points at on a machine
+  that builds other things too.
+- There was briefly a `.cargo/config.toml` redirecting the linker to `/usr/bin/cc`,
+  because a `~/bin/cc` shim shadowed the compiler. That shim is gone, so the
+  workaround is too — a hardcoded compiler path is worth keeping only as long as it
+  is load-bearing.
 
 ## Toolchain
 
