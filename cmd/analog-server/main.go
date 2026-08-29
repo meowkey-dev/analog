@@ -23,6 +23,7 @@ import (
 	"github.com/meowkey-dev/analog/internal/auth"
 	"github.com/meowkey-dev/analog/internal/config"
 	"github.com/meowkey-dev/analog/internal/store"
+	"github.com/meowkey-dev/analog/internal/tokencli"
 	"github.com/meowkey-dev/analog/internal/web"
 )
 
@@ -49,7 +50,7 @@ func root() *cobra.Command {
 	cmd.Flags().StringVar(&host, "host", config.Host(),
 		"0.0.0.0 to accept connections from other machines")
 	cmd.Flags().IntVar(&port, "port", config.Port(), "TCP port to listen on")
-	cmd.AddCommand(seedCmd(), tokenCmd())
+	cmd.AddCommand(seedCmd(), tokencli.Command())
 	return cmd
 }
 
