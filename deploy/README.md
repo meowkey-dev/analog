@@ -6,7 +6,7 @@ here is for the case where something else needs to reach it.
 ## The short version
 
 ```bash
-git clone https://github.com/xukai92/analog && cd analog
+git clone https://github.com/meowkey-dev/analog && cd analog
 uv venv && uv pip install -e .
 (cd web && npm ci && npm run build)          # the server serves this
 .venv/bin/analog token add kai --kind human  # shown once
