@@ -21,6 +21,7 @@ rest works anywhere.
 from __future__ import annotations
 
 import argparse
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -41,6 +42,36 @@ def issue(actor: str, kind: str) -> str:
     print(f"  store: {store.path}")
     print("  it is shown once and stored only as a digest.\n")
     return token
+
+
+def write_wrapper(into: Path, actor: str, kind: str, url: str,
+                  token: str | None) -> Path:
+    """A command that is already configured as one actor.
+
+    MCP config and skills are read when a session starts, so neither reaches an
+    agent that is mid-session. A wrapper on disk does, and it also sidesteps the
+    trap in `analog login`: that writes ~/.analog.toml for the *user*, so an agent
+    running as you would inherit your identity and write under your name.
+    """
+    into.mkdir(parents=True, exist_ok=True)
+    path = into / f"analog-{actor}"
+    analog = Path(sys.executable).parent / "analog"
+    lines = [
+        "#!/bin/sh",
+        f"# Analog, pre-configured as {actor} ({kind}).",
+        "# Written by scripts/onboard_agent.py. Contains a token: keep it mode 700",
+        "# and out of any repository.",
+        f"export ANALOG_URL={url}",
+        f"export ANALOG_ACTOR={actor}",
+        f"export ANALOG_ACTOR_KIND={kind}",
+        *([f"export ANALOG_TOKEN={token}"] if token else []),
+        "# Ignore any ~/.analog.toml, which may belong to a different actor.",
+        "export ANALOG_CONFIG=/nonexistent",
+        f'exec "{analog}" "$@"',
+    ]
+    path.write_text("\n".join(lines) + "\n")
+    path.chmod(0o700)
+    return path
 
 
 def install_skill(into: Path) -> Path:
@@ -70,6 +101,11 @@ def main(argv: list[str] | None = None) -> int:
                     help="print the `claude mcp add` command")
     ap.add_argument("--print-env", action="store_true",
                     help="print the exports an agent with only a shell needs")
+    ap.add_argument("--wrapper", nargs="?", const="~/.local/bin", default=None,
+                    metavar="DIR",
+                    help="write a wrapper command carrying this actor's config, for "
+                         "an agent that is already running and cannot pick up new "
+                         "MCP config or skills without a restart")
     args = ap.parse_args(argv)
 
     token = args.token
@@ -82,6 +118,19 @@ def main(argv: list[str] | None = None) -> int:
         print("  it loads on demand, so it costs nothing in unrelated sessions.\n")
 
     python = Path(sys.executable)
+    if args.wrapper is not None:
+        path = write_wrapper(Path(args.wrapper).expanduser(), args.actor, args.kind,
+                             args.url, token)
+        print(f"wrapper: {path}")
+        print(f"  A running agent can use it immediately — no restart, no exports:\n"
+              f"    {path.name} whoami\n"
+              f"    {path.name} feedback <slug>\n")
+        print("  It carries the token, so it is mode 700 and lives outside the repo.")
+        if str(path.parent) not in os.environ.get("PATH", "").split(os.pathsep):
+            print(f"  {path.parent} is not on PATH; use the full path or add it.\n")
+        else:
+            print()
+
     mcp_entry = python.parent / "analog-mcp"
     command = str(mcp_entry) if mcp_entry.exists() else (
         f"{python} {REPO_ROOT / 'mcp_server' / 'server.py'}")

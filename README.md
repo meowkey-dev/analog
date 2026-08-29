@@ -125,10 +125,37 @@ analog resolve a_01... --reply "rebased axis at 0"
 `analog --help` lists the rest. Every read command takes `--json`. Failure is always
 non-zero, and exit **3** specifically means auth.
 
+### An agent that is already running
+
+MCP config and skills are both read when a session starts, so neither reaches an
+agent mid-session. A command on disk does:
+
+```bash
+.venv/bin/python scripts/onboard_agent.py claude-code --issue --url https://analog.meowkey.com --wrapper
+```
+
+That writes `~/.local/bin/analog-claude-code`, a one-line shell wrapper with the URL,
+actor and token baked in. Tell the running agent to use it and it works immediately —
+no restart, no exports:
+
+```
+analog-claude-code whoami
+analog-claude-code feedback <slug>
+```
+
+Then paste `skill/analog/SKILL.md` into the conversation, or tell it to read the
+file. That is the workflow half, and it matters more than the wiring.
+
+It sidesteps a trap worth knowing about: `analog login` writes `~/.analog.toml` for
+the **user**, so an agent running as you would inherit your identity and post under
+your name. The wrapper pins its own actor and ignores that file. It contains a token,
+so it is mode 700 and lives outside the repo.
+
 ### The skill
 
 `skill/analog/SKILL.md`, copied into `~/.claude/skills/` or a project's
-`.claude/skills/`. `--skill-into` does it for you.
+`.claude/skills/`. `--skill-into` does it for you. New sessions pick it up; a running
+one will not.
 
 **This is the half that matters.** MCP and the CLI give an agent the operations; the
 skill teaches the conventions that decide whether the tool stays usable — read
