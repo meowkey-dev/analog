@@ -49,7 +49,7 @@ says about who did what is true rather than asserted. `analog token list` and
 From a client:
 
 ```bash
-.venv/bin/analog login https://analog.example.com --token analog_...
+.venv/bin/analog login https://analog.meowkey.com --token analog_...
 ```
 
 That writes `~/.analog.toml` (mode 600) and learns your actor from the server.

@@ -54,7 +54,7 @@ Tokens live in `$ANALOG_DATA_DIR/auth.json` as SHA-256 digests, mode 600. Back u
 
 - **Browser**: visit the domain. Same-origin, and it asks for the token itself.
 - **Desktop app**: put the URL in the connection screen and paste the token.
-- **Agents**: `analog login https://analog.example.com --token analog_...`, or set
+- **Agents**: `analog login https://analog.meowkey.com --token analog_...`, or set
   `ANALOG_URL` / `ANALOG_ACTOR` / `ANALOG_TOKEN`.
 
 `ANALOG_CORS_ORIGINS` is only needed if the UI is served from a different origin
