@@ -80,8 +80,23 @@ jobs:
       # Developer ID signing needs the certificate in a keychain before `tauri build`
       # runs. Skipped entirely when the secret is absent, so forks and this repo
       # keep building.
+      # The `secrets` context is not allowed in an `if:` expression, so the presence
+      # of a certificate has to become an ordinary step output first.
+      - name: Is a signing certificate configured?
+        id: signing
+        shell: bash
+        env:
+          CERT: ${{ secrets.APPLE_CERTIFICATE }}
+        run: |
+          if [ -n "$CERT" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "No APPLE_CERTIFICATE secret — building ad-hoc signed. See deploy/SIGNING.md."
+          fi
+
       - name: Import the signing certificate
-        if: matrix.os == 'macos-14' && secrets.APPLE_CERTIFICATE != ''
+        if: matrix.os == 'macos-14' && steps.signing.outputs.enabled == 'true'
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
