@@ -11,6 +11,9 @@ node_modules/
 web/dist/
 *.tsbuildinfo
 
+# The SPA copied into the package at build time (see scripts/build_dist.py)
+analog/server/web/
+
 # Runtime data (SQLite DB + uploaded media)
 data/
 !data/.gitkeep
@@ -20,3 +23,6 @@ data/
 auth.json
 .env
 .DS_Store
+
+# Built distributions
+dist/

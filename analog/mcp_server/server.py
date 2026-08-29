@@ -18,7 +18,7 @@ from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 from pydantic import Field
 
-from client import Analog, AnalogError, CardDraft
+from analog.client import Analog, AnalogError, CardDraft
 
 INSTRUCTIONS = """\
 A shared canvas you and a human both write to.

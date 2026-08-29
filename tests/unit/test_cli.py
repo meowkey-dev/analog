@@ -14,8 +14,8 @@ import httpx
 import pytest
 from typer.testing import CliRunner
 
-import cli.main as cli_main
-from client import Analog
+import analog.cli.main as cli_main
+from analog.client import Analog
 from tests.conftest import REPO_ROOT
 
 runner = CliRunner()
@@ -313,7 +313,7 @@ def test_events_prints_the_log(cli):
 
 def test_installed_entrypoint_runs():
     """`analog` must work as an installed command, not just as a module."""
-    proc = subprocess.run([sys.executable, "-m", "cli.main", "--help"],
+    proc = subprocess.run([sys.executable, "-m", "analog.cli.main", "--help"],
                           capture_output=True, text=True, cwd=REPO_ROOT)
     assert proc.returncode == 0, proc.stderr
     for command in ("spaces", "feedback", "add", "cards", "update", "rm", "link",

@@ -1,4 +1,4 @@
-"""server/schema.sql is frozen; these tests pin what WP1 may rely on."""
+"""analog/server/schema.sql is frozen; these tests pin what WP1 may rely on."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import sqlite3
 
 import pytest
 
-from server import config
+from analog.server import config
 
 pytestmark = pytest.mark.contract
 

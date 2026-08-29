@@ -27,7 +27,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from server import config  # noqa: E402
+from analog.server import config  # noqa: E402
 
 FIXTURES = REPO_ROOT / "contracts" / "fixtures"
 

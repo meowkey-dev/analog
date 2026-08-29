@@ -230,3 +230,27 @@ changed and no fixture moved.
 **Consequence worth knowing:** `human` is now just a name. `analog token add kai
 --kind human` produces an event log that says `kai`, not `human`. Existing spaces
 keep whatever they recorded.
+
+---
+
+### 12. `schema.sql` moved, and it is still frozen — APPLIED
+
+Not a contract change: the file's bytes are untouched and every test that pins it
+still passes. But `contracts/README.md` and the freeze instruction both name a path,
+and that path moved, so it is recorded here rather than done quietly.
+
+`server/schema.sql` → **`analog/server/schema.sql`**.
+
+**Why.** A wheel built from the old layout claimed four top-level names — `server`,
+`client`, `cli`, `mcp_server` — so installing Analog put `import server` and
+`import client` into site-packages. That is the same failure this repo already hit
+once from the other direction (a top-level `mcp/` shadowing the `mcp` package
+FastMCP imports; see DECISIONS.md), and pointing it outward at anyone who installs
+the project is worse. One top-level name, `analog`, fixes it.
+
+Done before the first release, because after one it is an import-breaking change
+with users attached.
+
+`contracts/README.md` was edited for the pointer only. `SPEC.md` was left alone: it
+is the brief this was built from, and a brief that gets quietly edited to match what
+happened is no longer a record of anything.

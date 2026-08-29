@@ -13,13 +13,13 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 
-from server import auth as auth_module
-from server import config, events as sse
-from server.auth import Identity, TokenStore
-from server.errors import ActorRequired, ApiError, Forbidden, ValidationFailed
-from server.models import (AnnotationCreate, AnnotationPatch, CanvasImport, CardsCreate,
+from analog.server import auth as auth_module
+from analog.server import config, events as sse
+from analog.server.auth import Identity, TokenStore
+from analog.server.errors import ActorRequired, ApiError, Forbidden, ValidationFailed
+from analog.server.models import (AnnotationCreate, AnnotationPatch, CanvasImport, CardsCreate,
                            LinksCreate, SpaceCreate, SpacePatch)
-from server.store import Store
+from analog.server.store import Store
 
 API = config.API_PREFIX
 
@@ -311,10 +311,10 @@ def _jsonable(value):
 
 def _mount_web(app: FastAPI) -> None:
     """Serve the built SPA when it exists, so production is one origin (SPEC §5)."""
-    dist = config.REPO_ROOT / "web" / "dist"
-    index = dist / "index.html"
-    if not index.is_file():
+    dist = config.web_dist()
+    if dist is None:
         return
+    index = dist / "index.html"
     from fastapi.staticfiles import StaticFiles
 
     app.mount("/assets", StaticFiles(directory=dist / "assets"), name="assets")

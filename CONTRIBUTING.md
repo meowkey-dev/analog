@@ -5,7 +5,7 @@ things about how this repo is put together.
 
 ## `contracts/` is frozen
 
-`contracts/` and `server/schema.sql` describe the wire format, and everything else is
+`contracts/` and `analog/server/schema.sql` describe the wire format, and everything else is
 generated from or tested against them. Changing one of those files in a pull request
 that also changes behaviour is the one thing that will get a change bounced.
 

@@ -33,19 +33,27 @@ dev = [
 ]
 
 [project.scripts]
-analog = "cli.main:main"
-analog-mcp = "mcp_server.server:main"
-analog-server = "server.__main__:main"
+analog = "analog.cli.main:main"
+analog-mcp = "analog.mcp_server.server:main"
+analog-server = "analog.server.__main__:main"
 
 [build-system]
 requires = ["setuptools>=69"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["server", "client", "cli", "mcp_server"]
+packages = [
+  "analog",
+  "analog.server",
+  "analog.client",
+  "analog.cli",
+  "analog.mcp_server",
+]
 
 [tool.setuptools.package-data]
-server = ["schema.sql"]
+# schema.sql is read at runtime; web/dist is the UI the server serves, and
+# without it `pip install` yields an API with no page behind it.
+"analog.server" = ["schema.sql", "web/**/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

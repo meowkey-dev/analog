@@ -6,7 +6,7 @@
     python scripts/demo.py agent-b        # 5-6: read feedback over the CLI, post a fix
     python scripts/demo.py agent-a-again  # 7:  Agent A's independent cursor
 
-Agent A speaks MCP over stdio to `mcp_server/server.py` — a real subprocess and a
+Agent A speaks MCP over stdio to `analog/mcp_server/server.py` — a real subprocess and a
 real protocol round trip, not a function call. Agent B shells out to the installed
 `analog` binary. They are different actors with independent cursors, which is the
 whole point of step 7.
@@ -46,7 +46,7 @@ def mcp_client():
 
     return Client(StdioTransport(
         command=sys.executable,
-        args=[str(REPO_ROOT / "mcp_server" / "server.py")],
+        args=[str(REPO_ROOT / "analog" / "mcp_server" / "server.py")],
         env={**os.environ, "ANALOG_URL": URL, "ANALOG_ACTOR": AGENT_A,
              "ANALOG_ACTOR_KIND": "agent", "PYTHONPATH": str(REPO_ROOT)},
     ))
@@ -121,7 +121,7 @@ async def agent_a() -> None:
 def analog(*args: str, stdin: str | None = None, actor: str = AGENT_B) -> str:
     env = {**os.environ, "ANALOG_URL": URL, "ANALOG_ACTOR": actor,
            "ANALOG_ACTOR_KIND": "agent"}
-    proc = subprocess.run([sys.executable, "-m", "cli.main", *args], input=stdin,
+    proc = subprocess.run([sys.executable, "-m", "analog.cli.main", *args], input=stdin,
                           capture_output=True, text=True, env=env, cwd=REPO_ROOT)
     if proc.returncode != 0:
         raise SystemExit(f"analog {' '.join(args)} failed ({proc.returncode}):\n{proc.stderr}")

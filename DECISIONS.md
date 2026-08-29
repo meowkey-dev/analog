@@ -116,4 +116,6 @@ touches the filesystem. Accepted types: PNG, JPEG, GIF, WebP, SVG, PDF. 25 MB ca
   if `npm --version` looks wrong, resolve it to an actual Node install first.
 - The MCP package directory is **`mcp_server/`**, not `mcp/` as in SPEC §6. A
   top-level `mcp/` on `sys.path` shadows the `mcp` PyPI package that FastMCP imports,
-  which breaks the MCP server and every test run from the repo root.
+  which breaks the MCP server and every test run from the repo root. Nesting
+  everything under `analog/` removed that hazard — `analog.mcp` would be safe now —
+  but renaming buys nothing, so it stays.

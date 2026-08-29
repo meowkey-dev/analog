@@ -14,8 +14,8 @@ import threading
 from datetime import datetime, timezone
 from typing import Any, Iterable
 
-from server import config, ids
-from server.errors import Conflict, NotFound, UnsupportedKind, ValidationFailed
+from analog.server import config, ids
+from analog.server.errors import Conflict, NotFound, UnsupportedKind, ValidationFailed
 
 SLUG_RE = re.compile(r"^[a-z0-9-]{1,64}$")
 KINDS = ("md", "html", "svg", "plain")

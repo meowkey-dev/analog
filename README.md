@@ -2,7 +2,7 @@
 
 A shared canvas for one human and their agents. See [SPEC.md](SPEC.md).
 
-`contracts/` and `server/schema.sql` are frozen (see `contracts/README.md`). Runtime
+`contracts/` and `analog/server/schema.sql` are frozen (see `contracts/README.md`). Runtime
 choices the contract leaves open are recorded in [DECISIONS.md](DECISIONS.md); gaps
 found in the contract are in [AMENDMENTS.md](AMENDMENTS.md).
 
@@ -202,14 +202,15 @@ the annotation Agent B resolved is gone.
 
 ## Layout
 
-    server/      FastAPI + SQLite. Every rule lives in store.py.
-    client/      typed HTTP client over the API
-    cli/         `analog`
-    mcp_server/  FastMCP stdio server (not `mcp/` — it would shadow the `mcp` package)
+    analog/
+      server/    FastAPI + SQLite. Every rule lives in store.py.
+      client/    typed HTTP client over the API
+      cli/       `analog`
+      mcp_server/  FastMCP stdio server
     skill/       the agent skill
     web/         React + Vite
     deploy/      systemd unit and Caddyfile for running it on a host
-    scripts/     seed.py, demo.py, onboard_agent.py
+    scripts/     seed.py, demo.py, onboard_agent.py, build_dist.py
     tests/       contract/ and unit/
 
 ## CI
@@ -222,6 +223,6 @@ the annotation Agent B resolved is gone.
 [Apache-2.0](LICENSE). Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md);
 there is no CLA, just a `Signed-off-by` line.
 
-`contracts/` and `server/schema.sql` are the wire format and are changed only through
+`contracts/` and `analog/server/schema.sql` are the wire format and are changed only through
 the amendment process, which is the one thing worth reading before opening a pull
 request.

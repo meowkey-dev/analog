@@ -7,7 +7,7 @@ that `actor` is trustworthy (§2.2, §10). So a token identifies exactly one act
 and the server takes `actor`/`actor_kind` from the token rather than believing the
 query string.
 
-The store is a JSON file, not a table: `server/schema.sql` is a frozen contract, and
+The store is a JSON file, not a table: `analog/server/schema.sql` is a frozen contract, and
 credentials are operator state rather than canvas data. It holds SHA-256 digests, so
 a leaked file does not hand over working tokens.
 

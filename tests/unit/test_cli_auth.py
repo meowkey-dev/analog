@@ -7,15 +7,15 @@ import json
 import pytest
 from typer.testing import CliRunner
 
-import cli.main as cli_main
-from client import Analog
+import analog.cli.main as cli_main
+from analog.client import Analog
 
 runner = CliRunner()
 
 
 @pytest.fixture
 def token_store(data_root, monkeypatch):
-    from server.auth import TokenStore
+    from analog.server.auth import TokenStore
 
     path = data_root / "auth.json"
     monkeypatch.setenv("ANALOG_AUTH_FILE", str(path))

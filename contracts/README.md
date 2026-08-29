@@ -12,7 +12,7 @@ another is the exact failure this directory exists to prevent.
 | File | What it is |
 |---|---|
 | `openapi.json` | Every endpoint. Validated 3.1.0. The frontend generates `web/src/api.ts` from it; `client/` generates its types from it. |
-| `../server/schema.sql` | Storage. Field names and types settled. |
+| `../analog/server/schema.sql` | Storage. Field names and types settled. |
 | `fixtures/space.json` | Space metadata for slug `redesign`. |
 | `fixtures/canvas.json` | 6 live cards, 4 links. Valid JSON Canvas 1.0. |
 | `fixtures/canvas.with-deleted.json` | Same plus the soft-deleted card. |

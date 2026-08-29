@@ -33,8 +33,8 @@ SKILL_SRC = REPO_ROOT / "skill" / "analog"
 
 
 def issue(actor: str, kind: str) -> str:
-    from server import config
-    from server.auth import TokenStore
+    from analog.server import config
+    from analog.server.auth import TokenStore
 
     store = TokenStore(config.auth_path())
     token = store.issue(actor, kind)
@@ -178,7 +178,7 @@ def main(argv: list[str] | None = None) -> int:
 
     mcp_entry = python.parent / "analog-mcp"
     command = str(mcp_entry) if mcp_entry.exists() else (
-        f"{python} {REPO_ROOT / 'mcp_server' / 'server.py'}")
+        f"{python} {REPO_ROOT / 'analog' / 'mcp_server' / 'server.py'}")
 
     if args.print_mcp:
         secret = token or "$ANALOG_TOKEN"

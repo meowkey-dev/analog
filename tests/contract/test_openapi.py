@@ -49,7 +49,7 @@ def test_every_spec_endpoint_is_documented(openapi):
 
 def test_base_url_pins_the_port(openapi):
     """The port is contract, not a runtime choice: server/config.py must match."""
-    from server import config
+    from analog.server import config
 
     assert openapi["servers"][0]["url"] == "http://127.0.0.1:8787/api"
     assert config.PORT == 8787

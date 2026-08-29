@@ -274,7 +274,7 @@ def test_deleting_an_unknown_card_is_404(space):
 def test_a_long_batch_wraps_into_a_new_column(space):
     """SPEC §5 says a column; five cards of one is a strip you have to zoom out to
     read, so a batch wraps once the column passes LAYOUT_MAX_COLUMN."""
-    from server.store import LAYOUT_MAX_COLUMN
+    from analog.server.store import LAYOUT_MAX_COLUMN
 
     nodes = add_cards(space, "demo", [
         {"title": str(i), "content": "c", "height": 200, "width": 320} for i in range(6)])

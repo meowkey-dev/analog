@@ -8,8 +8,8 @@ from __future__ import annotations
 import httpx
 import pytest
 
-import client as analog_client
-from client import Analog, ActorRequired, Conflict, NotFound, ValidationFailed
+import analog.client as analog_client
+from analog.client import Analog, ActorRequired, Conflict, NotFound, ValidationFailed
 from tests.conftest import fixture
 
 CANVAS = fixture("canvas.json")

@@ -10,8 +10,8 @@ from __future__ import annotations
 import argparse
 import sys
 
-from server import config
-from server.auth import AuthError, TokenStore, require_auth_for_host
+from analog.server import config
+from analog.server.auth import AuthError, TokenStore, require_auth_for_host
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -36,7 +36,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"  auth: {'per-actor tokens' if tokens.enabled else 'off — no tokens configured'}")
     print(f"  data: {config.db_path()}")
 
-    uvicorn.run("server.main:app", host=args.host, port=args.port, reload=args.reload)
+    uvicorn.run("analog.server.main:app", host=args.host, port=args.port, reload=args.reload)
     return 0
 
 

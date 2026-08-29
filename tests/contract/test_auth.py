@@ -13,7 +13,7 @@ import stat
 
 import pytest
 
-from server.auth import AuthError, TokenStore, bearer, is_loopback, require_auth_for_host
+from analog.server.auth import AuthError, TokenStore, bearer, is_loopback, require_auth_for_host
 from tests.conftest import AGENT, HUMAN, make_space
 
 pytestmark = pytest.mark.contract
@@ -123,10 +123,10 @@ def test_a_network_bind_with_tokens_is_allowed(store):
 @pytest.fixture
 def secured(data_root, monkeypatch):
     """A server with two actors configured."""
-    pytest.importorskip("server.main", reason="WP1 not implemented yet")
+    pytest.importorskip("analog.server.main", reason="WP1 not implemented yet")
     from fastapi.testclient import TestClient
 
-    from server.main import create_app
+    from analog.server.main import create_app
 
     tokens = TokenStore(data_root / "auth.json")
     secrets = {
@@ -297,7 +297,7 @@ def test_a_401_still_carries_cors_headers(secured):
 
 
 def test_the_tauri_origin_is_allowed_by_default(secured):
-    from server import config
+    from analog.server import config
 
     assert "tauri://localhost" in config.cors_origins()
     r = secured.get("/api/health", headers={"Origin": "tauri://localhost"})

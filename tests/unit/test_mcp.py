@@ -6,7 +6,7 @@ import asyncio
 
 import pytest
 
-from mcp_server.server import create_server
+from analog.mcp_server.server import create_server
 from tests.conftest import assert_valid, fixture
 
 CANVAS = fixture("canvas.json")
@@ -249,7 +249,7 @@ def test_await_feedback_times_out_quietly(server, mock):
 def test_a_client_error_reaches_the_agent_as_a_readable_message(server, mock):
     from fastmcp.exceptions import ToolError
 
-    from client import NotFound
+    from analog.client import NotFound
 
     def boom(slug, include_deleted=False):
         raise NotFound(404, {"error": "not_found", "message": "no space 'nope'"})

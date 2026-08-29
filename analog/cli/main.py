@@ -15,7 +15,7 @@ from typing import Annotated, Any, Optional
 
 import typer
 
-from client import Analog, AnalogError, Conflict, Unauthorized
+from analog.client import Analog, AnalogError, Conflict, Unauthorized
 
 app = typer.Typer(add_completion=False, no_args_is_help=True,
                   help="A shared canvas for you and your agents.")
@@ -145,8 +145,8 @@ app.add_typer(tokens_app, name="token")
 
 
 def _token_store():
-    from server import config as server_config
-    from server.auth import TokenStore
+    from analog.server import config as server_config
+    from analog.server.auth import TokenStore
 
     return TokenStore(server_config.auth_path())
 
@@ -155,7 +155,7 @@ def _token_store():
 def token_add(actor: str,
               kind: Annotated[str, typer.Option("--kind", help="human | agent")] = "agent"):
     """Mint a token for one actor. It is shown once and only stored as a digest."""
-    from server.auth import AuthError
+    from analog.server.auth import AuthError
 
     store = _token_store()
     try:

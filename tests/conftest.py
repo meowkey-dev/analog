@@ -1,13 +1,13 @@
 """Shared fixtures for the contract suite.
 
 The suite is written against contracts/ and SPEC.md, not against an implementation.
-Tests that need a running app import `server.main.create_app` lazily and skip with a
+Tests that need a running app import `analog.server.main.create_app` lazily and skip with a
 clear reason until WP1 lands, so the parts that can be checked today (the spec itself,
 the fixtures, schema.sql) still run.
 
 Contract the server must honour for these fixtures to work:
 
-    server.main.create_app() -> FastAPI
+    analog.server.main.create_app() -> FastAPI
 
 reading ANALOG_DB / ANALOG_DATA_DIR at call time, not at import time.
 """
@@ -73,12 +73,12 @@ def data_root(tmp_path, monkeypatch) -> Path:
 
 def _client(data_root: Path):
     pytest.importorskip(
-        "server.main",
-        reason="WP1 not implemented yet: server.main.create_app() is missing",
+        "analog.server.main",
+        reason="WP1 not implemented yet: analog.server.main.create_app() is missing",
     )
     from fastapi.testclient import TestClient
 
-    from server.main import create_app
+    from analog.server.main import create_app
 
     return TestClient(create_app())
 
@@ -115,14 +115,14 @@ def live_server(data_root):
     Needed for SSE only: starlette's TestClient buffers the whole response body, so
     it can never observe an open stream.
     """
-    pytest.importorskip("server.main", reason="WP1 not implemented yet")
+    pytest.importorskip("analog.server.main", reason="WP1 not implemented yet")
     import socket
     import threading
     import time
 
     import uvicorn
 
-    from server.main import create_app
+    from analog.server.main import create_app
 
     probe = socket.socket()
     probe.bind(("127.0.0.1", 0))
