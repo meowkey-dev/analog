@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/meowkey-dev/analog/internal/apierr"
+	"github.com/meowkey-dev/analog/internal/config"
 	"github.com/meowkey-dev/analog/internal/sse"
 	"github.com/meowkey-dev/analog/internal/store"
 )
@@ -482,9 +483,12 @@ func (s *Server) uploadMedia(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
-	// A little headroom over the cap so an oversized upload is rejected by the
-	// store's own message rather than by the multipart reader.
-	if err := r.ParseMultipartForm(32 << 20); err != nil {
+	// Bounded before anything is read: ParseMultipartForm spools the whole body to
+	// a temp file, so without this a runaway upload fills the disk before the cap is
+	// ever consulted. The headroom is so a merely-too-big upload is still rejected by
+	// the store, which says how big is too big; only an absurd one is cut off here.
+	r.Body = http.MaxBytesReader(w, r.Body, multipartCeiling)
+	if err := r.ParseMultipartForm(8 << 20); err != nil {
 		fail(w, apierr.ValidationFailed("expected a multipart upload with a `file` part",
 			apierr.Detail{"errors": []string{err.Error()}}))
 		return
@@ -495,7 +499,9 @@ func (s *Server) uploadMedia(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer file.Close()
-	data, err := io.ReadAll(io.LimitReader(file, int64(maxUploadRead)))
+	// One byte past the cap, so the store still sees an oversized upload as
+	// oversized and can say so.
+	data, err := io.ReadAll(io.LimitReader(file, config.MaxUploadBytes+1))
 	if err != nil {
 		fail(w, err)
 		return
@@ -521,9 +527,9 @@ func (s *Server) getMedia(w http.ResponseWriter, r *http.Request) {
 
 // --- parameters ---------------------------------------------------------------------
 
-// maxUploadRead is one byte past the cap, so the store still sees an oversized
-// upload as oversized and can say so.
-const maxUploadRead = 25*1024*1024 + 1
+// multipartCeiling bounds the whole request body. Comfortably above the upload cap
+// so the store's "upload exceeds N bytes" is what a user hitting the limit sees.
+const multipartCeiling = config.MaxUploadBytes + 8<<20
 
 func clamp(v, lo, hi int) int {
 	if v < lo {
