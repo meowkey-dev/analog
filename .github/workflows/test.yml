@@ -1,8 +1,9 @@
 name: test
 
 # The contract suite is the point: tests/contract/ is written against contracts/
-# and SPEC.md rather than against the implementation, so a red build here means
-# the server stopped describing the contract, not that a refactor moved a symbol.
+# and SPEC.md rather than against the implementation, and it reaches the server over
+# HTTP like any other client. A red build there means the server stopped describing
+# the contract, not that a refactor moved a symbol.
 on:
   push:
     branches-ignore: ['dependabot/**']
@@ -13,32 +14,61 @@ permissions:
   contents: read
 
 jobs:
-  python:
-    # Both ends of the range pyproject claims, so `requires-python = ">=3.11"` is
-    # a tested statement rather than an aspiration.
-    name: suite (py${{ matrix.python }})
+  go:
+    name: go test
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python: ["3.11", "3.13"]
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
 
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l . )
+          if [ -n "$unformatted" ]; then
+            echo "not gofmt'd:"; echo "$unformatted"; exit 1
+          fi
+
+      - run: go vet ./...
+      - run: go test ./... -race
+
+  conformance:
+    name: conformance (${{ matrix.os }})
+    # Two platforms because the server is shipped as a binary now: the suite has to
+    # judge the thing that gets released, not one build of it.
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
 
-      # A venv, not --system: Ubuntu's system Python is externally managed, and a
-      # venv is how the repo is actually used anyway.
-      - name: Install
-        run: |
-          uv venv --python ${{ matrix.python }}
-          uv pip install -e ".[dev,mcp]"
+      - name: Build the binaries
+        run: scripts/build.sh
 
-      - name: Run the suite
+      - name: Install the harness
+        run: |
+          uv venv --python 3.13
+          uv pip install -r tests/requirements.txt
+
+      - name: Run the contract suite against the binary
         run: .venv/bin/python -m pytest -q
 
   web:

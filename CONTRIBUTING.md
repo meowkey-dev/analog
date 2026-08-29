@@ -5,7 +5,7 @@ things about how this repo is put together.
 
 ## `contracts/` is frozen
 
-`contracts/` and `analog/server/schema.sql` describe the wire format, and everything else is
+`contracts/` and `internal/store/schema.sql` describe the wire format, and everything else is
 generated from or tested against them. Changing one of those files in a pull request
 that also changes behaviour is the one thing that will get a change bounced.
 
@@ -20,14 +20,23 @@ because people still trust it.
 ## Tests are written against the contract, not the implementation
 
 ```bash
-uv venv && uv pip install -e ".[dev,mcp]"
-.venv/bin/python -m pytest
+go test ./...                           # the Go tests
+scripts/build.sh                        # the binaries the suite judges
+
+uv venv && uv pip install -r tests/requirements.txt
+.venv/bin/python -m pytest              # the conformance suite, over HTTP
+
 (cd web && npm ci && npm run build)     # tsc --noEmit + vite build
 ```
 
-`tests/contract/` asserts against `contracts/fixtures/` and SPEC.md. If a change makes
+`tests/contract/` asserts against `contracts/fixtures/` and SPEC.md, and reaches the
+server over a socket rather than importing it — so it judges any binary that answers,
+and `test_black_box.py` fails the build if that stops being true. If a change makes
 one fail, the interesting question is which of the two is wrong — sometimes it is the
 fixture, and that is an amendment.
+
+Anything that needs the implementation's own objects is a Go test next to the code.
+`tests/README.md` has the split, and the contract a server binary has to honour.
 
 ## Sign your commits off
 
@@ -51,4 +60,4 @@ There is a commercial desktop app built on this core. It is a separate, closed
 repository and it reaches this code only through the HTTP API — it does not have a
 private fork, and a contribution here is never quietly diverted into it beyond what
 Apache-2.0 already permits of anyone. If a feature would help someone running
-`python -m server` themselves, it belongs here.
+`analog-server` themselves, it belongs here.

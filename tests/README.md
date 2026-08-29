@@ -37,10 +37,12 @@ points, so the same suite judges both during the port.
 - The token store is re-read per request, so issuing a token secures a server
   that is already running.
 
-## `tests/unit/` — reference material
+## Everything else lives beside the code
 
-Tests that hold implementation objects rather than a socket: the client, the CLI,
-the MCP server, and `TokenStore`. These do **not** port. They are rewritten in
-whatever language the server is written in, and they exist here as a description of
-what those rewrites have to cover. Every behaviour they pin that is observable over
-HTTP is *also* pinned in `tests/contract/`.
+Tests that hold implementation objects rather than a socket — the client, the CLI,
+the MCP tools, the token store — are Go tests next to what they test, run with
+`go test ./...`. They were Python once, under `tests/unit/`; the Go port rewrote
+them, which is what that directory was always for.
+
+Every behaviour they pin that is observable over HTTP is *also* pinned in
+`tests/contract/`, so a third implementation would still be fully judged.

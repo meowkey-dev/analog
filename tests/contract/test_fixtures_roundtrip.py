@@ -62,7 +62,7 @@ def test_events_match_fixture(seeded):
 
 
 def test_feedback_matches_fixture_without_an_explicit_since(seeded):
-    """scripts/seed.py parks claude-code's cursor at 12, so the default call is the
+    """The seed parks claude-code's cursor at 12, so the default call is the
     `since=12` fixture. This is the §4.1 contract end to end."""
     r = seeded.get("/api/spaces/redesign/feedback",
                    params={"actor": "claude-code", "advance": False})

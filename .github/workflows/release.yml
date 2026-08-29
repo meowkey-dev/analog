@@ -1,15 +1,16 @@
 name: release
 
-# Tag -> a GitHub release with a wheel and an sdist attached.
+# Tag -> a GitHub release with one archive per platform.
 #
-# Nothing is published to PyPI. The artifacts exist so a release is installable
-# without a registry entry:
+# Each archive holds `analog`, `analog-server` and `analog-mcp`, and the server
+# carries the built SPA inside it. There is nothing to install and no runtime to
+# match: unpack it and run it.
 #
-#   pip install https://github.com/meowkey-dev/analog/releases/download/v0.1.0/analog-0.1.0-py3-none-any.whl
-#   pip install git+https://github.com/meowkey-dev/analog@v0.1.0
+#   curl -L https://github.com/meowkey-dev/analog/releases/download/v0.3.0/analog-v0.3.0-darwin-arm64.tar.gz | tar xz
+#   ./analog-server
 #
-# The wheel carries the built SPA, so an install serves a UI rather than a bare
-# API — check_wheel.py asserts that here rather than leaving it to be discovered.
+# CGO is off, so every target cross-compiles from one Linux runner —
+# modernc.org/sqlite is pure Go and drags no C toolchain into the build.
 on:
   push:
     tags: ['v*']
@@ -26,6 +27,11 @@ jobs:
         with:
           persist-credentials: false
 
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -36,17 +42,61 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Build the distributions, with the web bundle inside them
+      - name: Build the web bundle
+        working-directory: web
+        run: npm ci && npm run build
+
+      - name: Build the matrix
+        run: |
+          scripts/build.sh \
+            darwin/arm64 darwin/amd64 linux/amd64 linux/arm64 windows/amd64
+
+      # A binary that needs a repo beside it is not a binary you can ship, and the
+      # size is a stated goal rather than an accident. Both are checked here so a
+      # regression fails the release instead of reaching a user.
+      - name: Prove the server stands alone, and is small
+        run: |
+          set -euo pipefail
+          for dir in bin/*/; do
+            size=$(du -m "$dir/analog-server"* | cut -f1)
+            echo "$dir  ${size}MB"
+            [ "$size" -lt 20 ] || { echo "analog-server is ${size}MB, over the 20MB budget"; exit 1; }
+          done
+
+          # Run it from an empty directory with no checkout in sight.
+          workdir=$(mktemp -d)
+          cp bin/linux-amd64/analog-server "$workdir/"
+          (cd "$workdir" && ./analog-server --port 8788 &)
+          for _ in $(seq 1 100); do
+            curl -fsS http://127.0.0.1:8788/api/health >/dev/null && break
+            sleep 0.1
+          done
+          curl -fsS http://127.0.0.1:8788/api/health | tee /dev/stderr | grep -q '"ok":true'
+          # ...and it serves the UI, not just the API.
+          curl -fsS http://127.0.0.1:8788/ | grep -qi '<!doctype html' \
+            || { echo "the web bundle is not embedded"; exit 1; }
+          pkill -f 'analog-server --port 8788'
+
+      - name: Run the conformance suite against what is being released
         run: |
           uv venv --python 3.13
-          uv pip install -e ".[dev,mcp]"
-          .venv/bin/python scripts/build_dist.py
+          uv pip install -r tests/requirements.txt
+          ANALOG_SERVER_BIN="$PWD/bin/linux-amd64/analog-server" \
+            .venv/bin/python -m pytest -q
 
-      - name: Prove the wheel installs clean and serves
-        run: .venv/bin/python scripts/check_wheel.py
-
-      - name: Run the suite against what is being released
-        run: .venv/bin/python -m pytest -q
+      - name: Package
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          for dir in bin/*/; do
+            platform=$(basename "$dir")
+            case "$platform" in
+              windows-*) (cd "$dir" && zip -q -r "../../dist/analog-${GITHUB_REF_NAME}-${platform}.zip" .) ;;
+              *)         tar -czf "dist/analog-${GITHUB_REF_NAME}-${platform}.tar.gz" -C "$dir" . ;;
+            esac
+          done
+          (cd dist && sha256sum * > SHA256SUMS)
+          ls -la dist
 
       - name: Attach the artifacts to the release
         if: startsWith(github.ref, 'refs/tags/')

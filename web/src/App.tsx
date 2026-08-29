@@ -326,7 +326,7 @@ export default function App() {
               See all spaces
             </a>, or create this one with <code>analog new {slug}</code>.</>
           ) : (
-            <>Start the server with <code>uvicorn server.main:app --port 8787</code>, or open{" "}
+            <>Start the server with <code>analog-server</code>, or open{" "}
             <a href="/s/redesign?fixture">/s/redesign?fixture</a> to render the fixture space
             with no database.</>
           )}

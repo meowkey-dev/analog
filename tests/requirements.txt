@@ -1,0 +1,11 @@
+# What the conformance harness needs. It drives a server binary over HTTP and
+# validates responses against contracts/openapi.json; it does not import Analog.
+#
+#   uv venv && uv pip install -r tests/requirements.txt
+#
+# Pinned exactly, resolved 2026-08-29.
+httpx==0.28.1
+pytest==9.1.1
+jsonschema==4.26.0
+openapi-spec-validator==0.9.0
+openjsoncanvas==3.0.0
