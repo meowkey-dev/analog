@@ -68,14 +68,17 @@ jobs:
           cp bin/linux-amd64/analog-server "$workdir/"
           (cd "$workdir" && ./analog-server --port 8788 &)
           for _ in $(seq 1 100); do
-            curl -fsS http://127.0.0.1:8788/api/health >/dev/null && break
+            curl -fsS http://127.0.0.1:8788/api/health >/dev/null 2>&1 && break
             sleep 0.1
           done
+          trap 'pkill -f "analog-server --port 8788" || true' EXIT
+
           curl -fsS http://127.0.0.1:8788/api/health | tee /dev/stderr | grep -q '"ok":true'
           # ...and it serves the UI, not just the API.
           curl -fsS http://127.0.0.1:8788/ | grep -qi '<!doctype html' \
             || { echo "the web bundle is not embedded"; exit 1; }
-          pkill -f 'analog-server --port 8788'
+          # It made its own data directory rather than needing one.
+          test -f "$workdir/data/analog.db" || { echo "no data/ was created"; exit 1; }
 
       - name: Run the conformance suite against what is being released
         run: |
