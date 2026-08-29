@@ -6,7 +6,7 @@ import sqlite3
 
 import pytest
 
-from analog.server import config
+from tests.conftest import schema_sql
 
 pytestmark = pytest.mark.contract
 
@@ -25,7 +25,7 @@ EXPECTED_COLUMNS = {
 @pytest.fixture
 def db():
     conn = sqlite3.connect(":memory:")
-    conn.executescript(config.SCHEMA_PATH.read_text())
+    conn.executescript(schema_sql().read_text())
     conn.execute("PRAGMA foreign_keys = ON")
     yield conn
     conn.close()

@@ -1,142 +1,35 @@
-"""Per-actor bearer tokens (WP7).
+"""Per-actor bearer tokens (WP7), over HTTP.
 
 SPEC §3 said "a single shared bearer token ... when you first expose it beyond
 localhost". A shared token gatekeeps the server but not identity, and §2.2/§10 make
 `actor` load-bearing: the event log is only worth having if attribution is true. So a
 token names exactly one actor, and the server checks the claim rather than taking it.
+
+The store itself is exercised in tests/unit/test_auth_store.py; everything here goes
+through the socket, so it judges any implementation.
 """
 
 from __future__ import annotations
 
-import json
-import stat
-
 import pytest
 
-from analog.server.auth import AuthError, TokenStore, bearer, is_loopback, require_auth_for_host
-from tests.conftest import AGENT, HUMAN, make_space
+from tests.conftest import AGENT, HUMAN, Server, env_for, make_space
 
 pytestmark = pytest.mark.contract
-
-
-# --- the store ---------------------------------------------------------------
-
-@pytest.fixture
-def store(tmp_path):
-    return TokenStore(tmp_path / "auth.json")
-
-
-def test_auth_is_off_until_a_token_exists(store):
-    assert store.enabled is False
-    assert store.entries() == []
-    assert store.resolve("anything") is None
-
-
-def test_issue_returns_a_usable_token(store):
-    token = store.issue("claude-code", "agent")
-    assert token.startswith("analog_")
-    assert len(token) > 40
-    assert store.enabled is True
-
-    identity = store.resolve(token)
-    assert (identity.actor, identity.actor_kind) == ("claude-code", "agent")
-
-
-def test_the_secret_is_never_stored(store):
-    token = store.issue("kai", "human")
-    raw = store.path.read_text()
-    assert token not in raw, "a leaked auth file must not hand over working tokens"
-    assert json.loads(raw)["actors"][0]["token_sha256"]
-    assert "token_sha256" not in json.dumps(store.entries())
-
-
-def test_the_store_is_not_world_readable(store):
-    store.issue("kai", "human")
-    assert stat.S_IMODE(store.path.stat().st_mode) == 0o600
-
-
-def test_tokens_are_per_actor(store):
-    human = store.issue("kai", "human")
-    agent = store.issue("claude-code", "agent")
-    assert store.resolve(human).actor == "kai"
-    assert store.resolve(agent).actor == "claude-code"
-    assert human != agent
-
-
-def test_reissuing_replaces_the_previous_token(store):
-    old = store.issue("claude-code", "agent")
-    new = store.issue("claude-code", "agent")
-    assert store.resolve(old) is None, "the old token must stop working"
-    assert store.resolve(new).actor == "claude-code"
-    assert len(store.entries()) == 1
-
-
-def test_revoke(store):
-    token = store.issue("codex", "agent")
-    assert store.revoke("codex") is True
-    assert store.resolve(token) is None
-    assert store.revoke("codex") is False
-
-
-@pytest.mark.parametrize("actor,kind", [("", "agent"), ("a" * 65, "agent"), ("x", "robot")])
-def test_issue_validates(store, actor, kind):
-    with pytest.raises(AuthError):
-        store.issue(actor, kind)
-
-
-@pytest.mark.parametrize("header,expected", [
-    ("Bearer abc", "abc"), ("bearer abc", "abc"), ("Bearer  abc ", "abc"),
-    ("Basic abc", None), ("abc", None), ("Bearer", None), ("Bearer ", None), (None, None),
-])
-def test_bearer_parsing(header, expected):
-    assert bearer(header) == expected
-
-
-# --- the safety rail ---------------------------------------------------------
-
-@pytest.mark.parametrize("host,loopback", [
-    ("127.0.0.1", True), ("localhost", True), ("::1", True), ("127.0.0.5", True),
-    ("0.0.0.0", False), ("192.168.1.10", False), ("analog.example.com", False),
-])
-def test_is_loopback(host, loopback):
-    assert is_loopback(host) is loopback
-
-
-def test_loopback_may_run_without_tokens(store):
-    require_auth_for_host("127.0.0.1", store)      # must not raise
-
-
-def test_a_network_bind_without_tokens_is_refused(store):
-    with pytest.raises(AuthError) as exc:
-        require_auth_for_host("0.0.0.0", store)
-    assert "world-writable" in str(exc.value)
-    assert "analog token add" in str(exc.value), "the error must say how to fix it"
-
-
-def test_a_network_bind_with_tokens_is_allowed(store):
-    store.issue("kai", "human")
-    require_auth_for_host("0.0.0.0", store)
 
 
 # --- over HTTP ---------------------------------------------------------------
 
 @pytest.fixture
-def secured(data_root, monkeypatch):
-    """A server with two actors configured."""
-    pytest.importorskip("analog.server.main", reason="WP1 not implemented yet")
-    from fastapi.testclient import TestClient
+def secured(data_root):
+    """A server with two actors configured.
 
-    from analog.server.main import create_app
-
-    tokens = TokenStore(data_root / "auth.json")
-    secrets = {
-        "kai": tokens.issue("kai", "human"),
-        "claude-code": tokens.issue("claude-code", "agent"),
-    }
-    monkeypatch.setenv("ANALOG_AUTH_FILE", str(tokens.path))
-    with TestClient(create_app()) as client:
-        client.secrets = secrets
-        yield client
+    Tokens are minted through the binary's own `token add`, so the auth file is
+    written by the implementation under test rather than by this suite.
+    """
+    with Server(env_for(data_root),
+                tokens=[("kai", "human"), ("claude-code", "agent")]) as server:
+        yield server
 
 
 def auth(client, actor):
@@ -297,9 +190,8 @@ def test_a_401_still_carries_cors_headers(secured):
 
 
 def test_the_tauri_origin_is_allowed_by_default(secured):
-    from analog.server import config
-
-    assert "tauri://localhost" in config.cors_origins()
+    """The Tauri shell loads the UI from its own scheme, so a server it talks to has
+    to allow that origin out of the box or the desktop app cannot reach it."""
     r = secured.get("/api/health", headers={"Origin": "tauri://localhost"})
     assert r.headers.get("access-control-allow-origin") == "tauri://localhost"
 

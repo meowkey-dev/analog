@@ -1,24 +1,39 @@
 """Shared fixtures for the contract suite.
 
-The suite is written against contracts/ and SPEC.md, not against an implementation.
-Tests that need a running app import `analog.server.main.create_app` lazily and skip with a
-clear reason until WP1 lands, so the parts that can be checked today (the spec itself,
-the fixtures, schema.sql) still run.
+The suite is written against contracts/ and SPEC.md, not against an implementation,
+and it talks to the server the way any other client would: over HTTP, to a separate
+process. Nothing here imports the server, so the same tests judge any binary that
+answers the socket.
 
-Contract the server must honour for these fixtures to work:
+Contract the server binary must honour (see tests/README.md):
 
-    analog.server.main.create_app() -> FastAPI
+    <bin> --host H --port P            serve; /api/health answers when ready
+    <bin> seed --db D --media-dir M --reset
+                                       load contracts/fixtures/ into a fresh database
+    <bin> token add ACTOR --kind K     mint a token into $ANALOG_AUTH_FILE and print
+                                       it on a line of its own
 
-reading ANALOG_DB / ANALOG_DATA_DIR at call time, not at import time.
+`ANALOG_SERVER_BIN` names the binary; without it the fixtures drive the Python
+implementation through the equivalent module entry points.
+
+Configuration reaches the server through the environment, explicitly — a subprocess
+does not see monkeypatch.setenv, so `data_root` records the values and the spawn
+helpers pass them on.
 """
 
 from __future__ import annotations
 
 import json
+import os
+import re
+import shlex
+import socket
 import subprocess
 import sys
+import time
 from pathlib import Path
 
+import httpx
 import pytest
 from jsonschema import Draft202012Validator, FormatChecker
 
@@ -27,6 +42,23 @@ FIXTURES = REPO_ROOT / "contracts" / "fixtures"
 sys.path.insert(0, str(REPO_ROOT))
 
 OPENAPI = json.loads((REPO_ROOT / "contracts" / "openapi.json").read_text())
+
+
+def schema_sql() -> Path:
+    """schema.sql, wherever the implementation keeps it.
+
+    Frozen bytes, moving path: the Go tree holds it at internal/store/schema.sql.
+    Searching rather than importing keeps this suite implementation-agnostic.
+    """
+    for candidate in (REPO_ROOT / "internal" / "store" / "schema.sql",
+                      REPO_ROOT / "analog" / "server" / "schema.sql"):
+        if candidate.is_file():
+            return candidate
+    raise AssertionError("no schema.sql found")
+
+# How long to wait for a freshly spawned server to answer /api/health.
+STARTUP_TIMEOUT = 20.0
+TOKEN_RE = re.compile(r"^analog_[A-Za-z0-9_-]+$")
 
 
 def fixture(name: str):
@@ -61,87 +93,195 @@ def openapi() -> dict:
     return OPENAPI
 
 
+# --- the binary under test ---------------------------------------------------
+
+def server_bin() -> list[str] | None:
+    """The server command, or None when testing the Python implementation."""
+    raw = os.environ.get("ANALOG_SERVER_BIN", "").strip()
+    return shlex.split(raw) if raw else None
+
+
+def _serve_cmd(host: str, port: int) -> list[str]:
+    base = server_bin() or [sys.executable, "-m", "analog.server"]
+    return [*base, "--host", host, "--port", str(port)]
+
+
+def _seed_cmd(db: Path, media: Path) -> list[str]:
+    bin_ = server_bin()
+    if bin_:
+        return [*bin_, "seed", "--db", str(db), "--media-dir", str(media), "--reset"]
+    # The seed path a human runs is the seed path the tests exercise.
+    return [sys.executable, str(REPO_ROOT / "scripts" / "seed.py"),
+            "--db", str(db), "--media-dir", str(media), "--reset"]
+
+
+def _token_cmd(actor: str, kind: str) -> list[str]:
+    bin_ = server_bin()
+    if bin_:
+        return [*bin_, "token", "add", actor, "--kind", kind]
+    return [sys.executable, "-m", "analog.cli.main", "token", "add", actor, "--kind", kind]
+
+
+def _run(cmd: list[str], env: dict[str, str]) -> subprocess.CompletedProcess:
+    proc = subprocess.run(cmd, capture_output=True, text=True,
+                          env={**os.environ, **env})
+    assert proc.returncode == 0, (
+        f"{' '.join(cmd)} failed ({proc.returncode}):\n{proc.stdout}\n{proc.stderr}")
+    return proc
+
+
+def _free_port() -> int:
+    probe = socket.socket()
+    probe.bind(("127.0.0.1", 0))
+    port = probe.getsockname()[1]
+    probe.close()
+    return port
+
+
+class Server:
+    """A running server process, and an httpx client pointed at it.
+
+    Tests use it exactly like the old TestClient: `server.get("/api/health")`.
+    """
+
+    def __init__(self, env: dict[str, str],
+                 tokens: list[tuple[str, str]] | None = None):
+        self.env = env
+        self.port = _free_port()
+        self.base_url = f"http://127.0.0.1:{self.port}"
+        self.secrets: dict[str, str] = {}
+        # Issued before the process starts, the way an operator would. The store is
+        # re-read per request, so issuing later works too — test_cli_auth relies on
+        # it — but most tests should not depend on that.
+        for actor, kind in tokens or ():
+            self.issue_token(actor, kind)
+        self.proc = subprocess.Popen(
+            _serve_cmd("127.0.0.1", self.port),
+            env={**os.environ, **env},
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        # follow_redirects matches TestClient's default, so a trailing-slash
+        # redirect does not change what a test sees.
+        self._http = httpx.Client(base_url=self.base_url, timeout=30.0,
+                                  follow_redirects=True)
+        self._await_health()
+
+    def _await_health(self) -> None:
+        deadline = time.monotonic() + STARTUP_TIMEOUT
+        while time.monotonic() < deadline:
+            if self.proc.poll() is not None:
+                raise AssertionError(
+                    f"server exited with {self.proc.returncode} before serving:\n"
+                    f"{self.proc.stdout.read() if self.proc.stdout else ''}")
+            try:
+                if self._http.get("/api/health").status_code == 200:
+                    return
+            except httpx.HTTPError:
+                pass
+            time.sleep(0.05)
+        self.close()
+        raise AssertionError(f"server did not answer /api/health in {STARTUP_TIMEOUT}s")
+
+    # httpx passthrough --------------------------------------------------------
+    def request(self, *a, **kw):
+        return self._http.request(*a, **kw)
+
+    def get(self, *a, **kw):
+        return self._http.get(*a, **kw)
+
+    def post(self, *a, **kw):
+        return self._http.post(*a, **kw)
+
+    def patch(self, *a, **kw):
+        return self._http.patch(*a, **kw)
+
+    def put(self, *a, **kw):
+        return self._http.put(*a, **kw)
+
+    def delete(self, *a, **kw):
+        return self._http.delete(*a, **kw)
+
+    def options(self, *a, **kw):
+        return self._http.options(*a, **kw)
+
+    def stream(self, *a, **kw):
+        return self._http.stream(*a, **kw)
+
+    def issue_token(self, actor: str, kind: str) -> str:
+        """Mint a token against this server's auth file and remember the secret."""
+        proc = _run(_token_cmd(actor, kind), self.env)
+        for line in proc.stdout.splitlines():
+            if TOKEN_RE.match(line.strip()):
+                self.secrets[actor] = line.strip()
+                return line.strip()
+        raise AssertionError(f"no token on stdout:\n{proc.stdout}\n{proc.stderr}")
+
+    def close(self) -> None:
+        self._http.close()
+        self.proc.terminate()
+        try:
+            self.proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            self.proc.kill()
+            self.proc.wait(timeout=5)
+
+    def __enter__(self) -> "Server":
+        return self
+
+    def __exit__(self, *exc) -> None:
+        self.close()
+
+
+def env_for(root: Path) -> dict[str, str]:
+    """Everything the server needs to find this data directory.
+
+    Derived from the path rather than read back from os.environ, because a
+    subprocess never sees monkeypatch.setenv.
+    """
+    return {
+        "ANALOG_DATA_DIR": str(root),
+        "ANALOG_DB": str(root / "analog.db"),
+        "ANALOG_AUTH_FILE": str(root / "auth.json"),
+    }
+
+
 @pytest.fixture
 def data_root(tmp_path, monkeypatch) -> Path:
-    """Point the server at a throwaway data directory."""
+    """A throwaway data directory.
+
+    monkeypatch.setenv still runs so in-process helpers — the CLI tests build a
+    client in this process — see the same values a spawned server gets.
+    """
     root = tmp_path / "analog-data"
     root.mkdir()
-    monkeypatch.setenv("ANALOG_DATA_DIR", str(root))
-    monkeypatch.setenv("ANALOG_DB", str(root / "analog.db"))
+    for key, value in env_for(root).items():
+        monkeypatch.setenv(key, value)
     return root
-
-
-def _client(data_root: Path):
-    pytest.importorskip(
-        "analog.server.main",
-        reason="WP1 not implemented yet: analog.server.main.create_app() is missing",
-    )
-    from fastapi.testclient import TestClient
-
-    from analog.server.main import create_app
-
-    return TestClient(create_app())
 
 
 @pytest.fixture
 def client(data_root):
     """Empty database."""
-    with _client(data_root) as c:
-        yield c
+    with Server(env_for(data_root)) as server:
+        yield server
 
 
 @pytest.fixture
 def seeded(data_root):
-    """Database loaded from contracts/fixtures/ by scripts/seed.py.
-
-    Deliberately shells out to the real script rather than importing it: the seed
-    path a human runs is the seed path the tests exercise.
-    """
-    proc = subprocess.run(
-        [sys.executable, str(REPO_ROOT / "scripts" / "seed.py"),
-         "--db", str(data_root / "analog.db"),
-         "--media-dir", str(data_root / "media"), "--reset"],
-        capture_output=True, text=True,
-    )
-    assert proc.returncode == 0, f"seed failed:\n{proc.stdout}\n{proc.stderr}"
-    with _client(data_root) as c:
-        yield c
+    """Database loaded from contracts/fixtures/ by the binary's seed command."""
+    env = env_for(data_root)
+    _run(_seed_cmd(data_root / "analog.db", data_root / "media"), env)
+    with Server(env) as server:
+        yield server
 
 
 @pytest.fixture
-def live_server(data_root):
-    """A real uvicorn server on an ephemeral port.
+def live_server(client) -> str:
+    """The base URL of the running server.
 
-    Needed for SSE only: starlette's TestClient buffers the whole response body, so
-    it can never observe an open stream.
+    Once `client` is a real process this is the same server; the fixture stays
+    because SSE tests and the CLI tests want the URL rather than a client.
     """
-    pytest.importorskip("analog.server.main", reason="WP1 not implemented yet")
-    import socket
-    import threading
-    import time
-
-    import uvicorn
-
-    from analog.server.main import create_app
-
-    probe = socket.socket()
-    probe.bind(("127.0.0.1", 0))
-    port = probe.getsockname()[1]
-    probe.close()
-
-    server = uvicorn.Server(uvicorn.Config(
-        create_app(), host="127.0.0.1", port=port, log_level="warning"))
-    thread = threading.Thread(target=server.run, daemon=True)
-    thread.start()
-    deadline = time.monotonic() + 10
-    while not server.started and time.monotonic() < deadline:
-        time.sleep(0.02)
-    assert server.started, "uvicorn did not start"
-    try:
-        yield f"http://127.0.0.1:{port}"
-    finally:
-        server.should_exit = True
-        thread.join(timeout=5)
+    return client.base_url
 
 
 # --- request helpers ---------------------------------------------------------
