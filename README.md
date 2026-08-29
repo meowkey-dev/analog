@@ -172,6 +172,7 @@ the annotation Agent B resolved is gone.
     skill/       the agent skill
     web/         React + Vite
     app/         Tauri 2 desktop shell around the web bundle
+    deploy/      systemd unit, Caddyfile, signing notes
     scripts/     seed.py, demo.py, onboard_agent.py, make_icon.py
     tests/       contract/ and unit/
 
@@ -182,6 +183,17 @@ typecheck. `.github/workflows/build-app.yml` bundles the desktop app for macOS
 (arm64 `.app` + `.dmg`) and Windows (`.msi` + NSIS `.exe`) and uploads them as
 artifacts.
 
-Neither bundle is signed, so macOS Gatekeeper wants a right-click → Open and Windows
-SmartScreen will warn. Intel macOS is deliberately not built: GitHub's `macos-13`
-runners are deprecated and that leg queues without a runner.
+The macOS bundle carries a **valid ad-hoc signature**, and Gatekeeper will still
+refuse it. Ad-hoc proves the bundle is intact, not who made it, and Gatekeeper only
+checks the second — no local flag changes that. For a build you made yourself:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/Analog.app
+```
+
+For builds other people can open you need a Developer ID. The workflow is already
+wired for it; see [deploy/SIGNING.md](deploy/SIGNING.md) for the certificate and the
+six secrets. Windows is unsigned; SmartScreen warns on first launch.
+
+Intel macOS is deliberately not built: GitHub's `macos-13` runners are deprecated
+and that leg queues without a runner.
