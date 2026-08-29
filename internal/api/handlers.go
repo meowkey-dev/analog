@@ -12,47 +12,55 @@ import (
 	"github.com/meowkey-dev/analog/internal/store"
 )
 
+// handle registers one route and remembers the pattern, so contract_test.go can
+// check the routing table against contracts/openapi.json rather than trusting it.
+func (s *Server) handle(mux *http.ServeMux, pattern string, h http.HandlerFunc) {
+	s.patterns = append(s.patterns, pattern)
+	mux.HandleFunc(pattern, h)
+}
+
 func (s *Server) routes(mux *http.ServeMux) {
+	s.patterns = nil
 	// --- connection ----------------------------------------------------------
-	mux.HandleFunc("GET "+API+"/health", s.health)
-	mux.HandleFunc("GET "+API+"/whoami", s.whoami)
+	s.handle(mux, "GET "+API+"/health", s.health)
+	s.handle(mux, "GET "+API+"/whoami", s.whoami)
 
 	// --- spaces --------------------------------------------------------------
-	mux.HandleFunc("GET "+API+"/spaces", s.listSpaces)
-	mux.HandleFunc("POST "+API+"/spaces", s.createSpace)
-	mux.HandleFunc("GET "+API+"/spaces/{slug}", s.getSpace)
-	mux.HandleFunc("PATCH "+API+"/spaces/{slug}", s.updateSpace)
-	mux.HandleFunc("DELETE "+API+"/spaces/{slug}", s.deleteSpace)
+	s.handle(mux, "GET "+API+"/spaces", s.listSpaces)
+	s.handle(mux, "POST "+API+"/spaces", s.createSpace)
+	s.handle(mux, "GET "+API+"/spaces/{slug}", s.getSpace)
+	s.handle(mux, "PATCH "+API+"/spaces/{slug}", s.updateSpace)
+	s.handle(mux, "DELETE "+API+"/spaces/{slug}", s.deleteSpace)
 
 	// --- canvas --------------------------------------------------------------
-	mux.HandleFunc("GET "+API+"/spaces/{slug}/canvas", s.getCanvas)
-	mux.HandleFunc("POST "+API+"/spaces/{slug}/import", s.importCanvas)
+	s.handle(mux, "GET "+API+"/spaces/{slug}/canvas", s.getCanvas)
+	s.handle(mux, "POST "+API+"/spaces/{slug}/import", s.importCanvas)
 
 	// --- cards ---------------------------------------------------------------
-	mux.HandleFunc("POST "+API+"/spaces/{slug}/cards", s.createCards)
-	mux.HandleFunc("PATCH "+API+"/spaces/{slug}/cards/{card_id}", s.updateCard)
-	mux.HandleFunc("DELETE "+API+"/spaces/{slug}/cards/{card_id}", s.deleteCard)
+	s.handle(mux, "POST "+API+"/spaces/{slug}/cards", s.createCards)
+	s.handle(mux, "PATCH "+API+"/spaces/{slug}/cards/{card_id}", s.updateCard)
+	s.handle(mux, "DELETE "+API+"/spaces/{slug}/cards/{card_id}", s.deleteCard)
 
 	// --- links ---------------------------------------------------------------
-	mux.HandleFunc("POST "+API+"/spaces/{slug}/links", s.createLinks)
-	mux.HandleFunc("DELETE "+API+"/spaces/{slug}/links/{link_id}", s.deleteLink)
+	s.handle(mux, "POST "+API+"/spaces/{slug}/links", s.createLinks)
+	s.handle(mux, "DELETE "+API+"/spaces/{slug}/links/{link_id}", s.deleteLink)
 
 	// --- annotations ---------------------------------------------------------
-	mux.HandleFunc("GET "+API+"/spaces/{slug}/annotations", s.listAnnotations)
-	mux.HandleFunc("POST "+API+"/spaces/{slug}/annotations", s.createAnnotation)
-	mux.HandleFunc("PATCH "+API+"/spaces/{slug}/annotations/{annotation_id}", s.resolveAnnotation)
+	s.handle(mux, "GET "+API+"/spaces/{slug}/annotations", s.listAnnotations)
+	s.handle(mux, "POST "+API+"/spaces/{slug}/annotations", s.createAnnotation)
+	s.handle(mux, "PATCH "+API+"/spaces/{slug}/annotations/{annotation_id}", s.resolveAnnotation)
 
 	// --- feedback, events ----------------------------------------------------
-	mux.HandleFunc("GET "+API+"/spaces/{slug}/feedback", s.getFeedback)
-	mux.HandleFunc("GET "+API+"/spaces/{slug}/events", s.listEvents)
-	mux.HandleFunc("GET "+API+"/spaces/{slug}/events/stream", s.streamEvents)
+	s.handle(mux, "GET "+API+"/spaces/{slug}/feedback", s.getFeedback)
+	s.handle(mux, "GET "+API+"/spaces/{slug}/events", s.listEvents)
+	s.handle(mux, "GET "+API+"/spaces/{slug}/events/stream", s.streamEvents)
 
 	// --- media ---------------------------------------------------------------
-	mux.HandleFunc("POST "+API+"/spaces/{slug}/media", s.uploadMedia)
-	mux.HandleFunc("GET "+API+"/spaces/{slug}/media/{filename}", s.getMedia)
+	s.handle(mux, "POST "+API+"/spaces/{slug}/media", s.uploadMedia)
+	s.handle(mux, "GET "+API+"/spaces/{slug}/media/{filename}", s.getMedia)
 
 	// Everything else is the SPA.
-	mux.HandleFunc("/", s.serveWeb)
+	s.handle(mux, "/", s.serveWeb)
 }
 
 // --- connection --------------------------------------------------------------

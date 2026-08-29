@@ -33,6 +33,8 @@ type Server struct {
 	Broker *sse.Broker
 
 	handler http.Handler
+	// patterns is the routing table, recorded as it is built.
+	patterns []string
 	// Web is the built SPA to serve, or nil for an API-only server.
 	Web fs.FS
 }
@@ -50,6 +52,9 @@ func New(st *store.Store, tokens *auth.Store, web fs.FS) *Server {
 	s.handler = s.cors(s.authenticate(mux))
 	return s
 }
+
+// Patterns is the routing table this server registered, for the contract check.
+func (s *Server) Patterns() []string { return s.patterns }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.handler.ServeHTTP(w, r)
