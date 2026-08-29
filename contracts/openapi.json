@@ -2,11 +2,17 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Analog API",
-    "version": "0.2.1",
+    "version": "0.3.0",
     "description": "Shared canvas for a human and their agents. FROZEN CONTRACT — amendments go through WP0 only. Every mutating operation requires actor and actor_kind and emits an event for each object it creates or changes."
   },
   "servers": [{ "url": "http://127.0.0.1:8787/api" }],
   "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http", "scheme": "bearer",
+        "description": "A per-actor token. It identifies exactly one actor, and the server rejects an `actor`/`actor_kind` that disagrees with it — attribution in the event log is only worth having if it cannot be claimed. Absent when no tokens are configured, which is the loopback default. Deliberately not a cookie: a card's sandboxed iframe cannot set an Authorization header, so agent-authored HTML cannot ride an ambient credential."
+      }
+    },
     "parameters": {
       "slug": {
         "name": "slug", "in": "path", "required": true,
@@ -28,7 +34,8 @@
         "required": ["error", "message"],
         "properties": {
           "error": { "type": "string", "enum": [
-            "not_found", "conflict", "validation_failed", "actor_required", "unsupported_kind"
+            "not_found", "conflict", "validation_failed", "actor_required",
+            "unsupported_kind", "unauthorized", "forbidden"
           ]},
           "message": { "type": "string" },
           "detail": { "type": "object", "additionalProperties": true }
@@ -232,10 +239,57 @@
       "ActorRequired": {
         "description": "actor or actor_kind missing.",
         "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+      },
+      "Unauthorized": {
+        "description": "Tokens are configured and the request had no valid one.",
+        "headers": { "WWW-Authenticate": { "schema": { "type": "string" } } },
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+      },
+      "Forbidden": {
+        "description": "The declared actor is not the one this token writes as.",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
       }
     }
   },
+  "security": [{ "bearerAuth": [] }, {}],
   "paths": {
+    "/health": {
+      "get": {
+        "operationId": "health",
+        "security": [{}],
+        "description": "Liveness, and whether this server wants a token. Reachable without one on purpose: a client cannot be asked to authenticate before it can discover that authentication exists.",
+        "responses": {
+          "200": { "description": "OK", "content": { "application/json": { "schema": {
+            "type": "object",
+            "required": ["ok", "service", "version", "auth_required"],
+            "properties": {
+              "ok": { "const": true },
+              "service": { "const": "analog" },
+              "version": { "type": "string" },
+              "auth_required": { "type": "boolean" }
+            }
+          } } } }
+        }
+      }
+    },
+    "/whoami": {
+      "get": {
+        "operationId": "whoami",
+        "description": "The actor this token writes as. Clients use it instead of assuming a name: the web UI can no longer hardcode 'human' once a token decides who you are.",
+        "responses": {
+          "200": { "description": "OK", "content": { "application/json": { "schema": {
+            "type": "object",
+            "required": ["authenticated", "actor", "actor_kind"],
+            "properties": {
+              "authenticated": { "type": "boolean" },
+              "actor": { "type": ["string", "null"] },
+              "actor_kind": { "type": ["string", "null"], "enum": ["human", "agent", null] }
+            }
+          } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
     "/spaces": {
       "get": {
         "operationId": "listSpaces",

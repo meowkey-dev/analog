@@ -17,6 +17,7 @@ import httpx
 
 __all__ = [
     "Analog", "AnalogError", "NotFound", "Conflict", "ActorRequired", "ValidationFailed",
+    "Unauthorized", "Forbidden",
     "Node", "Edge", "Canvas", "Space", "Annotation", "Event", "Feedback", "CardDraft",
     "DEFAULT_URL", "load_config",
 ]
@@ -159,8 +160,17 @@ class ValidationFailed(AnalogError):
     pass
 
 
+class Unauthorized(AnalogError):
+    """No token, or one the server does not recognise."""
+
+
+class Forbidden(AnalogError):
+    """The token is valid but writes as a different actor."""
+
+
 _BY_CODE = {"not_found": NotFound, "conflict": Conflict, "actor_required": ActorRequired,
-            "validation_failed": ValidationFailed, "unsupported_kind": ValidationFailed}
+            "validation_failed": ValidationFailed, "unsupported_kind": ValidationFailed,
+            "unauthorized": Unauthorized, "forbidden": Forbidden}
 
 
 # --- config ------------------------------------------------------------------
@@ -177,7 +187,7 @@ def load_config(path: Path | None = None) -> dict[str, str]:
         config.update({k: str(v) for k, v in raw.items() if not isinstance(v, dict)})
     for key, env in (("url", "ANALOG_URL"), ("actor", "ANALOG_ACTOR"),
                      ("actor_kind", "ANALOG_ACTOR_KIND"), ("web_url", "ANALOG_WEB_URL"),
-                     ("space", "ANALOG_SPACE")):
+                     ("space", "ANALOG_SPACE"), ("token", "ANALOG_TOKEN")):
         if os.environ.get(env):
             config[key] = os.environ[env]
     return config
@@ -200,15 +210,20 @@ class Analog:
     def __init__(self, url: str | None = None, actor: str | None = None,
                  actor_kind: ActorKind | None = None, *, timeout: float = 30.0,
                  transport: httpx.BaseTransport | None = None,
+                 token: str | None = None,
                  config: dict[str, str] | None = None):
         config = load_config() if config is None else config
         self.base = normalize_base(url or config.get("url") or DEFAULT_URL)
         self.actor = actor or config.get("actor")
         self.actor_kind: ActorKind = actor_kind or config.get("actor_kind") or "agent"
+        # A remote server issues one token per actor and takes `actor` from it.
+        self.token = token or config.get("token")
         self.web_url = (config.get("web_url") or self.base.removesuffix("/api")).rstrip("/")
         # SPEC §4.2 spells `analog resolve a_7f` with no slug; ANALOG_SPACE supplies it.
         self.config_space = config.get("space")
-        self._http = httpx.Client(base_url=self.base, timeout=timeout, transport=transport)
+        headers = {"Authorization": f"Bearer {self.token}"} if self.token else {}
+        self._http = httpx.Client(base_url=self.base, timeout=timeout,
+                                  transport=transport, headers=headers)
 
     def close(self) -> None:
         self._http.close()
@@ -258,6 +273,15 @@ class Analog:
         if response.status_code == 204 or not response.content:
             return None
         return response.json()
+
+    # --- connection ----------------------------------------------------------
+
+    def health(self) -> dict[str, Any]:
+        """Reachable without a token; says whether one is needed."""
+        return self._request("GET", "/health")
+
+    def whoami(self) -> dict[str, Any]:
+        return self._request("GET", "/whoami")
 
     # --- spaces --------------------------------------------------------------
 
@@ -389,7 +413,11 @@ class Analog:
                              params={"since": since, "limit": limit})
 
     def stream_events(self, slug: str, *, since: int = 0) -> Iterator[Event]:
-        """SSE. Yields events as they arrive; reconnects with Last-Event-ID."""
+        """SSE. Yields events as they arrive; reconnects with Last-Event-ID.
+
+        The token rides in the client's default headers, which is why this uses
+        httpx rather than anything EventSource-shaped.
+        """
         last = since
         while True:
             try:

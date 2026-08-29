@@ -48,6 +48,16 @@ class ActorRequired(ApiError):
     code = "actor_required"
 
 
+class Unauthorized(ApiError):
+    status = 401
+    code = "unauthorized"
+
+
+class Forbidden(ApiError):
+    status = 403
+    code = "forbidden"
+
+
 class ValidationFailed(ApiError):
     status = 400
     code = "validation_failed"

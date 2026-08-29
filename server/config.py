@@ -26,10 +26,17 @@ DEFAULT_CORS_ORIGINS = (
 )
 
 
+# The Tauri shell loads the bundled UI from its own scheme, so a remote server has
+# to allow it explicitly. macOS/iOS use tauri://localhost; the others use
+# http://tauri.localhost.
+TAURI_ORIGINS = ("tauri://localhost", "http://tauri.localhost")
+
+
 def cors_origins() -> list[str]:
+    """`*` is honoured but never the default: an open canvas should be a choice."""
     raw = os.environ.get("ANALOG_CORS_ORIGINS")
     if raw is None:
-        return list(DEFAULT_CORS_ORIGINS)
+        return [*DEFAULT_CORS_ORIGINS, *TAURI_ORIGINS]
     return [o.strip() for o in raw.split(",") if o.strip()]
 
 
@@ -49,6 +56,12 @@ def media_dir() -> Path:
     Keyed by space id rather than slug so a space rename cannot orphan its media.
     """
     return data_dir() / "media"
+
+
+def auth_path() -> Path:
+    """Per-actor bearer tokens. Absent or empty means auth is off (loopback dev)."""
+    override = os.environ.get("ANALOG_AUTH_FILE")
+    return Path(override).resolve() if override else data_dir() / "auth.json"
 
 
 SCHEMA_PATH = Path(__file__).resolve().parent / "schema.sql"

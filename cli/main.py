@@ -15,7 +15,7 @@ from typing import Annotated, Any, Optional
 
 import typer
 
-from client import Analog, AnalogError, Conflict
+from client import Analog, AnalogError, Conflict, Unauthorized
 
 app = typer.Typer(add_completion=False, no_args_is_help=True,
                   help="A shared canvas for you and your agents.")
@@ -52,6 +52,10 @@ def run(fn):
     """Exit non-zero with a message on stderr, so agents notice failures."""
     try:
         return fn()
+    except Unauthorized as exc:
+        err(f"unauthorized: {exc.body.get('message', '')}")
+        err("  set ANALOG_TOKEN, or run `analog login <url> --token ...`")
+        raise typer.Exit(3)
     except Conflict as exc:
         err(f"conflict: {exc.body.get('message', '')}")
         current = exc.current
@@ -65,6 +69,133 @@ def run(fn):
         raise
     except (BrokenPipeError, KeyboardInterrupt):
         raise typer.Exit(130)
+
+
+# --- connection --------------------------------------------------------------
+
+@app.command()
+def whoami(json_out: Annotated[bool, typer.Option("--json")] = False):
+    """Which server this shell talks to, and who it writes as."""
+    a = api()
+    health = run(lambda: a.health())
+    identity = run(lambda: a.whoami()) if health.get("auth_required") else {
+        "authenticated": False, "actor": a.actor, "actor_kind": a.actor_kind}
+    payload = {"url": a.base, "configured_actor": a.actor, **health, **identity}
+    if json_out:
+        return out(payload)
+    print(f"server  {a.base}  (analog {health.get('version', '?')})")
+    print(f"auth    {'per-actor tokens' if health.get('auth_required') else 'off'}")
+    if health.get("auth_required"):
+        print(f"token   {'valid' if identity.get('authenticated') else 'MISSING OR INVALID'}")
+        if identity.get("authenticated") and identity["actor"] != a.actor:
+            print(f"        warning: ANALOG_ACTOR is {a.actor!r} but this token "
+                  f"writes as {identity['actor']!r}; writes will be refused")
+    print(f"actor   {identity.get('actor') or a.actor}"
+          f" ({identity.get('actor_kind') or a.actor_kind})")
+
+
+@app.command()
+def login(url: str,
+          token: Annotated[Optional[str], typer.Option("--token")] = None,
+          actor: Annotated[Optional[str], typer.Option("--actor")] = None,
+          kind: Annotated[str, typer.Option("--kind")] = "agent",
+          path: Annotated[Optional[str], typer.Option("--config")] = None):
+    """Remember a server in ~/.analog.toml so ANALOG_* need not be set every time."""
+    import os
+
+    target = Path(path or os.environ.get("ANALOG_CONFIG", Path.home() / ".analog.toml"))
+    probe = Analog(url=url, actor=actor or "probe", token=token, config={})
+    health = run(lambda: probe.health())
+    if health.get("auth_required") and not token:
+        err("this server requires a token; pass --token")
+        raise typer.Exit(1)
+    if token:
+        try:
+            identity = probe.whoami()
+        except Unauthorized:
+            err(f"{probe.base} did not accept that token")
+            raise typer.Exit(3)
+        if not identity.get("authenticated"):
+            err(f"{probe.base} did not accept that token")
+            raise typer.Exit(3)
+        actor, kind = identity["actor"], identity["actor_kind"]
+
+    lines = [f'url = "{probe.base.removesuffix("/api")}"']
+    if actor:
+        lines += [f'actor = "{actor}"', f'kind = "{kind}"'.replace("kind", "actor_kind")]
+    if token:
+        lines.append(f'token = "{token}"')
+    target.write_text("# written by `analog login`\n" + "\n".join(lines) + "\n")
+    try:
+        target.chmod(0o600)          # it holds a credential
+    except OSError:
+        pass
+    print(f"wrote {target}")
+    print(f"  server {probe.base}")
+    if actor:
+        print(f"  actor  {actor} ({kind})")
+
+
+# --- tokens (run these on the machine hosting the server) --------------------
+
+tokens_app = typer.Typer(no_args_is_help=True,
+                         help="Issue and revoke per-actor tokens. Reads and writes the "
+                              "server's auth file, so run it on the server host.")
+app.add_typer(tokens_app, name="token")
+
+
+def _token_store():
+    from server import config as server_config
+    from server.auth import TokenStore
+
+    return TokenStore(server_config.auth_path())
+
+
+@tokens_app.command("add")
+def token_add(actor: str,
+              kind: Annotated[str, typer.Option("--kind", help="human | agent")] = "agent"):
+    """Mint a token for one actor. It is shown once and only stored as a digest."""
+    from server.auth import AuthError
+
+    store = _token_store()
+    try:
+        secret = store.issue(actor, kind)
+    except AuthError as exc:
+        err(str(exc))
+        raise typer.Exit(1)
+    print(f"{actor} ({kind})")
+    print(f"  {secret}")
+    print()
+    print("Copy it now — it is not recoverable. On the client:")
+    print(f"  export ANALOG_ACTOR={actor}")
+    print(f"  export ANALOG_TOKEN={secret}")
+    print(f"stored in {store.path}")
+
+
+@tokens_app.command("list")
+def token_list(json_out: Annotated[bool, typer.Option("--json")] = False):
+    """Every actor with a token. Secrets are not recoverable."""
+    store = _token_store()
+    entries = store.entries()
+    if json_out:
+        return out(entries)
+    if not entries:
+        print(f"no tokens; auth is off ({store.path})")
+        return
+    for entry in entries:
+        print(f"{entry['name']:<20} {entry['kind']:<6} issued {entry.get('created_at', '?')}")
+
+
+@tokens_app.command("revoke")
+def token_revoke(actor: str):
+    """Invalidate an actor's token."""
+    store = _token_store()
+    if not store.revoke(actor):
+        err(f"no token for {actor!r}")
+        raise typer.Exit(1)
+    print(f"revoked {actor}")
+    if not store.enabled:
+        err("warning: that was the last token — auth is now OFF on this server")
 
 
 # --- spaces ------------------------------------------------------------------

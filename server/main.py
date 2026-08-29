@@ -13,46 +13,85 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 
+from server import auth as auth_module
 from server import config, events as sse
-from server.errors import ActorRequired, ApiError, ValidationFailed
+from server.auth import Identity, TokenStore
+from server.errors import ActorRequired, ApiError, Forbidden, ValidationFailed
 from server.models import (AnnotationCreate, AnnotationPatch, CanvasImport, CardsCreate,
                            LinksCreate, SpaceCreate, SpacePatch)
 from server.store import Store
 
 API = config.API_PREFIX
 
+# Reachable without a token: it is how a client discovers whether it needs one.
+PUBLIC_PATHS = frozenset({f"{API}/health"})
+
 
 def require_actor(
+    request: Request,
     actor: Annotated[str | None, Query()] = None,
     actor_kind: Annotated[str | None, Query()] = None,
     header_actor: Annotated[str | None, Header(alias="X-Analog-Actor")] = None,
     header_kind: Annotated[str | None, Header(alias="X-Analog-Actor-Kind")] = None,
 ) -> tuple[str, str]:
-    """SPEC §2.2: mandatory, no default, so a misconfigured agent fails loudly."""
+    """SPEC §2.2: mandatory, no default, so a misconfigured agent fails loudly.
+
+    With tokens configured the declared actor must also match the one the token
+    identifies. The params stay required rather than being inferred: the contract
+    says they are, and an agent writing under the wrong name should fail loudly
+    rather than be silently corrected.
+    """
     name = actor or header_actor
     kind = actor_kind or header_kind
     if not name or not kind:
         raise ActorRequired("actor and actor_kind are required on every mutation")
     if kind not in ("human", "agent"):
         raise ValidationFailed("actor_kind must be 'human' or 'agent'", actor_kind=kind)
+
+    identity: Identity | None = getattr(request.state, "identity", None)
+    if identity is not None and (name, kind) != (identity.actor, identity.actor_kind):
+        if name == identity.actor:
+            # Much the commonest case: ANALOG_ACTOR_KIND defaults to "agent" and the
+            # operator is a human. Saying "not 'kai', not 'kai'" helps nobody.
+            message = (f"this token writes as actor_kind={identity.actor_kind!r}, "
+                       f"not {kind!r} — set ANALOG_ACTOR_KIND={identity.actor_kind}")
+        else:
+            message = (f"this token writes as {identity.actor!r} "
+                       f"({identity.actor_kind}), not {name!r} ({kind})")
+        raise Forbidden(message, token_actor=identity.actor,
+                        token_actor_kind=identity.actor_kind,
+                        requested_actor=name, requested_actor_kind=kind)
     return name, kind
 
 
 Actor = Annotated[tuple[str, str], Depends(require_actor)]
 
 
-def create_app(store: Store | None = None) -> FastAPI:
-    app = FastAPI(title="Analog", version="0.1.0")
+def create_app(store: Store | None = None, tokens: TokenStore | None = None) -> FastAPI:
+    app = FastAPI(title="Analog", version="0.3.0")
     app.state.store = store or Store(config.db_path(), config.media_dir())
+    app.state.tokens = tokens or TokenStore(config.auth_path())
     app.state.broker = sse.Broker()
+    # Backstop: the entrypoint checks this too, but an app built by hand and served
+    # on 0.0.0.0 should not silently be world-writable either.
+    auth_module.require_auth_for_host(config.HOST, app.state.tokens)
 
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=config.cors_origins(),
-        allow_credentials=False,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+    @app.middleware("http")
+    async def authenticate(request: Request, call_next):
+        request.state.identity = None
+        path = request.url.path
+        if (path.startswith(API) and path not in PUBLIC_PATHS
+                and request.method != "OPTIONS"        # never gate a CORS preflight
+                and app.state.tokens.enabled):
+            identity = app.state.tokens.resolve(
+                auth_module.bearer(request.headers.get("authorization")))
+            if identity is None:
+                return JSONResponse(status_code=401, content={
+                    "error": "unauthorized",
+                    "message": "a bearer token is required; see `analog token add`",
+                }, headers={"WWW-Authenticate": "Bearer"})
+            request.state.identity = identity
+        return await call_next(request)
 
     @app.middleware("http")
     async def fan_out_events(request: Request, call_next):
@@ -60,6 +99,16 @@ def create_app(store: Store | None = None) -> FastAPI:
         for space_id, event in app.state.store.drain():
             app.state.broker.publish(space_id, event)
         return response
+
+    # Added last so it is the outermost layer: a 401 still needs CORS headers, or
+    # the browser reports an opaque network error instead of the real reason.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=config.cors_origins(),
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
     @app.exception_handler(ApiError)
     async def _api_error(_: Request, exc: ApiError):
@@ -76,6 +125,24 @@ def create_app(store: Store | None = None) -> FastAPI:
 
     def st() -> Store:
         return app.state.store
+
+    # --- connection ----------------------------------------------------------
+
+    @app.get(f"{API}/health")
+    async def health():
+        """Unauthenticated on purpose: a client has to be able to find out whether
+        this server exists and whether it wants a token before it has one."""
+        return {"ok": True, "service": "analog", "version": app.version,
+                "auth_required": app.state.tokens.enabled}
+
+    @app.get(f"{API}/whoami")
+    async def whoami(request: Request):
+        """Who this token writes as. Null identity when the server has no tokens."""
+        identity: Identity | None = getattr(request.state, "identity", None)
+        if identity is None:
+            return {"authenticated": False, "actor": None, "actor_kind": None}
+        return {"authenticated": True, "actor": identity.actor,
+                "actor_kind": identity.actor_kind}
 
     # --- spaces --------------------------------------------------------------
 

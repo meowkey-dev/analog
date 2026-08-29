@@ -30,6 +30,7 @@ dev = [
 [project.scripts]
 analog = "cli.main:main"
 analog-mcp = "mcp_server.server:main"
+analog-server = "server.__main__:main"
 
 [build-system]
 requires = ["setuptools>=69"]
