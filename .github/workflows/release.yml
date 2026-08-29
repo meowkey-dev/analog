@@ -1,0 +1,61 @@
+name: release
+
+# Tag -> a GitHub release with a wheel and an sdist attached.
+#
+# Nothing is published to PyPI. The artifacts exist so a release is installable
+# without a registry entry:
+#
+#   pip install https://github.com/meowkey-dev/analog/releases/download/v0.1.0/analog-0.1.0-py3-none-any.whl
+#   pip install git+https://github.com/meowkey-dev/analog@v0.1.0
+#
+# The wheel carries the built SPA, so an install serves a UI rather than a bare
+# API — check_wheel.py asserts that here rather than leaving it to be discovered.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Build the distributions, with the web bundle inside them
+        run: |
+          uv venv --python 3.13
+          uv pip install -e ".[dev,mcp]"
+          .venv/bin/python scripts/build_dist.py
+
+      - name: Prove the wheel installs clean and serves
+        run: .venv/bin/python scripts/check_wheel.py
+
+      - name: Run the suite against what is being released
+        run: .venv/bin/python -m pytest -q
+
+      - name: Attach the artifacts to the release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${GITHUB_REF_NAME}" dist/* --clobber
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/*
+          if-no-files-found: error
