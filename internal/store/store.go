@@ -6,6 +6,7 @@
 package store
 
 import (
+	"bytes"
 	"database/sql"
 	_ "embed"
 	"encoding/json"
@@ -13,11 +14,8 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"strings"
 	"sync"
 	"time"
-
-	"github.com/meowkey-dev/analog/internal/apierr"
 
 	_ "modernc.org/sqlite"
 )
@@ -181,7 +179,6 @@ type querier interface {
 // Scoping them here removes that whole class of bug.
 type tx struct {
 	*sql.Tx
-	store   *Store
 	pending []pendingEvent
 }
 
@@ -197,7 +194,7 @@ func (s *Store) withWrite(fn func(*tx) error) error {
 	if err != nil {
 		return err
 	}
-	t := &tx{Tx: sqlTx, store: s}
+	t := &tx{Tx: sqlTx}
 	if err := fn(t); err != nil {
 		_ = sqlTx.Rollback()
 		return err
@@ -261,7 +258,7 @@ func decodeObject(raw []byte) (map[string]any, error) {
 	if len(raw) == 0 {
 		return map[string]any{}, nil
 	}
-	dec := json.NewDecoder(strings.NewReader(string(raw)))
+	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.UseNumber()
 	var out map[string]any
 	if err := dec.Decode(&out); err != nil {
@@ -321,5 +318,3 @@ func nullString(s sql.NullString) any {
 	}
 	return s.String
 }
-
-var _ = apierr.NotFound
