@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas } from "./Canvas";
 import { Activity } from "./Activity";
 import { AnnotationComposer, AnnotationPanel, type DraftAnnotation } from "./Annotations";
+import { SpaceIndex, SpaceSwitcher } from "./Spaces";
 import { api, subscribe, ApiError } from "./api";
 import type { AnalogEvent, Annotation, Canvas as CanvasData, Motivation, Node, Space } from "./api";
 import fixtureCanvas from "../../contracts/fixtures/canvas.json";
@@ -11,13 +12,32 @@ import fixtureSpace from "../../contracts/fixtures/space.json";
 
 const EMPTY: CanvasData = { nodes: [], edges: [] };
 
-function slugFromLocation(): string {
-  const match = window.location.pathname.match(/^\/s\/([a-z0-9-]{1,64})/);
-  return match?.[1] ?? "";
+function slugFromPath(path: string): string {
+  return path.match(/^\/s\/([a-z0-9-]{1,64})/)?.[1] ?? "";
+}
+
+/** Two routes — "/" and "/s/:slug" — is not worth a router dependency. */
+function useRoute(): [string, (slug: string) => void] {
+  const [path, setPath] = useState(window.location.pathname);
+
+  useEffect(() => {
+    const onPop = () => setPath(window.location.pathname);
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
+  const go = useCallback((slug: string) => {
+    const next = slug ? `/s/${slug}` : "/";
+    if (next === window.location.pathname) return;
+    window.history.pushState(null, "", next + window.location.search);
+    setPath(next);
+  }, []);
+
+  return [slugFromPath(path), go];
 }
 
 export default function App() {
-  const slug = slugFromLocation();
+  const [slug, go] = useRoute();
   // WP3/WP4 render the fixture space with no database behind it: /s/redesign?fixture
   const fixtureMode = new URLSearchParams(window.location.search).has("fixture");
 
@@ -77,10 +97,8 @@ export default function App() {
       setEvents((fixtureEvents as { events: AnalogEvent[] }).events);
       return;
     }
-    if (!slug) {
-      setError("No space in the URL. Try /s/<slug>.");
-      return;
-    }
+    if (!slug) return;                       // "/" renders the space index instead
+    setError(null);
     (async () => {
       try {
         const [nextSpace, nextCanvas, nextAnnotations, log] = await Promise.all([
@@ -235,15 +253,26 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKey);
   });
 
+  if (!slug && !fixtureMode) {
+    return <SpaceIndex onOpen={go} />;
+  }
+
   if (error) {
+    const missing = error.startsWith("not_found");
     return (
       <div className="fatal">
         <h1>Analog</h1>
-        <p>{error}</p>
+        <p>{missing ? `There is no space called "${slug}".` : error}</p>
         <p className="hint">
-          Start the server with <code>uvicorn server.main:app --port 8787</code>, or open{" "}
-          <a href="/s/redesign?fixture">/s/redesign?fixture</a> to render the fixture space
-          with no database.
+          {missing ? (
+            <><a href="/" onClick={(event) => { event.preventDefault(); go(""); }}>
+              See all spaces
+            </a>, or create this one with <code>analog new {slug}</code>.</>
+          ) : (
+            <>Start the server with <code>uvicorn server.main:app --port 8787</code>, or open{" "}
+            <a href="/s/redesign?fixture">/s/redesign?fixture</a> to render the fixture space
+            with no database.</>
+          )}
         </p>
       </div>
     );
@@ -254,12 +283,12 @@ export default function App() {
   return (
     <div className="app">
       <header className="topbar">
-        <div className="brand">analog</div>
-        <div className="space-name">
-          {space?.title ?? slug}
-          <span className="slug">/{slug}</span>
-          {fixtureMode && <span className="badge">fixture</span>}
-        </div>
+        <a className="brand" href="/"
+           onClick={(event) => { event.preventDefault(); go(""); }}>analog</a>
+        {fixtureMode
+          ? <div className="space-name">{space?.title ?? slug}<span className="slug">/{slug}</span>
+              <span className="badge">fixture</span></div>
+          : <SpaceSwitcher current={slug} title={space?.title ?? slug} onOpen={go} />}
         <div className="spacer" />
         <button className={annotateMode ? "on" : ""} onClick={() => setAnnotateMode((on) => !on)}
                 title="Click a card to pin a comment; shift-drag for a region (c)">

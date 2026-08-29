@@ -141,6 +141,11 @@ async function request<T>(
 }
 
 export const api = {
+  listSpaces: () => request<Space[]>("GET", "/spaces"),
+
+  createSpace: (slug: string, title: string, revision_mode: "replace" | "branch" = "replace") =>
+    request<Space>("POST", "/spaces", ACTOR, { slug, title, revision_mode }),
+
   getSpace: (slug: string) => request<Space>("GET", `/spaces/${slug}`),
 
   getCanvas: (slug: string, includeDeleted = false) =>

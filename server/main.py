@@ -254,7 +254,9 @@ def _mount_web(app: FastAPI) -> None:
         candidate = dist / path
         if path and candidate.is_file() and dist in candidate.resolve().parents:
             return FileResponse(candidate)
-        return FileResponse(index)
+        # Asset filenames are content-hashed and may cache forever, but index.html
+        # names them — cache it and a rebuild is invisible until a hard reload.
+        return FileResponse(index, headers={"Cache-Control": "no-cache"})
 
 
 app = create_app()
