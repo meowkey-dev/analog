@@ -12,6 +12,7 @@ Contract-derived values are marked; the rest are reversible defaults.
 | API prefix | `/api` | Contract, same source. |
 | Web dev server | `5173` (Vite default, `strictPort`) | Proxies `/api` → 8787, so the app is same-origin in dev exactly as in prod. This matters: SPEC §5's iframe-sandbox reasoning assumes the annotation overlay and the artifact iframe are not same-origin with each other, and a cross-origin dev setup would have hidden a mistake there. |
 | CORS | allowlist `http://localhost:5173`, `http://127.0.0.1:5173`; `ANALOG_CORS_ORIGINS` overrides | Only needed if someone runs the web app without the proxy. Not `*` — cheap to keep narrow. |
+| Data directory | `./data`, or `ANALOG_DATA_DIR` | A binary has no checkout to sit beside, so it makes a `data/` where you ran it. |
 
 ## Identifiers
 
@@ -109,13 +110,77 @@ touches the filesystem. Accepted types: PNG, JPEG, GIF, WebP, SVG, PDF. 25 MB ca
   `server/config.py` allows the `tauri://localhost` origins for that reason, and
   `web/src/connection.ts` is what makes one build serve both cases.
 
+## Go (2026-08-29)
+
+The core moved from Python to Go (#13). Nothing about the product changed: the HTTP
+API, the database schema, the fixtures and the web UI are the same, and the
+conformance suite that proves it was written before any Go existed.
+
+- **`modernc.org/sqlite`**, not `mattn/go-sqlite3`. Pure Go, so `CGO_ENABLED=0
+  GOOS=windows go build` works from any machine and a release needs no C toolchain
+  per platform. That is the whole reason the port is worth doing.
+- **Types are hand-written, not generated from `contracts/openapi.json`.** The
+  tempting argument is that generation makes the contract structurally load-bearing.
+  The bodies that matter here are free-form JSON Canvas blobs with arbitrary `sp_*`
+  keys, so a generator emits `map[string]any` for them anyway — and for the ten named
+  schemas it would emit response models, which is the one thing `models.py` explicitly
+  refused to do because a response model can silently drop what the contract requires.
+  `internal/api/contract_test.go` gets the benefit a different way: every documented
+  operation must be routed and every route documented, checked on every run.
+- **Card and edge blobs decode through `json.Number`.** Decoding into `float64` would
+  turn the fixtures' `"x": 0` into `0.0` and lose precision on a large integer in
+  `sp_meta`. Numbers now round-trip as the literal they arrived as.
+- **Pending events belong to the write transaction, not to the store.** In Python they
+  were thread-local, and before that a class attribute shared between requests — a bug
+  that had already been fixed once. Scoping them to the transaction removes the
+  category rather than the instance. They publish after commit; a rollback drops them.
+- **Two connection pools: many readers, one writer.** SQLite in WAL mode allows
+  exactly that, and Go's `database/sql` would otherwise hand concurrent writers a
+  `SQLITE_BUSY`. Reads inside a write go through the transaction so they still see
+  uncommitted state. `busy_timeout=5000`, `journal_mode=WAL` and `foreign_keys=ON`
+  ride on the DSN, so every pooled connection gets them rather than whichever one a
+  query lands on first.
+- **The feedback buckets are insertion-ordered maps.** Go randomises map iteration and
+  the buckets are compared against a frozen fixture; Python's dict order was load-bearing
+  and nothing said so.
+- **CORS wraps authentication.** In FastAPI that meant registering it last; in Go it is
+  the outer `http.Handler`. Either way a 401 has to carry the headers, or the browser
+  reports an opaque network error instead of "unauthorized".
+- **The web bundle is embedded with `//go:embed`.** `scripts/build.sh` copies
+  `web/dist` into `internal/web/dist` before building, so `analog-server` alone serves
+  the UI with no repo beside it. ~13 MB with the bundle inside.
+- **`analog-server` grew `seed` and `token` subcommands.** They are operator commands
+  on the data directory rather than API calls, and putting them on the server binary is
+  what lets the conformance harness run with no Python of its own in the path.
+- **`client/` is not under `internal/`.** Third parties import it, so it defines its
+  own types rather than exposing `internal/store`'s — which Go would not let an
+  outside package name anyway.
+
+### The test suite stays in Python
+
+`tests/contract/` could have been rewritten in Go with the rest. It was not, and that
+is deliberate:
+
+- It was written against `contracts/` and `SPEC.md` before the Go existed, so it
+  cannot have been shaped by the implementation it now judges. A Go rewrite would
+  quietly lose that property.
+- A server tested by an outside observer over a real socket is a stronger claim than a
+  server testing itself in-process, and it is the same claim for any future
+  implementation.
+- It is the artifact that made the port tractable: red-to-green against 344 tests,
+  rather than a reading exercise.
+
+Everything that genuinely needed the implementation's objects — the token store, the
+client, the CLI, the MCP tools — is a Go test next to the code. `tests/README.md` has
+the split.
+
 ## Toolchain
 
-- Python **3.11+**, pinned deps in `pyproject.toml` (resolved 2026-08-28 on 3.14).
+- Go **1.23+**. `CGO_ENABLED=0` everywhere.
+- Python **3.11+** for the conformance harness only, pinned in
+  `tests/requirements.txt`. It is not needed to build or run Analog.
 - Node **22+** with a real `npm`. Vite 8 will not run under a Bun or Volta shim, so
   if `npm --version` looks wrong, resolve it to an actual Node install first.
-- The MCP package directory is **`mcp_server/`**, not `mcp/` as in SPEC §6. A
-  top-level `mcp/` on `sys.path` shadows the `mcp` PyPI package that FastMCP imports,
-  which breaks the MCP server and every test run from the repo root. Nesting
-  everything under `analog/` removed that hazard — `analog.mcp` would be safe now —
-  but renaming buys nothing, so it stays.
+- The MCP command is **`cmd/analog-mcp`**. The Python note about `mcp_server/` vs
+  `mcp/` was about a `sys.path` collision with the `mcp` PyPI package; Go has no such
+  hazard, and `internal/mcp` is named plainly.

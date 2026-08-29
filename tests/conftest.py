@@ -13,8 +13,8 @@ Contract the server binary must honour (see tests/README.md):
     <bin> token add ACTOR --kind K     mint a token into $ANALOG_AUTH_FILE and print
                                        it on a line of its own
 
-`ANALOG_SERVER_BIN` names the binary; without it the fixtures drive the Python
-implementation through the equivalent module entry points.
+`ANALOG_SERVER_BIN` names the binary. Unset, the fixtures fall back to
+`bin/analog-server` in the checkout, which is where scripts/build.sh puts it.
 
 Configuration reaches the server through the environment, explicitly — a subprocess
 does not see monkeypatch.setenv, so `data_root` records the values and the spawn
@@ -45,16 +45,15 @@ OPENAPI = json.loads((REPO_ROOT / "contracts" / "openapi.json").read_text())
 
 
 def schema_sql() -> Path:
-    """schema.sql, wherever the implementation keeps it.
+    """schema.sql, as a file rather than as an import.
 
-    Frozen bytes, moving path: the Go tree holds it at internal/store/schema.sql.
-    Searching rather than importing keeps this suite implementation-agnostic.
+    Frozen bytes; the path moved once already (analog/server/ -> internal/store/),
+    so this looks it up rather than importing a constant from an implementation.
     """
-    for candidate in (REPO_ROOT / "internal" / "store" / "schema.sql",
-                      REPO_ROOT / "analog" / "server" / "schema.sql"):
-        if candidate.is_file():
-            return candidate
-    raise AssertionError("no schema.sql found")
+    path = REPO_ROOT / "internal" / "store" / "schema.sql"
+    if not path.is_file():
+        raise AssertionError(f"no schema.sql at {path}")
+    return path
 
 # How long to wait for a freshly spawned server to answer /api/health.
 STARTUP_TIMEOUT = 20.0
@@ -95,31 +94,30 @@ def openapi() -> dict:
 
 # --- the binary under test ---------------------------------------------------
 
-def server_bin() -> list[str] | None:
-    """The server command, or None when testing the Python implementation."""
+def server_bin() -> list[str]:
+    """The server command under test."""
     raw = os.environ.get("ANALOG_SERVER_BIN", "").strip()
-    return shlex.split(raw) if raw else None
+    if raw:
+        return shlex.split(raw)
+    default = REPO_ROOT / "bin" / "analog-server"
+    if not default.is_file():
+        raise pytest.UsageError(
+            f"no server binary: {default} does not exist and ANALOG_SERVER_BIN is "
+            f"unset.\n  build one with:  scripts/build.sh")
+    return [str(default)]
 
 
 def _serve_cmd(host: str, port: int) -> list[str]:
-    base = server_bin() or [sys.executable, "-m", "analog.server"]
-    return [*base, "--host", host, "--port", str(port)]
+    return [*server_bin(), "--host", host, "--port", str(port)]
 
 
 def _seed_cmd(db: Path, media: Path) -> list[str]:
-    bin_ = server_bin()
-    if bin_:
-        return [*bin_, "seed", "--db", str(db), "--media-dir", str(media), "--reset"]
     # The seed path a human runs is the seed path the tests exercise.
-    return [sys.executable, str(REPO_ROOT / "scripts" / "seed.py"),
-            "--db", str(db), "--media-dir", str(media), "--reset"]
+    return [*server_bin(), "seed", "--db", str(db), "--media-dir", str(media), "--reset"]
 
 
 def _token_cmd(actor: str, kind: str) -> list[str]:
-    bin_ = server_bin()
-    if bin_:
-        return [*bin_, "token", "add", actor, "--kind", kind]
-    return [sys.executable, "-m", "analog.cli.main", "token", "add", actor, "--kind", kind]
+    return [*server_bin(), "token", "add", actor, "--kind", kind]
 
 
 def _run(cmd: list[str], env: dict[str, str]) -> subprocess.CompletedProcess:

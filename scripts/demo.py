@@ -1,20 +1,23 @@
 #!/usr/bin/env python3
 """The SPEC §7 acceptance demo, start to finish.
 
-    python scripts/demo.py agent-a        # 1-3: create the space, post cards, link them
+    python3 scripts/demo.py agent-a        # 1-3: create the space, post cards, link them
     <human does step 4 in the browser>
-    python scripts/demo.py agent-b        # 5-6: read feedback over the CLI, post a fix
-    python scripts/demo.py agent-a-again  # 7:  Agent A's independent cursor
+    python3 scripts/demo.py agent-b        # 5-6: read feedback over the CLI, post a fix
+    python3 scripts/demo.py agent-a-again  # 7:  Agent A's independent cursor
 
-Agent A speaks MCP over stdio to `analog/mcp_server/server.py` — a real subprocess and a
-real protocol round trip, not a function call. Agent B shells out to the installed
-`analog` binary. They are different actors with independent cursors, which is the
-whole point of step 7.
+Agent A speaks MCP over stdio to the `analog-mcp` binary — a real subprocess and a
+real protocol round trip, not a function call. Agent B shells out to `analog`. They
+are different actors with independent cursors, which is the whole point of step 7.
+
+Needs nothing but a Python interpreter: the MCP transport is newline-delimited
+JSON-RPC, which is about thirty lines below rather than a dependency.
+
+Binaries come from ./bin, or $ANALOG_BIN_DIR.
 """
 
 from __future__ import annotations
 
-import asyncio
 import json
 import os
 import subprocess
@@ -22,7 +25,7 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(REPO_ROOT))
+BIN = Path(os.environ.get("ANALOG_BIN_DIR", REPO_ROOT / "bin"))
 
 SLUG = "demo"
 URL = os.environ.get("ANALOG_URL", "http://127.0.0.1:8787")
@@ -35,26 +38,76 @@ def heading(text: str) -> None:
 
 
 def show(label: str, value) -> None:
-    print(f"  {label}: {json.dumps(value, ensure_ascii=False) if not isinstance(value, str) else value}")
+    rendered = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
+    print(f"  {label}: {rendered}")
+
+
+def binary(name: str) -> Path:
+    path = BIN / name
+    if not path.is_file():
+        raise SystemExit(f"no {path} — build the binaries first:  scripts/build.sh")
+    return path
+
+
+def agent_env(actor: str) -> dict[str, str]:
+    return {**os.environ, "ANALOG_URL": URL, "ANALOG_ACTOR": actor,
+            "ANALOG_ACTOR_KIND": "agent",
+            # Never let a ~/.analog.toml belonging to the operator decide who the
+            # demo's agents are.
+            "ANALOG_CONFIG": "/nonexistent"}
 
 
 # --- Agent A: MCP over stdio -------------------------------------------------
 
-def mcp_client():
-    from fastmcp import Client
-    from fastmcp.client.transports import StdioTransport
+class MCP:
+    """The smallest MCP stdio client that can drive ten tools."""
 
-    return Client(StdioTransport(
-        command=sys.executable,
-        args=[str(REPO_ROOT / "analog" / "mcp_server" / "server.py")],
-        env={**os.environ, "ANALOG_URL": URL, "ANALOG_ACTOR": AGENT_A,
-             "ANALOG_ACTOR_KIND": "agent", "PYTHONPATH": str(REPO_ROOT)},
-    ))
+    def __init__(self, actor: str):
+        self.proc = subprocess.Popen(
+            [str(binary("analog-mcp"))], env=agent_env(actor),
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, bufsize=1)
+        self.next_id = 0
 
+    def __enter__(self) -> "MCP":
+        self.call("initialize", {
+            "protocolVersion": "2024-11-05", "capabilities": {},
+            "clientInfo": {"name": "analog-demo", "version": "0"}})
+        self.notify("notifications/initialized")
+        return self
 
-def unwrap(result):
-    data = result.structured_content
-    return data.get("result", data) if isinstance(data, dict) else data
+    def __exit__(self, *exc) -> None:
+        self.proc.stdin.close()
+        self.proc.wait(timeout=5)
+
+    def _send(self, message: dict) -> None:
+        self.proc.stdin.write(json.dumps(message) + "\n")
+        self.proc.stdin.flush()
+
+    def notify(self, method: str, params: dict | None = None) -> None:
+        self._send({"jsonrpc": "2.0", "method": method, "params": params or {}})
+
+    def call(self, method: str, params: dict | None = None):
+        self.next_id += 1
+        self._send({"jsonrpc": "2.0", "id": self.next_id, "method": method,
+                    "params": params or {}})
+        line = self.proc.stdout.readline()
+        if not line:
+            raise SystemExit("analog-mcp closed the connection")
+        message = json.loads(line)
+        if "error" in message:
+            raise SystemExit(f"{method} failed: {message['error']['message']}")
+        return message["result"]
+
+    def tools(self) -> list[str]:
+        return sorted(t["name"] for t in self.call("tools/list")["tools"])
+
+    def tool(self, name: str, **arguments):
+        """One tool call, unwrapped from the MCP envelope."""
+        result = self.call("tools/call", {"name": name, "arguments": arguments})
+        if result.get("isError"):
+            raise SystemExit(f"{name}: {result['content'][0]['text']}")
+        data = result["structuredContent"]
+        return data.get("result", data) if isinstance(data, dict) else data
 
 
 CHART_HTML = """<!doctype html><meta charset="utf-8">
@@ -80,33 +133,29 @@ OPTIONS = [
 ]
 
 
-async def agent_a() -> None:
-    async with mcp_client() as client:
-        tools = sorted(t.name for t in await client.list_tools())
+def agent_a() -> None:
+    with MCP(AGENT_A) as mcp:
+        tools = mcp.tools()
         heading("Agent A — MCP over stdio")
         show("tools", tools)
         assert len(tools) == 10, tools
 
         heading("1. create_space('demo')")
-        show("space", unwrap(await client.call_tool(
-            "create_space", {"slug": SLUG, "title": "List perf — demo"}))["slug"])
+        show("space", mcp.tool("create_space", slug=SLUG, title="List perf — demo")["slug"])
 
         heading("2. add_cards — 4 options + 1 html chart")
-        cards = unwrap(await client.call_tool("add_cards", {
-            "slug": SLUG,
-            "cards": [{"title": t, "content": c, "kind": "md"} for t, c in OPTIONS]
-                     + [{"title": "Render time by option", "content": CHART_HTML,
-                         "kind": "html", "width": 460, "height": 320}],
-        }))
+        cards = mcp.tool("add_cards", slug=SLUG, cards=[
+            {"title": t, "content": c, "kind": "md"} for t, c in OPTIONS
+        ] + [{"title": "Render time by option", "content": CHART_HTML,
+              "kind": "html", "width": 460, "height": 320}])
         by_title = {c["sp_title"]: c["id"] for c in cards}
         for card in cards:
             show(card["sp_title"], f"{card['id']}  ({card['sp_kind']}) at "
                                    f"({card['x']}, {card['y']})")
 
         heading("3. link_cards — Option B contradicts Option D")
-        edge = unwrap(await client.call_tool("link_cards", {
-            "slug": SLUG, "from_card": by_title["Option B"],
-            "to_card": by_title["Option D"], "label": "contradicts"}))
+        edge = mcp.tool("link_cards", slug=SLUG, from_card=by_title["Option B"],
+                        to_card=by_title["Option D"], label="contradicts")
         show("edge", f"{edge['id']}  {edge['label']}")
 
         (REPO_ROOT / "demo" / "ids.json").write_text(json.dumps(by_title, indent=2))
@@ -119,10 +168,8 @@ async def agent_a() -> None:
 # --- Agent B: the CLI --------------------------------------------------------
 
 def analog(*args: str, stdin: str | None = None, actor: str = AGENT_B) -> str:
-    env = {**os.environ, "ANALOG_URL": URL, "ANALOG_ACTOR": actor,
-           "ANALOG_ACTOR_KIND": "agent"}
-    proc = subprocess.run([sys.executable, "-m", "analog.cli.main", *args], input=stdin,
-                          capture_output=True, text=True, env=env, cwd=REPO_ROOT)
+    proc = subprocess.run([str(binary("analog")), *args], input=stdin,
+                          capture_output=True, text=True, env=agent_env(actor))
     if proc.returncode != 0:
         raise SystemExit(f"analog {' '.join(args)} failed ({proc.returncode}):\n{proc.stderr}")
     return proc.stdout
@@ -152,10 +199,10 @@ def agent_b() -> None:
 
 # --- Agent A again -----------------------------------------------------------
 
-async def agent_a_again() -> None:
-    async with mcp_client() as client:
+def agent_a_again() -> None:
+    with MCP(AGENT_A) as mcp:
         heading("7. Agent A calls get_feedback again — its own cursor, not Agent B's")
-        feedback = unwrap(await client.call_tool("get_feedback", {"slug": SLUG}))
+        feedback = mcp.tool("get_feedback", slug=SLUG)
         show("summary", feedback["summary"])
         for bucket in ("annotations", "cards_edited", "cards_deleted", "cards_moved",
                        "links_added", "links_removed"):
@@ -176,11 +223,11 @@ async def agent_a_again() -> None:
 def main() -> int:
     step = sys.argv[1] if len(sys.argv) > 1 else "all"
     if step == "agent-a":
-        asyncio.run(agent_a())
+        agent_a()
     elif step == "agent-b":
         agent_b()
     elif step == "agent-a-again":
-        asyncio.run(agent_a_again())
+        agent_a_again()
     else:
         print(__doc__)
         return 1

@@ -18,7 +18,7 @@ Group=analog
 WorkingDirectory=/opt/analog
 Environment=ANALOG_DATA_DIR=/var/lib/analog
 # The proxy terminates TLS and forwards here.
-ExecStart=/opt/analog/.venv/bin/python -m server --host 127.0.0.1 --port 8787
+ExecStart=/opt/analog/analog-server --host 127.0.0.1 --port 8787
 Restart=on-failure
 RestartSec=3
 

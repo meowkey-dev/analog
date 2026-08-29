@@ -35,6 +35,5 @@ def test_no_contract_test_imports_the_implementation(path):
                  if m == "analog" or m.startswith("analog.")}
     assert not offenders, (
         f"{path.name} imports {sorted(offenders)}. The contract suite talks to a "
-        f"server over HTTP; anything that needs the Python objects belongs in "
-        f"tests/unit/, which is rewritten in the server's language rather than run "
-        f"against a binary.")
+        f"server over HTTP; anything that needs the implementation's own objects "
+        f"belongs in a test beside that code, in its language.")

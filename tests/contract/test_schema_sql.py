@@ -1,4 +1,4 @@
-"""analog/server/schema.sql is frozen; these tests pin what WP1 may rely on."""
+"""schema.sql is frozen; these tests pin what an implementation may rely on."""
 
 from __future__ import annotations
 

@@ -7,41 +7,68 @@ which teaches the workflow the API cannot — read feedback first, one idea per 
 never resolve what you did not act on.
 
     # on the machine running the server: mint the token
-    python scripts/onboard_agent.py claude-code --issue
+    python3 scripts/onboard_agent.py claude-code --issue
 
     # anywhere the agent runs: install the skill, print the wiring
-    python scripts/onboard_agent.py claude-code \\
+    python3 scripts/onboard_agent.py claude-code \\
         --url https://analog.example.com --token analog_... \\
         --skill-into ~/.claude/skills --print-mcp
 
 `--issue` needs the server's auth file, so it only works on the server host. The
 rest works anywhere.
+
+The binaries come from --bin-dir, $ANALOG_BIN_DIR, ./bin, or PATH.
 """
 
 from __future__ import annotations
 
 import argparse
 import os
+import re
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(REPO_ROOT))
-
 SKILL_SRC = REPO_ROOT / "skill" / "analog"
+TOKEN_RE = re.compile(r"analog_[A-Za-z0-9_-]+")
+
+# Set from --bin-dir before anything looks a binary up.
+BIN_DIR: Path | None = None
+
+
+def binary(name: str) -> Path:
+    """Locate one of the three Analog binaries."""
+    for candidate in (BIN_DIR, Path(os.environ["ANALOG_BIN_DIR"])
+                      if os.environ.get("ANALOG_BIN_DIR") else None,
+                      REPO_ROOT / "bin"):
+        if candidate and (candidate.expanduser() / name).is_file():
+            return (candidate.expanduser() / name).resolve()
+    found = shutil.which(name)
+    if found:
+        return Path(found)
+    raise SystemExit(
+        f"cannot find `{name}`. Build it with scripts/build.sh, or pass --bin-dir.")
 
 
 def issue(actor: str, kind: str) -> str:
-    from analog.server import config
-    from analog.server.auth import TokenStore
+    """Mint a token through analog-server, which owns the auth file.
 
-    store = TokenStore(config.auth_path())
-    token = store.issue(actor, kind)
+    Shelling out rather than reading the file: the format is the server's business,
+    and this script has no reason to know it.
+    """
+    server = binary("analog-server")
+    proc = subprocess.run([str(server), "token", "add", actor, "--kind", kind],
+                          capture_output=True, text=True)
+    if proc.returncode != 0:
+        raise SystemExit(f"{server} token add failed:\n{proc.stdout}{proc.stderr}")
+    match = TOKEN_RE.search(proc.stdout)
+    if not match:
+        raise SystemExit(f"no token in the output of `analog-server token add`:\n{proc.stdout}")
     print(f"issued a token for {actor} ({kind})")
-    print(f"  store: {store.path}")
     print("  it is shown once and stored only as a digest.\n")
-    return token
+    return match.group(0)
 
 
 def write_wrapper(into: Path, actor: str, kind: str, url: str,
@@ -55,7 +82,7 @@ def write_wrapper(into: Path, actor: str, kind: str, url: str,
     """
     into.mkdir(parents=True, exist_ok=True)
     path = into / f"analog-{actor}"
-    analog = Path(sys.executable).parent / "analog"
+    analog = binary("analog")
     lines = [
         "#!/bin/sh",
         f"# Analog, pre-configured as {actor} ({kind}).",
@@ -126,6 +153,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--issue", action="store_true",
                     help="mint a token (server host only)")
     ap.add_argument("--url", default="http://127.0.0.1:8787")
+    ap.add_argument("--bin-dir", type=Path, default=None, metavar="DIR",
+                    help="where the analog binaries are; defaults to $ANALOG_BIN_DIR, "
+                         "./bin, then PATH")
     ap.add_argument("--token", default=None,
                     help="an existing token; implied by --issue")
     ap.add_argument("--skill-into", type=Path, default=None, metavar="DIR",
@@ -145,6 +175,9 @@ def main(argv: list[str] | None = None) -> int:
                          "MCP config or skills without a restart")
     args = ap.parse_args(argv)
 
+    global BIN_DIR
+    BIN_DIR = args.bin_dir
+
     token = args.token
     if args.issue:
         token = issue(args.actor, args.kind)
@@ -162,7 +195,6 @@ def main(argv: list[str] | None = None) -> int:
             print("  no token written — add ANALOG_TOKEN there once the server issues one.")
         print("  Read at session start, so restart the agent for it to take effect.\n")
 
-    python = Path(sys.executable)
     if args.wrapper is not None:
         path = write_wrapper(Path(args.wrapper).expanduser(), args.actor, args.kind,
                              args.url, token)
@@ -176,11 +208,8 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print()
 
-    mcp_entry = python.parent / "analog-mcp"
-    command = str(mcp_entry) if mcp_entry.exists() else (
-        f"{python} {REPO_ROOT / 'analog' / 'mcp_server' / 'server.py'}")
-
     if args.print_mcp:
+        command = str(binary("analog-mcp"))
         secret = token or "$ANALOG_TOKEN"
         print("wire up MCP (stdio) — run this where the agent runs:\n")
         print(f"  claude mcp add analog \\")
@@ -199,7 +228,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  export ANALOG_ACTOR={args.actor}")
         print(f"  export ANALOG_ACTOR_KIND={args.kind}")
         print(f"  export ANALOG_TOKEN={token or '<token>'}")
-        print(f"  export PATH={python.parent}:$PATH")
+        print(f"  export PATH={binary('analog').parent}:$PATH")
         print("\n  then:  analog whoami   # confirms who the server thinks you are")
 
     if token and not args.print_mcp and not args.print_env:

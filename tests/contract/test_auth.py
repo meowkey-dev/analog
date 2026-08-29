@@ -5,7 +5,7 @@ localhost". A shared token gatekeeps the server but not identity, and §2.2/§10
 `actor` load-bearing: the event log is only worth having if attribution is true. So a
 token names exactly one actor, and the server checks the claim rather than taking it.
 
-The store itself is exercised in tests/unit/test_auth_store.py; everything here goes
+The store itself is exercised in internal/auth's Go tests; everything here goes
 through the socket, so it judges any implementation.
 """
 

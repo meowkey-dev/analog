@@ -7,8 +7,8 @@ package config
 
 import (
 	"os"
-	"slices"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 )

@@ -81,7 +81,7 @@ export function SpaceIndex({ onOpen }: { onOpen: (slug: string) => void }) {
         <div className="index-error">
           <p>Can't reach the API: {error}</p>
           <p className="hint">
-            Start it with <code>uvicorn server.main:app --port 8787</code>, or open{" "}
+            Start it with <code>analog-server</code>, or open{" "}
             <a href="/s/redesign?fixture">the fixture space</a>, which needs no database.
           </p>
         </div>

@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 import socket
 import subprocess
-import sys
 import time
 
 import httpx
@@ -78,7 +77,7 @@ def test_the_server_defaults_to_the_contracts_address(data_root):
     finally:
         probe.close()
 
-    proc = subprocess.Popen((server_bin() or [sys.executable, "-m", "analog.server"]),
+    proc = subprocess.Popen(server_bin(),
                             env={**os.environ, **env_for(data_root)},
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:

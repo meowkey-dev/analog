@@ -2,32 +2,50 @@
 
 A shared canvas for one human and their agents. See [SPEC.md](SPEC.md).
 
-`contracts/` and `analog/server/schema.sql` are frozen (see `contracts/README.md`). Runtime
-choices the contract leaves open are recorded in [DECISIONS.md](DECISIONS.md); gaps
-found in the contract are in [AMENDMENTS.md](AMENDMENTS.md).
+`contracts/` and `internal/store/schema.sql` are frozen (see `contracts/README.md`).
+Runtime choices the contract leaves open are recorded in [DECISIONS.md](DECISIONS.md);
+gaps found in the contract are in [AMENDMENTS.md](AMENDMENTS.md).
 
-## Setup
+## Install
+
+Three binaries — `analog-server`, `analog`, `analog-mcp` — with no runtime to install
+beside them. The web UI is inside `analog-server`.
 
 ```bash
-uv venv --python 3.14 && uv pip install -e ".[dev,mcp]"
-(cd web && npm install && npm run build)
+curl -L https://github.com/meowkey-dev/analog/releases/latest/download/analog-darwin-arm64.tar.gz | tar xz
+./analog-server
+```
+
+Then open <http://127.0.0.1:8787>.
+
+### From source
+
+```bash
+(cd web && npm install && npm run build)     # the bundle the server embeds
+scripts/build.sh                             # -> bin/
 ```
 
 If `npm --version` reports something implausible (a Bun or Volta shim, say), point at
-a real Node install — Vite 8 will not run under a shim.
+a real Node install — Vite 8 will not run under a shim. Without a built bundle the
+server still runs; it just serves the API and no UI.
+
+`scripts/build.sh darwin/arm64 linux/amd64 windows/amd64` cross-compiles. `CGO_ENABLED=0`
+throughout, so no target needs a C toolchain.
 
 ## Run
 
 ```bash
-.venv/bin/python scripts/seed.py --reset
-.venv/bin/python -m server
+bin/analog-server seed --reset      # load contracts/fixtures/ into a fresh database
+bin/analog-server
 ```
 
-Then open <http://127.0.0.1:8787/s/redesign>. The server serves `web/dist`, so that
-is one origin with no proxy. For frontend work, `cd web && npm run dev` gives HMR on
-:5173 and proxies `/api` to :8787.
+Then open <http://127.0.0.1:8787/s/redesign>. The server serves its embedded bundle,
+so that is one origin with no proxy. For frontend work, `cd web && npm run dev` gives
+HMR on :5173 and proxies `/api` to :8787.
 
 `/s/redesign?fixture` renders `contracts/fixtures/` with no database behind it.
+
+The database, media and tokens live in `./data`, or wherever `ANALOG_DATA_DIR` points.
 
 ## Running it somewhere else
 
@@ -36,20 +54,22 @@ bind anything else it refuses to start until a token exists, because an
 unauthenticated Analog on a network is world-writable.
 
 ```bash
-.venv/bin/analog token add kai --kind human          # on the server; shown once
-.venv/bin/analog token add claude-code --kind agent
-.venv/bin/python -m server --host 0.0.0.0
+analog-server token add kai --kind human          # on the server; shown once
+analog-server token add claude-code --kind agent
+analog-server --host 0.0.0.0
 ```
 
 A token identifies **exactly one actor**, and the server takes `actor` from it. A
 client claiming a name its token does not hold gets a `403`, so what the event log
-says about who did what is true rather than asserted. `analog token list` and
-`analog token revoke <actor>` manage them; reissuing revokes the previous one.
+says about who did what is true rather than asserted. `token list` and
+`token revoke <actor>` manage them; reissuing revokes the previous one. The same
+command group is on the client as `analog token ...`, for when that is what is
+installed — either way it reads the server's auth file, so it runs on the server host.
 
 From a client:
 
 ```bash
-.venv/bin/analog login https://analog.example.com --token analog_...
+analog login https://analog.example.com --token analog_...
 ```
 
 That writes `~/.analog.toml` (mode 600) and learns your actor from the server.
@@ -63,14 +83,16 @@ Deliberately **not** a cookie: a card's sandboxed iframe cannot set an
 `Authorization` header, so agent-authored HTML has no ambient credential to ride —
 which is the concern SPEC §8 raised about this app touching a network.
 
+See [deploy/](deploy/README.md) for systemd and TLS.
+
 ## Desktop app
 
 There is one, and it is a separate commercial product: a local sidecar that runs its
-own server, so you never see a venv or a port. It talks to this code over the HTTP
-API in `contracts/` like any other client — it has no private fork of the server.
+own server, so you never see a port. It talks to this code over the HTTP API in
+`contracts/` like any other client — it has no private fork of the server.
 
-You do not need it. `python -m server` plus a browser is the whole thing, which is
-what the rest of this README documents.
+You do not need it. `analog-server` plus a browser is the whole thing, which is what
+the rest of this README documents.
 
 ## Giving an agent access
 
@@ -79,7 +101,7 @@ Three things have to line up: a **token** (the server decides who the agent is),
 the workflow the API cannot. One command sets up all three:
 
 ```bash
-.venv/bin/python scripts/onboard_agent.py claude-code --issue --url http://127.0.0.1:8787 --skill-into ~/.claude/skills --print-mcp
+python3 scripts/onboard_agent.py claude-code --issue --url http://127.0.0.1:8787 --skill-into ~/.claude/skills --print-mcp
 ```
 
 `--issue` mints the token, so it has to run on the server host; everything else runs
@@ -90,7 +112,7 @@ wherever the agent does. Drop `--issue` and pass `--token` if you already have o
 Ten tools over stdio (SPEC §4.1). The command above prints this filled in:
 
 ```bash
-claude mcp add analog -e ANALOG_URL=http://127.0.0.1:8787 -e ANALOG_ACTOR=claude-code -e ANALOG_ACTOR_KIND=agent -e ANALOG_TOKEN=analog_... -- /path/to/.venv/bin/analog-mcp
+claude mcp add analog -e ANALOG_URL=http://127.0.0.1:8787 -e ANALOG_ACTOR=claude-code -e ANALOG_ACTOR_KIND=agent -e ANALOG_TOKEN=analog_... -- /path/to/analog-mcp
 ```
 
 Add `--scope user` to make it available in every project instead of just the current
@@ -125,7 +147,7 @@ MCP config and skills are both read when a session starts, so neither reaches an
 agent mid-session. A command on disk does:
 
 ```bash
-.venv/bin/python scripts/onboard_agent.py claude-code --issue --url https://analog.example.com --wrapper
+python3 scripts/onboard_agent.py claude-code --issue --url https://analog.example.com --wrapper
 ```
 
 That writes `~/.local/bin/analog-claude-code`, a one-line shell wrapper with the URL,
@@ -151,8 +173,8 @@ The skill teaches the CLI, so it needs the CLI configured — it is documentatio
 credentials. Three pieces:
 
 ```bash
-ln -sf "$PWD/.venv/bin/analog" ~/.local/bin/analog     # `analog` on PATH, as the skill writes it
-.venv/bin/python scripts/onboard_agent.py claude-code --url https://analog.example.com --token analog_... --skill-into ~/.claude/skills --claude-env ~/code/that-project
+ln -sf "$PWD/bin/analog" ~/.local/bin/analog     # `analog` on PATH, as the skill writes it
+python3 scripts/onboard_agent.py claude-code --url https://analog.example.com --token analog_... --skill-into ~/.claude/skills --claude-env ~/code/that-project
 ```
 
 `--claude-env` merges `ANALOG_URL` / `ANALOG_ACTOR` / `ANALOG_ACTOR_KIND` /
@@ -165,8 +187,8 @@ make the agent post under your name.
 Then **restart the agent**: both the skill listing and `settings.local.json` are read
 at session start.
 
-Mint the token on whichever machine runs the server — `analog token add claude-code
---kind agent` — since that is where the token store lives.
+Mint the token on whichever machine runs the server — `analog-server token add
+claude-code --kind agent` — since that is where the token store lives.
 
 This is the half that matters. MCP and the CLI give an agent the operations; the
 skill teaches the conventions that decide whether the tool stays usable — read
@@ -177,23 +199,34 @@ skill will use Analog as a dumping ground.
 ## Test
 
 ```bash
-.venv/bin/python -m pytest              # 445 tests
+go test ./...                           # 113 tests
+scripts/build.sh                        # the binaries the suite judges
+
+uv venv && uv pip install -r tests/requirements.txt
+.venv/bin/python -m pytest              # 344 conformance tests, over HTTP
+
 (cd web && npm run build)               # tsc --noEmit + vite build
 ```
 
-`tests/contract/` is written against `contracts/` and SPEC.md rather than against the
-implementation; `tests/unit/` covers the client, CLI and MCP surfaces.
+`tests/contract/` is the executable definition of Analog: written against
+`contracts/` and SPEC.md rather than against the implementation, and reaching the
+server over a socket, so it judges any binary that answers. Point it at one with
+`ANALOG_SERVER_BIN`. It stayed in Python through the Go port deliberately —
+[DECISIONS.md](DECISIONS.md) says why, and `tests/README.md` has the contract a
+server binary must honour.
+
+Everything that needs the implementation's own objects is a Go test beside the code.
 
 ## The §7 acceptance demo
 
 With the server running:
 
 ```bash
-.venv/bin/python scripts/demo.py agent-a        # 1-3: MCP over stdio, as claude-code
+python3 scripts/demo.py agent-a        # 1-3: MCP over stdio, as claude-code
 #   4: in the browser — drag cards, delete Option D, pin "y-axis starts at 40, fix",
 #      link Option A -> Option C "depends on"
-.venv/bin/python scripts/demo.py agent-b        # 5-6: the CLI, as codex
-.venv/bin/python scripts/demo.py agent-a-again  # 7:  independent cursors
+python3 scripts/demo.py agent-b        # 5-6: the CLI, as codex
+python3 scripts/demo.py agent-a-again  # 7:  independent cursors
 ```
 
 Step 7 asserts the three things the design exists for: every delta Agent A receives
@@ -202,27 +235,36 @@ the annotation Agent B resolved is gone.
 
 ## Layout
 
-    analog/
-      server/    FastAPI + SQLite. Every rule lives in store.py.
-      client/    typed HTTP client over the API
-      cli/       `analog`
-      mcp_server/  FastMCP stdio server
-    skill/       the agent skill
-    web/         React + Vite
-    deploy/      systemd unit and Caddyfile for running it on a host
-    scripts/     seed.py, demo.py, onboard_agent.py, build_dist.py
-    tests/       contract/ and unit/
+    cmd/
+      analog/          the `analog` CLI
+      analog-server/   the server, plus `seed` and `token`
+      analog-mcp/      MCP over stdio
+    internal/
+      store/           SQLite. Every rule lives here.
+      api/             HTTP handlers; thin
+      auth/            per-actor bearer tokens
+      sse/             the event broker
+      ids/             ULID with the s_/c_/l_/a_/m_ prefixes
+      mcp/             the ten tools
+      web/             where the built bundle is embedded from
+    client/            exported HTTP client — third parties import this
+    skill/             the agent skill
+    web/               React + Vite
+    deploy/            systemd unit and Caddyfile for running it on a host
+    scripts/           build.sh, demo.py, onboard_agent.py
+    tests/             the conformance harness
 
 ## CI
 
-`.github/workflows/test.yml` runs the contract and unit suites on Python 3.11 and
-3.13, plus the web typecheck.
+`.github/workflows/test.yml` runs `go test`, the conformance suite against a built
+binary on Linux and macOS, and the web typecheck. `release.yml` cross-compiles the
+matrix on a tag and checks that the server runs standalone and stays under 20 MB.
 
 ## License
 
 [Apache-2.0](LICENSE). Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md);
 there is no CLA, just a `Signed-off-by` line.
 
-`contracts/` and `analog/server/schema.sql` are the wire format and are changed only through
-the amendment process, which is the one thing worth reading before opening a pull
-request.
+`contracts/` and `internal/store/schema.sql` are the wire format and are changed only
+through the amendment process, which is the one thing worth reading before opening a
+pull request.

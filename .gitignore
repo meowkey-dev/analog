@@ -1,8 +1,7 @@
-# Python
+# Python — the conformance harness only; Analog itself has no Python in it.
 __pycache__/
 *.py[cod]
 .venv/
-*.egg-info/
 .pytest_cache/
 .ruff_cache/
 
@@ -10,9 +9,6 @@ __pycache__/
 node_modules/
 web/dist/
 *.tsbuildinfo
-
-# The SPA copied into the package at build time (see scripts/build_dist.py)
-analog/server/web/
 
 # Runtime data (SQLite DB + uploaded media)
 data/
@@ -24,8 +20,11 @@ auth.json
 .env
 .DS_Store
 
-# Built distributions
+# Release archives
 dist/
+
+# npm is the supported toolchain; Vite 8 will not run under a Bun shim.
+web/bun.lock
 
 # The web bundle is copied in at build time; only the placeholder is tracked.
 internal/web/dist/*
