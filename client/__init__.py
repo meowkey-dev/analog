@@ -11,7 +11,12 @@ import json
 import os
 import time
 from pathlib import Path
-from typing import Any, Iterator, Literal, TypedDict
+from typing import Any, Iterator, Literal
+
+# typing_extensions, not typing: below 3.12 pydantic refuses to build a schema from
+# a typing.TypedDict, and mcp_server exposes CardDraft directly as a tool parameter.
+# It re-exports the stdlib version where there is no difference.
+from typing_extensions import TypedDict
 
 import httpx
 
