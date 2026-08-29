@@ -1,8 +1,44 @@
-import { memo, useMemo } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import DOMPurify from "dompurify";
+import { api, getConnection, resolveUrl } from "./api";
 import type { Node } from "./api";
+
+/**
+ * A file node's URL cannot go straight into <img src>: an image request carries no
+ * Authorization header, so on a server with tokens it would 401. Fetch it and hand
+ * back an object URL instead. With no token the plain URL is fine and cheaper.
+ */
+function useMediaSrc(path: string | undefined): string | undefined {
+  const [src, setSrc] = useState<string | undefined>(undefined);
+
+  useEffect(() => {
+    if (!path) {
+      setSrc(undefined);
+      return;
+    }
+    if (!getConnection().token) {
+      setSrc(resolveUrl(path));
+      return;
+    }
+    let objectUrl: string | null = null;
+    let cancelled = false;
+    api.mediaObjectUrl(path)
+      .then((url) => {
+        if (cancelled) { URL.revokeObjectURL(url); return; }
+        objectUrl = url;
+        setSrc(url);
+      })
+      .catch(() => { if (!cancelled) setSrc(undefined); });
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [path]);
+
+  return src;
+}
 
 /**
  * Renders one card by sp_kind (SPEC §5).
@@ -39,21 +75,24 @@ function Body({ node }: { node: Node }) {
           title={node.sp_title ?? node.id}
         />
       );
-    case "file": {
-      const isImage = !/\.pdf$/i.test(node.file ?? "");
-      return isImage ? (
-        <div className="card-body file">
-          <img src={node.file} alt={node.sp_title ?? ""} draggable={false} />
-        </div>
-      ) : (
-        <div className="card-body file">
-          <a href={node.file} target="_blank" rel="noreferrer">{node.file}</a>
-        </div>
-      );
-    }
+    case "file":
+      return <FileBody node={node} />;
     default:
       return <pre className="card-body plain">{node.text ?? ""}</pre>;
   }
+}
+
+function FileBody({ node }: { node: Node }) {
+  const src = useMediaSrc(node.file);
+  const isImage = !/\.pdf$/i.test(node.file ?? "");
+  if (!src) return <div className="card-body file muted">loading…</div>;
+  return (
+    <div className="card-body file">
+      {isImage
+        ? <img src={src} alt={node.sp_title ?? ""} draggable={false} />
+        : <a href={src} target="_blank" rel="noreferrer">{node.sp_title || node.file}</a>}
+    </div>
+  );
 }
 
 export interface CardProps {

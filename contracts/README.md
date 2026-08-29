@@ -84,6 +84,32 @@ member with no fixture.
 The only fixture edit so far. `scripts/seed.py` reads the value straight from the
 fixture, so re-seeding is all that is needed to pick it up.
 
+### 0.3.0 — 2026-08-29 · going remote
+
+SPEC §3 anticipated this ("add a single shared bearer token ... when you first expose
+it beyond localhost") but a shared token gatekeeps the *server*, not *identity*, and
+§2.2/§10 make `actor` load-bearing: an event log is only worth keeping if attribution
+cannot simply be claimed. So a token identifies exactly one actor.
+
+| Change |
+|---|
+| `securitySchemes.bearerAuth`, and a top-level `security` of `[{bearerAuth: []}, {}]` — a token is accepted, and a server with none configured is still a valid deployment. |
+| `Error.error` gains `unauthorized` and `forbidden`. |
+| `GET /health` — public, and the only public operation. A client cannot be asked to authenticate before it can discover that authentication exists. |
+| `GET /whoami` — the actor a token writes as. The web UI reads it instead of hardcoding `human`, which §2.2 could assume only while the server was loopback-only. |
+
+`actor` and `actor_kind` stay **required** on every mutation rather than being
+inferred from the token. The contract says they are required, and SPEC §10 wants a
+misconfigured agent to fail loudly — a silently corrected actor is not loud. A
+declared actor that disagrees with the token is `403`.
+
+The bearer token is deliberately not a cookie. A card's sandboxed iframe cannot set
+an `Authorization` header, so agent-authored HTML has no ambient credential to ride;
+a cookie would have handed it one. That is the concern SPEC §8 filed under
+"separate-origin artifact serving ... before this touches a network".
+
+No fixture changed: none of them contain a token or an identity.
+
 ## One correction to the spec
 
 `GET /spaces/{slug}/feedback` is in `openapi.json` but was not in §3 of the build

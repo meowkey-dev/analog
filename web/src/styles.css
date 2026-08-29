@@ -346,3 +346,14 @@ input, textarea, select {
 a.brand { text-decoration: none; }
 .switcher-row .tick { width: 12px; flex: none; color: var(--accent); }
 .switcher-row.current { color: var(--ink); background: #1e2432; }
+
+.connect .recent-heading { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--dim); margin: 26px 0 10px; }
+.space-counts.forget { cursor: pointer; }
+.space-counts.forget:hover { color: var(--danger); }
+.topbar .server {
+  display: flex; align-items: center; gap: 6px;
+  background: transparent; border-color: var(--line); color: var(--dim);
+}
+.topbar .server:hover { color: var(--ink); }
+.topbar .server .who { color: var(--accent); }
+.card-body.file.muted { color: var(--dim); }

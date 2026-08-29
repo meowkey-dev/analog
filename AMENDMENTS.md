@@ -5,7 +5,8 @@ changes**. Each says what I implemented in the meantime so nothing was blocked.
 
 **#1, #2, #4, #5 and #6 were approved on 2026-08-29** (on the `decisions` space) and
 are applied: `openapi.json` is at **0.2.0**, `schema.sql` gained the two `space.*`
-event types, and the server matches. **#3 was approved and applied on the same space (0.2.1).** **#8 and #9 are new.**
+event types, and the server matches. **#3 was approved and applied on the same space (0.2.1).** **#8 and #9 are open.**
+**#10 and #11 came out of going remote and are applied in 0.3.0.**
 
 ---
 
@@ -191,3 +192,41 @@ Three ways out, cheapest first:
 I would take (3), with (1) as the fallback if it feels like sleight of hand.
 
 **Ask:** which, or neither.
+
+---
+
+### 10. Going remote needs auth the contract could not express — APPLIED in 0.3.0
+
+SPEC §3: "Add a single shared bearer token from an env var when you first expose it
+beyond localhost (one middleware, ten lines)." That gatekeeps the server. It does not
+gatekeep *identity* — anyone holding the shared token could still write as any actor,
+and §2.2/§10 spend real effort making `actor` trustworthy. On loopback the query
+param was fine because only you could reach the port. On a network it is a claim.
+
+**Applied:** a token identifies exactly one `(actor, actor_kind)`. `actor` and
+`actor_kind` stay required on every mutation — the contract says so, and SPEC §10
+wants a misconfigured agent to fail loudly, which a silently corrected actor is not —
+but a claim that disagrees with the token is `403`. Contract gains `bearerAuth`,
+`unauthorized`/`forbidden`, `GET /health` (public) and `GET /whoami`.
+
+**Still open, and yours to decide later:** there is no way to *rotate* a token
+without a window where the old one is dead and the new one has not reached the agent.
+`analog token add <same actor>` revokes the old one immediately. Fine for two actors,
+irritating for twenty.
+
+---
+
+### 11. `actor=human` was a loopback assumption — APPLIED in 0.3.0
+
+SPEC §2.2: "The web UI hardcodes `human`." True while the only person who could
+reach the server was the person running it. With tokens, two people can hold two
+tokens, and both would have written as `human` — indistinguishable in the event log,
+and sharing one cursor.
+
+**Applied:** the UI calls `GET /whoami` and writes as whatever the token says. On a
+server with no tokens it still says `human`, so nothing about the loopback case
+changed and no fixture moved.
+
+**Consequence worth knowing:** `human` is now just a name. `analog token add kai
+--kind human` produces an event log that says `kai`, not `human`. Existing spaces
+keep whatever they recorded.

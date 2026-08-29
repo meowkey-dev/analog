@@ -3,8 +3,10 @@ import { Canvas } from "./Canvas";
 import { Activity } from "./Activity";
 import { AnnotationComposer, AnnotationPanel, type DraftAnnotation } from "./Annotations";
 import { SpaceIndex, SpaceSwitcher } from "./Spaces";
-import { api, subscribe, ApiError } from "./api";
+import { api, subscribe, ApiError, getIdentity } from "./api";
 import type { AnalogEvent, Annotation, Canvas as CanvasData, Motivation, Node, Space } from "./api";
+import { Connect, adopt, attempt, type Connected } from "./Connect";
+import { clearConnection, describe, loadConnection } from "./connection";
 import fixtureCanvas from "../../contracts/fixtures/canvas.json";
 import fixtureAnnotations from "../../contracts/fixtures/annotations.json";
 import fixtureEvents from "../../contracts/fixtures/events.json";
@@ -36,11 +38,17 @@ function useRoute(): [string, (slug: string) => void] {
   return [slugFromPath(path), go];
 }
 
+type Boot =
+  | { phase: "checking" }
+  | { phase: "connect"; problem: string | null }
+  | { phase: "ready"; connected: Connected };
+
 export default function App() {
   const [slug, go] = useRoute();
   // WP3/WP4 render the fixture space with no database behind it: /s/redesign?fixture
   const fixtureMode = new URLSearchParams(window.location.search).has("fixture");
 
+  const [boot, setBoot] = useState<Boot>({ phase: "checking" });
   const [space, setSpace] = useState<Space | null>(null);
   const [canvas, setCanvas] = useState<CanvasData>(EMPTY);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
@@ -65,6 +73,12 @@ export default function App() {
   }, []);
 
   const failed = useCallback((exc: unknown) => {
+    if (exc instanceof ApiError && (exc.status === 401 || exc.status === 403)) {
+      setBoot({ phase: "connect", problem: exc.status === 401
+        ? "The server stopped accepting that token."
+        : `${exc.message}` });
+      return;
+    }
     const message = exc instanceof ApiError
       ? (exc.code === "conflict"
         ? "Someone else changed that card first — reloading."
@@ -89,6 +103,29 @@ export default function App() {
     }
   }, [slug, fixtureMode, failed]);
 
+  // Settle on a server and an identity before touching any space: which actor we
+  // write as is decided by the token, not by this UI (contract 0.3.0).
+  useEffect(() => {
+    if (fixtureMode) {
+      setBoot({ phase: "ready", connected: null as unknown as Connected });
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const connected = await attempt(loadConnection());
+        if (cancelled) return;
+        adopt(connected);
+        setBoot({ phase: "ready", connected });
+      } catch (exc) {
+        if (!cancelled) {
+          setBoot({ phase: "connect", problem: exc instanceof Error ? exc.message : String(exc) });
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [fixtureMode]);
+
   useEffect(() => {
     if (fixtureMode) {
       setSpace(fixtureSpace as Space);
@@ -97,7 +134,7 @@ export default function App() {
       setEvents((fixtureEvents as { events: AnalogEvent[] }).events);
       return;
     }
-    if (!slug) return;                       // "/" renders the space index instead
+    if (!slug || boot.phase !== "ready") return;   // "/" renders the space index
     setError(null);
     (async () => {
       try {
@@ -115,7 +152,7 @@ export default function App() {
         setError(exc instanceof ApiError ? `${exc.code}: ${exc.message}` : String(exc));
       }
     })();
-  }, [slug, fixtureMode]);
+  }, [slug, fixtureMode, boot.phase]);
 
   // --- live (SSE, falling back to polling) -----------------------------------
 
@@ -259,6 +296,20 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKey);
   });
 
+  if (boot.phase === "checking") {
+    return <div className="index"><header><h1>analog</h1><p>connecting…</p></header></div>;
+  }
+
+  if (boot.phase === "connect") {
+    return (
+      <Connect
+        initial={loadConnection()}
+        problem={boot.problem}
+        onConnected={(connected) => setBoot({ phase: "ready", connected })}
+      />
+    );
+  }
+
   if (!slug && !fixtureMode) {
     return <SpaceIndex onOpen={go} />;
   }
@@ -308,6 +359,19 @@ export default function App() {
         <button onClick={() => setRightPanel(rightPanel === "activity" ? null : "activity")}
                 className={rightPanel === "activity" ? "on" : ""}>
           activity
+        </button>
+        <button
+          className="server"
+          title={boot.phase === "ready" && boot.connected
+            ? `${describe(loadConnection())} · writing as ${getIdentity().actor}`
+            : "connection"}
+          onClick={() => {
+            clearConnection();
+            setBoot({ phase: "connect", problem: null });
+          }}
+        >
+          {describe(loadConnection())}
+          <span className="who">{getIdentity().actor}</span>
         </button>
         <span className={`conn ${connection}`} title={connection === "live" ? "live over SSE" : "polling"}>
           {connection === "live" ? "live" : "poll"}

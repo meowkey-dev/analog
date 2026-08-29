@@ -15,6 +15,12 @@ anything else. There is no default: the cursor that tracks what you've already s
 is keyed by it, so two agents sharing a name share a cursor and each miss half the
 feedback.
 
+If the space lives on a remote server, you also need `ANALOG_URL` and `ANALOG_TOKEN`.
+The token identifies exactly one actor, and the server takes your name from it — if
+`ANALOG_ACTOR` disagrees with the token, every write is refused rather than
+silently reattributed. `analog whoami` tells you what the server thinks you are, and
+is the first thing to run when something 401s or 403s.
+
 ## Every session, first
 
     analog feedback <slug>
@@ -73,7 +79,8 @@ default replaces in place.
     analog import <slug> < in.canvas     # merges, never deletes
 
 `--json` works on every read command. Everything exits non-zero on failure, so check
-the status rather than the output.
+the status rather than the output. Exit **3** specifically means an auth problem:
+a missing, wrong, or revoked token — not something to retry.
 
 ## MCP
 

@@ -11,11 +11,16 @@ node_modules/
 web/dist/
 *.tsbuildinfo
 
+# Tauri
+app/src-tauri/target/
+app/src-tauri/gen/
+
 # Runtime data (SQLite DB + uploaded media)
 data/
 !data/.gitkeep
 
-# Local config
+# Local config and credentials
 .analog.toml
+auth.json
 .env
 .DS_Store

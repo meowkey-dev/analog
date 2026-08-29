@@ -81,6 +81,37 @@ touches the filesystem. Accepted types: PNG, JPEG, GIF, WebP, SVG, PDF. 25 MB ca
 - **Shift-drag for a region annotation is now in the hint bar.** It always worked;
   nothing told you it existed.
 
+## Going remote (2026-08-29)
+
+- **Per-actor bearer tokens, not the shared token SPEC §3 sketched.** A shared token
+  gatekeeps the server but not identity, and §2.2/§10 make `actor` load-bearing. A
+  token maps to exactly one `(actor, actor_kind)`; the server compares the declared
+  actor against it and returns `403` on a mismatch rather than quietly correcting it,
+  because a silently corrected actor is not "failing loudly".
+- **Tokens live in a JSON file, not a table.** `schema.sql` is frozen, and
+  credentials are operator state rather than canvas data. SHA-256 digests, mode 600.
+- **A non-loopback bind with no tokens is refused at startup.** The one failure mode
+  worth being rude about.
+- **`GET /api/health` is public.** A client cannot be asked to authenticate before it
+  can discover that authentication exists.
+- **A header, never a cookie.** A card's sandboxed iframe cannot set an
+  `Authorization` header, so agent HTML has no ambient credential to ride. A cookie
+  would have handed it one — which is the risk SPEC §8 raised about this touching a
+  network.
+- **SSE moved from `EventSource` to `fetch`.** `EventSource` cannot set headers, and
+  a token in the query string leaks into logs and referrers. Parsing SSE framing is
+  about fifteen lines, and reconnection got more honest as a side effect.
+- **Media is fetched into a blob URL**, because `<img src>` carries no header either.
+- **The web bundle takes its server as data** (`web/src/connection.ts`), so one build
+  serves both the same-origin browser and the Tauri shell.
+- **The Tauri app has no Rust-side API client.** It loads the same bundle the server
+  serves. A second implementation of the auth rules is a second thing to get wrong.
+- **Two build-environment pins, both kept inside the repo** rather than fixed on the
+  machine: `app/src-tauri/rust-toolchain.toml` (Tauri 2 needs ≥1.88, and this repo
+  should not decide what `rustup default` points at), and
+  `app/src-tauri/.cargo/config.toml`, which points the linker at `/usr/bin/cc`
+  because `~/bin/cc` on this machine is a shim that execs `claude`.
+
 ## Toolchain
 
 - Python **3.11+**, pinned deps in `pyproject.toml` (resolved 2026-08-28 on 3.14).
