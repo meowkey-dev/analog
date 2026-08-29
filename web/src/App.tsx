@@ -126,6 +126,12 @@ export default function App() {
     const stop = subscribe(slug, space.seq, (event) => {
       if (event.seq <= seenSeq.current) return;
       seenSeq.current = event.seq;
+      if (event.type === "space.deleted") {
+        // The space is gone; refreshing it would only 404.
+        notify("This space was deleted.");
+        go("");
+        return;
+      }
       setEvents((previous) => (previous.some((e) => e.seq === event.seq)
         ? previous
         : [...previous, event]));
@@ -134,7 +140,7 @@ export default function App() {
     return stop;
     // Re-subscribing on every seq change would thrash; space identity is enough.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [slug, fixtureMode, space?.id, refresh]);
+  }, [slug, fixtureMode, space?.id, refresh, go, notify]);
 
   // --- mutations -------------------------------------------------------------
 
@@ -377,8 +383,14 @@ export default function App() {
 
       {toast && <div className="toast">{toast}</div>}
       <footer className="hints">
-        drag to pan · ⌘/ctrl-scroll to zoom · double-click empty space for a card ·
-        drag the ◇ handle to link · double-click a card to edit · c to comment
+        {annotateMode ? (
+          <>click a card to pin a comment · <strong>shift-drag on a card to comment on a
+          region</strong> · esc to stop</>
+        ) : (
+          <>drag to pan · ⌘/ctrl-scroll to zoom · scroll over a card to scroll the card ·
+          double-click empty space for a card · drag the ◇ handle to link ·
+          double-click a card to edit · c to comment</>
+        )}
       </footer>
     </div>
   );

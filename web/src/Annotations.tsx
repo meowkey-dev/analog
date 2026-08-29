@@ -216,6 +216,9 @@ export function AnnotationPanel(props: {
               <span className={`motivation ${a.motivation}`}>{a.motivation}</span>
               <span className="on">{a.card_title || a.card_id}</span>
               {a.stale && <span className="badge stale" title="The card changed after this was written">content changed since</span>}
+              {a.card_superseded_by && (
+                <span className="badge" title={`Revised into ${a.card_superseded_by}`}>revised</span>
+              )}
             </div>
             <p className="comment-body">{a.body}</p>
             <div className="comment-meta">{a.creator} · {new Date(a.created_at).toLocaleString()}</div>

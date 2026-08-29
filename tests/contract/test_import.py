@@ -87,7 +87,7 @@ def test_import_emits_one_event_per_item(space):
     types = [e["type"] for e in space.get("/api/spaces/demo/events").json()["events"]]
     assert types.count("card.created") == 6
     assert types.count("link.created") == 4
-    assert len(types) == 10
+    assert len(types) == 11, "plus the space's own creation"
 
 
 def test_an_edge_to_an_unknown_node_is_rejected_atomically(space):
@@ -109,9 +109,10 @@ def test_an_edge_may_reference_a_card_already_in_the_space(space):
 
 
 def test_empty_import_is_a_no_op(space):
+    before = space.get("/api/spaces/demo/events").json()["events"]
     result = do_import(space, {"nodes": [], "edges": []})
     assert result["id_map"] == {}
-    assert space.get("/api/spaces/demo/events").json()["events"] == []
+    assert space.get("/api/spaces/demo/events").json()["events"] == before
 
 
 def test_export_import_round_trips_through_a_second_space(client):

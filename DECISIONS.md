@@ -40,10 +40,12 @@ touches the filesystem. Accepted types: PNG, JPEG, GIF, WebP, SVG, PDF. 25 MB ca
 
 ## Behaviour the contract does not pin
 
-- **Auto-layout** (SPEC §5): cards created without `x`/`y` go in one column to the
-  right of the live bounding box, 40px gutter, top-down; default card box 320×200.
-  Deleted cards are excluded from the bounding box. First card in an empty space
-  lands at `(0, 0)`.
+- **Auto-layout** (SPEC §5): cards created without `x`/`y` go to the right of the
+  live bounding box, 40px gutter, top-down; default card box 320×200. Deleted cards
+  are excluded from the bounding box. First card in an empty space lands at `(0,0)`.
+  **A column wraps into a new one past 900px** (`LAYOUT_MAX_COLUMN`) — the literal
+  reading of §5 put five cards in a 1280px strip you had to zoom out to read.
+  Approved 2026-08-29.
 - **`sp_deleted_at`** is projected onto nodes at read time from `card.deleted_at`,
   only when `include_deleted=true`. It is never stored in the node blob, so
   `GET /canvas` cannot leak a tombstone.
@@ -63,6 +65,21 @@ touches the filesystem. Accepted types: PNG, JPEG, GIF, WebP, SVG, PDF. 25 MB ca
 - **Branch mode**: the new card is auto-placed rather than stacked on the card it
   supersedes, and revising an already-superseded card is a `409` — the chain has one
   head.
+
+## Added after the first review (2026-08-29)
+
+- **A space index at `/` and a switcher in the topbar.** SPEC §5 specifies one route,
+  `/s/:slug`, which left the app with no entry point: `/` was a dead end. The
+  switcher lists every space including the current one, ticked.
+- **Wheel over a card scrolls the card, not the board.** A card body with
+  `overflow: auto` scrolls natively *and* bubbles the wheel up to the canvas pan
+  handler, so both happened at once. The canvas now declines the event while an
+  ancestor still has room to scroll that way, and takes it back at the end.
+- **`Cache-Control: no-cache` on `index.html`.** Asset filenames are content-hashed
+  and may cache forever, but the document naming them must not, or every rebuild is
+  invisible until a hard reload.
+- **Shift-drag for a region annotation is now in the hint bar.** It always worked;
+  nothing told you it existed.
 
 ## Toolchain
 

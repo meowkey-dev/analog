@@ -101,7 +101,7 @@ def test_branch_auto_links_old_to_new_with_label_revised(branched):
 def test_branch_emits_a_create_and_a_link_and_nothing_else(branched):
     client, old, new = branched
     types = [e["type"] for e in client.get("/api/spaces/demo/events").json()["events"]]
-    assert types == ["card.created", "card.created", "link.created"]
+    assert types == ["space.created", "card.created", "card.created", "link.created"]
     assert "card.updated" not in types, "the superseded card is never written again"
 
 
@@ -208,3 +208,25 @@ def test_branching_a_superseded_card_is_rejected(client):
     r = client.patch(f"/api/spaces/demo/cards/{old['id']}", params=AGENT, json={"text": "v3"})
     assert r.status_code == 409
     assert r.json()["error"] == "conflict"
+
+
+def test_annotations_on_a_superseded_card_name_the_replacement(client):
+    """AMENDMENTS #6: SPEC §2.4 says feedback follows the supersede chain, so the
+    agent needs the head of the chain without a second GET /canvas."""
+    make_space(client, "demo", revision_mode="branch")
+    old = one_card(client, "demo", title="Chart", content="v1")
+    client.post("/api/spaces/demo/annotations", params=HUMAN,
+                json={"card_id": old["id"], "body": "fix the axis"})
+
+    listed = client.get("/api/spaces/demo/annotations").json()[0]
+    assert "card_superseded_by" not in listed, "absent while the card is current"
+
+    new = client.patch(f"/api/spaces/demo/cards/{old['id']}", params=AGENT,
+                       json={"text": "v2"}).json()
+
+    listed = client.get("/api/spaces/demo/annotations").json()[0]
+    assert listed["card_superseded_by"] == new["id"]
+    assert listed["card_id"] == old["id"], "the annotation itself does not move"
+
+    fb = client.get("/api/spaces/demo/feedback", params={"actor": "codex"}).json()
+    assert fb["annotations"][0]["card_superseded_by"] == new["id"]

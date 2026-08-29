@@ -60,6 +60,7 @@ CREATE TABLE event (
   seq         INTEGER NOT NULL,
   ts          TEXT NOT NULL,
   type        TEXT NOT NULL CHECK (type IN (
+                'space.created','space.deleted',
                 'card.created','card.updated','card.moved','card.deleted',
                 'link.created','link.deleted',
                 'annotation.created','annotation.resolved')),
@@ -87,4 +88,9 @@ CREATE TABLE actor_cursor (
 -- 3. An annotation is stale when annotation.card_rev < card.rev. Computed on read,
 --    never stored.
 -- 4. In branch mode the superseded card is never written again, so its rev freezes
---    and its annotations can never go stale.
+--    and its annotations can never go stale. A branching PATCH therefore emits two
+--    events -- card.created and link.created -- and no card.updated.
+-- 5. space.deleted is emitted and pushed to live subscribers, but the row does not
+--    survive: event is keyed by space_id and ON DELETE CASCADE takes it with the
+--    space. A per-space log cannot outlive its space. Retaining it would need
+--    soft-deleted spaces or a global log; neither is in v1.

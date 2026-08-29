@@ -176,17 +176,22 @@ export function SpaceSwitcher({ current, title, onOpen }: {
       {open && (
         <div className="switcher-menu">
           {spaces === null && <div className="switcher-row muted">loading…</div>}
-          {spaces?.filter((s) => s.slug !== current).map((space) => (
-            <button key={space.id} className="switcher-row"
-                    onClick={() => { setOpen(false); onOpen(space.slug); }}>
-              <span>{space.title}</span>
-              <span className="slug">/{space.slug}</span>
-              {(space.counts?.open_annotations ?? 0) > 0 && (
-                <span className="badge comments">{space.counts!.open_annotations}</span>
-              )}
-            </button>
-          ))}
-          {spaces?.length === 1 && <div className="switcher-row muted">no other spaces</div>}
+          {spaces?.map((space) => {
+            const isCurrent = space.slug === current;
+            return (
+              <button key={space.id}
+                      className={`switcher-row${isCurrent ? " current" : ""}`}
+                      aria-current={isCurrent ? "true" : undefined}
+                      onClick={() => { setOpen(false); if (!isCurrent) onOpen(space.slug); }}>
+                <span className="tick">{isCurrent ? "✓" : ""}</span>
+                <span>{space.title}</span>
+                <span className="slug">/{space.slug}</span>
+                {(space.counts?.open_annotations ?? 0) > 0 && (
+                  <span className="badge comments">{space.counts!.open_annotations}</span>
+                )}
+              </button>
+            );
+          })}
           <a className="switcher-row all" href="/"
              onClick={(event) => { event.preventDefault(); setOpen(false); onOpen(""); }}>
             all spaces…

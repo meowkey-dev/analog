@@ -89,8 +89,9 @@ def test_uploading_to_an_unknown_space_is_404(client):
 
 def test_upload_emits_no_event(space):
     """There is no media.* event type; the card that references it is the event."""
+    before = space.get("/api/spaces/demo/events").json()["events"]
     upload(space)
-    assert space.get("/api/spaces/demo/events").json()["events"] == []
+    assert space.get("/api/spaces/demo/events").json()["events"] == before
 
 
 @pytest.mark.parametrize("content_type,suffix", [

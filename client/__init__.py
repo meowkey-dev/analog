@@ -83,6 +83,7 @@ class Annotation(TypedDict, total=False):
     id: str
     card_id: str
     card_title: str
+    card_superseded_by: str      # branch mode only; absent while the card is current
     card_rev: int
     selector: dict[str, Any] | None
     body: str

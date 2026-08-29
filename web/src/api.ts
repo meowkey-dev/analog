@@ -60,6 +60,8 @@ export interface Annotation {
   id: string;
   card_id: string;
   card_title?: string;
+  /** Branch mode only: the card that replaced this one. Absent while it is current. */
+  card_superseded_by?: string;
   card_rev: number;
   selector: Selector;
   body: string;
@@ -73,6 +75,7 @@ export interface Annotation {
 }
 
 export type EventType =
+  | "space.created" | "space.deleted"
   | "card.created" | "card.updated" | "card.moved" | "card.deleted"
   | "link.created" | "link.deleted"
   | "annotation.created" | "annotation.resolved";

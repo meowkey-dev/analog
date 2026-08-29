@@ -269,3 +269,35 @@ def test_patching_a_deleted_card_is_404(space):
 
 def test_deleting_an_unknown_card_is_404(space):
     assert space.delete("/api/spaces/demo/cards/c_nope", params=HUMAN).status_code == 404
+
+
+def test_a_long_batch_wraps_into_a_new_column(space):
+    """SPEC §5 says a column; five cards of one is a strip you have to zoom out to
+    read, so a batch wraps once the column passes LAYOUT_MAX_COLUMN."""
+    from server.store import LAYOUT_MAX_COLUMN
+
+    nodes = add_cards(space, "demo", [
+        {"title": str(i), "content": "c", "height": 200, "width": 320} for i in range(6)])
+    columns: dict[float, list[dict]] = {}
+    for node in nodes:
+        columns.setdefault(node["x"], []).append(node)
+
+    assert len(columns) > 1, "six cards must not be one column"
+    for x, column in columns.items():
+        top = min(n["y"] for n in column)
+        bottom = max(n["y"] + n["height"] for n in column)
+        assert bottom - top <= LAYOUT_MAX_COLUMN + 200, f"column at {x} is too tall"
+    for column in columns.values():
+        ys = sorted(n["y"] for n in column)
+        assert ys == [n["y"] for n in column], "each column is still top-down"
+    assert len({n["y"] for n in nodes}) < len(nodes), "columns reuse the same rows"
+
+
+def test_wrapping_columns_do_not_overlap(space):
+    nodes = add_cards(space, "demo", [
+        {"title": str(i), "content": "c", "height": 200, "width": 320} for i in range(8)])
+    boxes = [(n["x"], n["y"], n["x"] + n["width"], n["y"] + n["height"]) for n in nodes]
+    for i, a in enumerate(boxes):
+        for b in boxes[i + 1:]:
+            overlaps = a[0] < b[2] and b[0] < a[2] and a[1] < b[3] and b[1] < a[3]
+            assert not overlaps, f"{a} overlaps {b}"

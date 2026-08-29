@@ -57,6 +57,25 @@ Nothing waits on WP1.
 A contract that stops describing the running system is worse than no contract,
 because people still trust it.
 
+## Applied amendments
+
+### 0.2.0 — 2026-08-29
+
+Requested in `../AMENDMENTS.md`, approved on the `decisions` space.
+
+| # | Change |
+|---|---|
+| 1 | `GET /spaces/{slug}/media/{filename}` (`getMedia`) added. A file node's `file` URL points at it, so without it a generated client cannot render one. |
+| 2 | `Node.sp_deleted_at` added, read-only, present only under `include_deleted=true`. |
+| 4 | `updateCard` and `schema.sql` note 4 now state that a branch-mode content change emits `card.created` + `link.created` and no `card.updated`. |
+| 5 | `space.created` and `space.deleted` added to the `event.type` enum here and in `schema.sql`. `space.created` is seq 1 of every new space; `space.deleted` reaches live subscribers but does not survive its own cascade (`schema.sql` note 5). |
+| 6 | `Annotation.card_superseded_by` added, so an agent can follow a supersede chain without a second `GET /canvas`. |
+
+Fixtures were **not** renumbered: they depict a space whose log begins at
+`card.created`, which stays valid — `link.deleted` has likewise always been an enum
+member with no fixture. Amendment #3 (`c_opt_d`'s tombstone) is still open, so no
+fixture changed in this round.
+
 ## One correction to the spec
 
 `GET /spaces/{slug}/feedback` is in `openapi.json` but was not in §3 of the build

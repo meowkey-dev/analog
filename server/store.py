@@ -28,6 +28,10 @@ IMMUTABLE_KEYS = frozenset({"id", "sp_rev", "sp_created_by", "sp_superseded_by"}
 DEFAULT_WIDTH = 320
 DEFAULT_HEIGHT = 200
 LAYOUT_GAP = 40
+# A batch wraps into a new column past this height rather than growing one very
+# tall column. SPEC §5 asks for "a column, top-down"; five cards of it is a
+# 1200px strip you have to zoom out to read.
+LAYOUT_MAX_COLUMN = 900
 
 
 def now() -> str:
@@ -155,18 +159,22 @@ class Store:
         return [self._space_dict(r) for r in
                 self.conn.execute("SELECT * FROM space ORDER BY rowid")]
 
-    def create_space(self, slug: str, title: str, revision_mode: str = "replace") -> dict:
+    def create_space(self, slug: str, title: str, revision_mode: str = "replace", *,
+                     actor: str = "human", actor_kind: str = "human") -> dict:
         if not SLUG_RE.match(slug or ""):
             raise ValidationFailed("slug must match ^[a-z0-9-]{1,64}$", slug=slug)
         if revision_mode not in ("replace", "branch"):
             raise ValidationFailed("revision_mode must be 'replace' or 'branch'")
         if self.conn.execute("SELECT 1 FROM space WHERE slug = ?", (slug,)).fetchone():
             raise Conflict(f"a space with slug {slug!r} already exists")
+        space_id = ids.space_id()
         with self.write():
             self.conn.execute(
                 "INSERT INTO space (id, slug, title, revision_mode, seq, created_at)"
                 " VALUES (?,?,?,?,0,?)",
-                (ids.space_id(), slug, title, revision_mode, now()))
+                (space_id, slug, title, revision_mode, now()))
+            self.emit(space_id, "space.created", space_id, actor, actor_kind,
+                      {"slug": slug, "title": title})
         return self.space(slug)
 
     def update_space(self, slug: str, patch: dict) -> dict:
@@ -180,9 +188,14 @@ class Store:
                               (title, mode, row["id"]))
         return self.space(slug)
 
-    def delete_space(self, slug: str) -> None:
+    def delete_space(self, slug: str, *, actor: str = "human",
+                     actor_kind: str = "human") -> None:
         row = self.space_row(slug)
         with self.write():
+            # Emitted for live subscribers, then taken by the cascade: a per-space
+            # log cannot outlive its space. See schema.sql note 5.
+            self.emit(row["id"], "space.deleted", row["id"], actor, actor_kind,
+                      {"slug": slug})
             self.conn.execute("DELETE FROM space WHERE id = ?", (row["id"],))
 
     # --- cards ---------------------------------------------------------------
@@ -270,11 +283,18 @@ class Store:
 
     def _insert_nodes(self, space_id: str, built: list[dict], *, actor: str,
                       actor_kind: str, in_transaction: bool = False) -> list[dict]:
-        next_x, next_y = self._layout_cursor(space_id)
+        next_x, top = self._layout_cursor(space_id)
+        next_y = top
+        column_width = 0.0
         for node in built:
             if node.get("x") is None or node.get("y") is None:
+                if next_y > top and next_y + node["height"] > top + LAYOUT_MAX_COLUMN:
+                    next_x += column_width + LAYOUT_GAP
+                    next_y = top
+                    column_width = 0.0
                 node["x"], node["y"] = next_x, next_y
                 next_y += node["height"] + LAYOUT_GAP
+                column_width = max(column_width, node["width"])
 
         def run():
             ts = now()
@@ -479,7 +499,7 @@ class Store:
     def _annotation(self, row: sqlite3.Row, card_index: dict[str, sqlite3.Row]) -> dict:
         card = card_index.get(row["card_id"])
         node = json.loads(card["node_json"]) if card else {}
-        return {
+        out = {
             "id": row["id"], "card_id": row["card_id"],
             "card_title": node.get("sp_title", ""),
             "card_rev": row["card_rev"],
@@ -491,6 +511,11 @@ class Store:
             "stale": bool(card) and row["card_rev"] < card["rev"],
             "created_at": row["created_at"],
         }
+        # Only present when there is a chain to follow, so a current card's
+        # annotation keeps the exact shape the fixtures pin.
+        if node.get("sp_superseded_by"):
+            out["card_superseded_by"] = node["sp_superseded_by"]
+        return out
 
     def _card_index(self, space_id: str) -> dict[str, sqlite3.Row]:
         return {r["id"]: r for r in self.conn.execute(

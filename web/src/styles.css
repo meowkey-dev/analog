@@ -344,3 +344,5 @@ input, textarea, select {
 .switcher-row.muted { color: var(--dim); }
 .switcher-row.all { border-top: 1px solid var(--line); border-radius: 0 0 6px 6px; margin-top: 4px; color: var(--dim); }
 a.brand { text-decoration: none; }
+.switcher-row .tick { width: 12px; flex: none; color: var(--accent); }
+.switcher-row.current { color: var(--ink); background: #1e2432; }

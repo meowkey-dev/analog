@@ -31,46 +31,49 @@ def count(client):
 
 def test_each_mutation_emits_exactly_one_event(space):
     client = space
+    base = count(client)
+    assert base == 1, "the space's own creation"
+
     card = one_card(client, "demo", title="A")
-    assert count(client) == 1
+    assert count(client) == base + 1
 
     other = one_card(client, "demo", title="B")
-    assert count(client) == 2
+    assert count(client) == base + 2
 
     client.patch(f"/api/spaces/demo/cards/{card['id']}", params=HUMAN, json={"x": 5})
-    assert count(client) == 3
+    assert count(client) == base + 3
 
     client.patch(f"/api/spaces/demo/cards/{card['id']}", params=HUMAN, json={"text": "v2"})
-    assert count(client) == 4
+    assert count(client) == base + 4
 
     link = client.post("/api/spaces/demo/links", params=AGENT, json={
         "edges": [{"fromNode": card["id"], "toNode": other["id"]}]}).json()[0]
-    assert count(client) == 5
+    assert count(client) == base + 5
 
     ann = client.post("/api/spaces/demo/annotations", params=HUMAN, json={
         "card_id": card["id"], "body": "b"}).json()
-    assert count(client) == 6
+    assert count(client) == base + 6
 
     client.patch(f"/api/spaces/demo/annotations/{ann['id']}", params=AGENT,
                  json={"resolved": True})
-    assert count(client) == 7
+    assert count(client) == base + 7
 
     client.delete(f"/api/spaces/demo/links/{link['id']}", params=HUMAN)
-    assert count(client) == 8
+    assert count(client) == base + 8
 
     client.delete(f"/api/spaces/demo/cards/{card['id']}", params=HUMAN)
-    assert count(client) == 9
+    assert count(client) == base + 9
 
     assert [e["type"] for e in events(client)] == [
+        "space.created",
         "card.created", "card.created", "card.moved", "card.updated", "link.created",
         "annotation.created", "annotation.resolved", "link.deleted", "card.deleted"]
 
 
 def test_bulk_create_emits_one_event_per_item(space):
     add_cards(space, "demo", [{"title": t, "content": t} for t in "ABCD"])
-    evs = events(space)
-    assert len(evs) == 4
-    assert all(e["type"] == "card.created" for e in evs)
+    created = [e for e in events(space) if e["type"] == "card.created"]
+    assert len(created) == 4
 
 
 def test_a_failed_mutation_emits_nothing(space):
@@ -88,7 +91,7 @@ def test_a_failed_mutation_emits_nothing(space):
 
 def test_events_validate_and_carry_attribution(space):
     one_card(space, "demo")
-    ev = events(space)[0]
+    ev = next(e for e in events(space) if e["type"] == "card.created")
     assert_valid(ev, "Event")
     assert ev["actor"] == "claude-code" and ev["actor_kind"] == "agent"
     assert ev["ts"].endswith("Z")
@@ -96,7 +99,9 @@ def test_events_validate_and_carry_attribution(space):
 
 def test_seq_starts_at_one_and_is_contiguous(space):
     add_cards(space, "demo", [{"title": t, "content": t} for t in "ABC"])
-    assert [e["seq"] for e in events(space)] == [1, 2, 3]
+    log = events(space)
+    assert [e["seq"] for e in log] == [1, 2, 3, 4]
+    assert log[0]["type"] == "space.created"
 
 
 def test_subject_id_points_at_the_thing_that_changed(space):
@@ -112,7 +117,8 @@ def test_subject_id_points_at_the_thing_that_changed(space):
 def test_card_created_payload_carries_the_title(space):
     """The activity sidebar and cards_deleted both need a title without the card."""
     one_card(space, "demo", title="Option D")
-    assert events(space)[0]["payload"]["title"] == "Option D"
+    created = next(e for e in events(space) if e["type"] == "card.created")
+    assert created["payload"]["title"] == "Option D"
 
 
 def test_link_created_payload_carries_endpoints_and_label(space):
@@ -128,8 +134,8 @@ def test_link_created_payload_carries_endpoints_and_label(space):
 
 def test_since_is_exclusive(space):
     add_cards(space, "demo", [{"title": t, "content": t} for t in "ABC"])
-    assert [e["seq"] for e in events(space, since=1)] == [2, 3]
-    assert events(space, since=3) == []
+    assert [e["seq"] for e in events(space, since=2)] == [3, 4]
+    assert events(space, since=4) == []
 
 
 def test_limit_and_cursor(space):
@@ -139,7 +145,7 @@ def test_limit_and_cursor(space):
     assert r["cursor"] == 2, "the cursor is resumable: pass it back as `since`"
 
     rest = space.get("/api/spaces/demo/events", params={"since": r["cursor"]}).json()
-    assert [e["seq"] for e in rest["events"]] == [3, 4, 5]
+    assert [e["seq"] for e in rest["events"]] == [3, 4, 5, 6]
 
 
 def test_cursor_when_nothing_is_returned(space):
@@ -195,10 +201,10 @@ def test_stream_replays_the_backlog_then_pushes_live_events(live_server):
         assert r.headers["cache-control"] == "no-cache"
 
         lines = r.iter_lines()
-        backlog = _frames(lines, 1, time.monotonic() + 10)
-        assert [f["event"] for f in backlog] == ["card.created"]
-        assert backlog[0]["id"] == 1
-        assert backlog[0]["data"]["subject_id"] == card["id"]
+        backlog = _frames(lines, 2, time.monotonic() + 10)
+        assert [f["event"] for f in backlog] == ["space.created", "card.created"]
+        assert [f["id"] for f in backlog] == [1, 2]
+        assert backlog[1]["data"]["subject_id"] == card["id"]
 
         def later():
             time.sleep(0.3)
@@ -208,7 +214,7 @@ def test_stream_replays_the_backlog_then_pushes_live_events(live_server):
         threading.Thread(target=later, daemon=True).start()
         live = _frames(lines, 1, time.monotonic() + 10)
         assert [f["event"] for f in live] == ["card.updated"]
-        assert live[0]["id"] == 2
+        assert live[0]["id"] == 3
         assert live[0]["data"]["actor"] == "human"
 
 
@@ -223,6 +229,6 @@ def test_stream_resumes_from_last_event_id(live_server):
                json={"cards": [{"title": t, "content": t} for t in "ABC"]})
 
     with httpx.stream("GET", f"{base}/api/spaces/demo/events/stream",
-                      headers={"Last-Event-ID": "2"}, timeout=15) as r:
+                      headers={"Last-Event-ID": "3"}, timeout=15) as r:
         frames = _frames(r.iter_lines(), 1, time.monotonic() + 10)
-        assert [f["id"] for f in frames] == [3], "events 1 and 2 were already delivered"
+        assert [f["id"] for f in frames] == [4], "events 1-3 were already delivered"

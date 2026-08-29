@@ -85,7 +85,9 @@ def create_app(store: Store | None = None) -> FastAPI:
 
     @app.post(f"{API}/spaces", status_code=201)
     async def create_space(actor: Actor, payload: SpaceCreate):
-        return st().create_space(payload.slug, payload.title, payload.revision_mode)
+        name, kind = actor
+        return st().create_space(payload.slug, payload.title, payload.revision_mode,
+                                 actor=name, actor_kind=kind)
 
     @app.get(API + "/spaces/{slug}")
     async def get_space(slug: str):
@@ -97,7 +99,8 @@ def create_app(store: Store | None = None) -> FastAPI:
 
     @app.delete(API + "/spaces/{slug}", status_code=204)
     async def delete_space(slug: str, actor: Actor):
-        st().delete_space(slug)
+        name, kind = actor
+        st().delete_space(slug, actor=name, actor_kind=kind)
         return Response(status_code=204)
 
     # --- canvas --------------------------------------------------------------

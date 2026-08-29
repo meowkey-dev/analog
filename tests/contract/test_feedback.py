@@ -114,7 +114,7 @@ def test_a_fresh_actor_starts_at_zero(space):
     one_card(space, "demo", title="A")
     assert len(feedback(space, "codex")["cards_edited"]) == 0
     fb = feedback(space, "codex")
-    assert fb["cursor"] == 1
+    assert fb["cursor"] == 2, "space.created plus one card"
 
 
 def test_advance_false_does_not_consume(space):
@@ -136,8 +136,8 @@ def test_explicit_since_overrides_the_stored_cursor(space):
 def test_cursor_is_always_the_spaces_current_seq(space):
     one_card(space, "demo")
     one_card(space, "demo")
-    assert feedback(space, "claude-code", advance=False)["cursor"] == 2
-    assert feedback(space, "claude-code", since=0, advance=False)["cursor"] == 2
+    assert feedback(space, "claude-code", advance=False)["cursor"] == 3
+    assert feedback(space, "claude-code", since=0, advance=False)["cursor"] == 3
 
 
 def test_feedback_on_an_unknown_space_is_404(client):

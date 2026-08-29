@@ -15,7 +15,7 @@ def test_create_returns_201_and_a_valid_space(client):
     assert space["slug"] == "redesign"
     assert space["title"] == "Nav redesign"
     assert space["revision_mode"] == "replace"     # SPEC §2.4 default
-    assert space["seq"] == 0
+    assert space["seq"] == 1, "seq 1 is the space.created event"
     assert space["id"].startswith("s_")
 
 
@@ -71,6 +71,15 @@ def test_patch_updates_title_and_revision_mode(client):
     assert client.get("/api/spaces/p").json()["revision_mode"] == "branch"
 
 
+def test_space_created_names_the_space(client):
+    """SPEC §3 / AMENDMENTS #5: a space's log opens with its own creation."""
+    make_space(client, "born", "Born")
+    event = client.get("/api/spaces/born/events").json()["events"][0]
+    assert (event["seq"], event["type"]) == (1, "space.created")
+    assert event["payload"] == {"slug": "born", "title": "Born"}
+    assert (event["actor"], event["actor_kind"]) == ("human", "human")
+
+
 def test_delete_removes_the_space_and_its_contents(client):
     make_space(client, "gone")
     one_card(client, "gone")
@@ -81,11 +90,11 @@ def test_delete_removes_the_space_and_its_contents(client):
 
 def test_space_seq_is_the_event_counter(client):
     make_space(client, "seq")
-    assert client.get("/api/spaces/seq").json()["seq"] == 0
-    one_card(client, "seq")
-    assert client.get("/api/spaces/seq").json()["seq"] == 1
+    assert client.get("/api/spaces/seq").json()["seq"] == 1     # space.created
     one_card(client, "seq")
     assert client.get("/api/spaces/seq").json()["seq"] == 2
+    one_card(client, "seq")
+    assert client.get("/api/spaces/seq").json()["seq"] == 3
 
 
 def test_seq_is_per_space(client):
@@ -94,6 +103,8 @@ def test_seq_is_per_space(client):
     one_card(client, "one")
     one_card(client, "one")
     one_card(client, "two")
-    assert client.get("/api/spaces/one").json()["seq"] == 2
-    assert client.get("/api/spaces/two").json()["seq"] == 1
-    assert [e["seq"] for e in client.get("/api/spaces/two/events").json()["events"]] == [1]
+    assert client.get("/api/spaces/one").json()["seq"] == 3     # created + 2 cards
+    assert client.get("/api/spaces/two").json()["seq"] == 2     # created + 1 card
+    log = client.get("/api/spaces/two/events").json()["events"]
+    assert [(e["seq"], e["type"]) for e in log] == [
+        (1, "space.created"), (2, "card.created")]

@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Analog API",
-    "version": "0.1.0",
-    "description": "Shared canvas for a human and their agents. FROZEN CONTRACT — amendments go through WP0 only. Every mutating operation requires actor and actor_kind and emits exactly one event."
+    "version": "0.2.0",
+    "description": "Shared canvas for a human and their agents. FROZEN CONTRACT — amendments go through WP0 only. Every mutating operation requires actor and actor_kind and emits an event for each object it creates or changes."
   },
   "servers": [{ "url": "http://127.0.0.1:8787/api" }],
   "components": {
@@ -78,6 +78,10 @@
           "sp_created_by": { "type": "string" },
           "sp_rev": { "type": "integer" },
           "sp_superseded_by": { "type": "string", "description": "Set in branch mode; points at the replacement card." },
+          "sp_deleted_at": {
+            "type": "string", "format": "date-time", "readOnly": true,
+            "description": "Read-only, projected from the soft-delete tombstone. Present only on nodes returned by GET /canvas?include_deleted=true; never accepted on write."
+          },
           "sp_meta": { "type": "object", "additionalProperties": true }
         }
       },
@@ -148,6 +152,10 @@
           "id": { "type": "string" },
           "card_id": { "type": "string" },
           "card_title": { "type": "string" },
+          "card_superseded_by": {
+            "type": ["string", "null"], "readOnly": true,
+            "description": "In branch mode, the card that replaced the annotated one, so an agent can follow the supersede chain without a separate GET /canvas. Absent while the annotated card is still current."
+          },
           "card_rev": { "type": "integer" },
           "selector": { "$ref": "#/components/schemas/Selector" },
           "body": { "type": "string" },
@@ -167,6 +175,7 @@
           "seq": { "type": "integer" },
           "ts": { "type": "string", "format": "date-time" },
           "type": { "type": "string", "enum": [
+            "space.created", "space.deleted",
             "card.created", "card.updated", "card.moved", "card.deleted",
             "link.created", "link.deleted",
             "annotation.created", "annotation.resolved"
@@ -357,7 +366,7 @@
       ],
       "patch": {
         "operationId": "updateCard",
-        "description": "Partial node update. Geometry-only changes emit card.moved and do NOT bump sp_rev. Any other change emits card.updated and bumps sp_rev.",
+        "description": "Partial node update. Geometry-only changes emit card.moved and do NOT bump sp_rev. Any other change emits card.updated and bumps sp_rev. In branch mode a content change instead emits TWO events — card.created for the replacement and link.created for the auto-link labelled 'revised' — and no card.updated, so the superseded card's sp_rev stays frozen and its annotations can never go stale.",
         "parameters": [
           { "$ref": "#/components/parameters/actor" },
           { "$ref": "#/components/parameters/actorKind" },
@@ -545,6 +554,25 @@
         "operationId": "streamEvents",
         "description": "SSE. One Event object per message, event name equals the event type. Reconnect with Last-Event-ID set to the last seq received.",
         "responses": { "200": { "description": "text/event-stream", "content": { "text/event-stream": { "schema": { "type": "string" } } } } }
+      }
+    },
+    "/spaces/{slug}/media/{filename}": {
+      "parameters": [
+        { "$ref": "#/components/parameters/slug" },
+        { "name": "filename", "in": "path", "required": true,
+          "description": "Server-assigned name, taken from the `url` uploadMedia returned.",
+          "schema": { "type": "string", "pattern": "^[A-Za-z0-9_.-]{1,128}$" } }
+      ],
+      "get": {
+        "operationId": "getMedia",
+        "description": "Serve an uploaded file. A JSON Canvas file node's `file` URL points here, so without this operation a client generated from the contract cannot render a file node at all. Scoped to the space: one space's media is not reachable through another's path.",
+        "responses": {
+          "200": {
+            "description": "The stored bytes, with their stored content type.",
+            "content": { "application/octet-stream": { "schema": { "type": "string", "format": "binary" } } }
+          },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
       }
     },
     "/spaces/{slug}/media": {

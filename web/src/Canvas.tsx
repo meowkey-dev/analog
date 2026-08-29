@@ -256,6 +256,35 @@ export function Canvas(props: CanvasProps) {
     };
   }, [drag, ghost, viewport.scale, toWorld, props]);
 
+  /**
+   * Whether some element between `start` and the canvas can still absorb this
+   * wheel delta itself. A card body with overflow:auto scrolls natively AND
+   * bubbles the wheel up here, so without this the board pans at the same time.
+   */
+  const consumedByScrollable = (start: Element | null, dx: number, dy: number): boolean => {
+    for (let el = start; el && el !== container.current; el = el.parentElement) {
+      if (!(el instanceof HTMLElement)) continue;
+      const style = getComputedStyle(el);
+      const scrollableY = /auto|scroll/.test(style.overflowY) && el.scrollHeight > el.clientHeight;
+      const scrollableX = /auto|scroll/.test(style.overflowX) && el.scrollWidth > el.clientWidth;
+      // Only claim the event if there is actually room left to move that way,
+      // so reaching the end of a card hands panning back to the board.
+      if (scrollableY && dy !== 0) {
+        const room = dy > 0
+          ? el.scrollHeight - el.clientHeight - el.scrollTop
+          : el.scrollTop;
+        if (room > 1) return true;
+      }
+      if (scrollableX && dx !== 0) {
+        const room = dx > 0
+          ? el.scrollWidth - el.clientWidth - el.scrollLeft
+          : el.scrollLeft;
+        if (room > 1) return true;
+      }
+    }
+    return false;
+  };
+
   const onWheel = (event: React.WheelEvent) => {
     if (event.ctrlKey || event.metaKey) {
       const box = container.current!.getBoundingClientRect();
@@ -267,6 +296,7 @@ export function Canvas(props: CanvasProps) {
         return { scale, x: px - (px - v.x) * ratio, y: py - (py - v.y) * ratio };
       });
     } else {
+      if (consumedByScrollable(event.target as Element, event.deltaX, event.deltaY)) return;
       setViewport((v) => ({ ...v, x: v.x - event.deltaX, y: v.y - event.deltaY }));
     }
   };
