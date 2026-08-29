@@ -49,7 +49,7 @@ says about who did what is true rather than asserted. `analog token list` and
 From a client:
 
 ```bash
-.venv/bin/analog login https://analog.meowkey.com --token analog_...
+.venv/bin/analog login https://analog.example.com --token analog_...
 ```
 
 That writes `~/.analog.toml` (mode 600) and learns your actor from the server.
@@ -65,18 +65,12 @@ which is the concern SPEC §8 raised about this app touching a network.
 
 ## Desktop app
 
-`app/` is a Tauri 2 shell around the same web bundle. It has no API client of its own
-— it loads the same code the server serves, so there is no second copy of the auth
-rules to drift out of sync. What it adds is a connection screen, because unlike a
-browser it has no origin to inherit.
+There is one, and it is a separate commercial product: a local sidecar that runs its
+own server, so you never see a venv or a port. It talks to this code over the HTTP
+API in `contracts/` like any other client — it has no private fork of the server.
 
-```bash
-cd app && npm install
-npm run dev          # or: npm run build -> app/src-tauri/target/release/bundle/
-```
-
-The Rust toolchain is pinned in `app/src-tauri/rust-toolchain.toml` (Tauri 2 needs
-≥1.88) rather than taking over your `rustup default`.
+You do not need it. `python -m server` plus a browser is the whole thing, which is
+what the rest of this README documents.
 
 ## Giving an agent access
 
@@ -131,7 +125,7 @@ MCP config and skills are both read when a session starts, so neither reaches an
 agent mid-session. A command on disk does:
 
 ```bash
-.venv/bin/python scripts/onboard_agent.py claude-code --issue --url https://analog.meowkey.com --wrapper
+.venv/bin/python scripts/onboard_agent.py claude-code --issue --url https://analog.example.com --wrapper
 ```
 
 That writes `~/.local/bin/analog-claude-code`, a one-line shell wrapper with the URL,
@@ -158,7 +152,7 @@ credentials. Three pieces:
 
 ```bash
 ln -sf "$PWD/.venv/bin/analog" ~/.local/bin/analog     # `analog` on PATH, as the skill writes it
-.venv/bin/python scripts/onboard_agent.py claude-code --url https://analog.meowkey.com --token analog_... --skill-into ~/.claude/skills --claude-env ~/code/that-project
+.venv/bin/python scripts/onboard_agent.py claude-code --url https://analog.example.com --token analog_... --skill-into ~/.claude/skills --claude-env ~/code/that-project
 ```
 
 `--claude-env` merges `ANALOG_URL` / `ANALOG_ACTOR` / `ANALOG_ACTOR_KIND` /
@@ -214,38 +208,20 @@ the annotation Agent B resolved is gone.
     mcp_server/  FastMCP stdio server (not `mcp/` — it would shadow the `mcp` package)
     skill/       the agent skill
     web/         React + Vite
-    app/         Tauri 2 desktop shell around the web bundle
-    deploy/      systemd unit, Caddyfile, signing notes
-    scripts/     seed.py, demo.py, onboard_agent.py, make_icon.py
+    deploy/      systemd unit and Caddyfile for running it on a host
+    scripts/     seed.py, demo.py, onboard_agent.py
     tests/       contract/ and unit/
 
 ## CI
 
-`.github/workflows/test.yml` runs the contract and unit suites plus the web
-typecheck. `.github/workflows/build-app.yml` bundles the desktop app for macOS
-(arm64 `.app` + `.dmg`) and Windows (`.msi` + NSIS `.exe`) and uploads them as
-artifacts.
+`.github/workflows/test.yml` runs the contract and unit suites on Python 3.11 and
+3.13, plus the web typecheck.
 
-**Grab the `.dmg`, not the `.app`.** GitHub zips artifacts, and a zipped `.app` is a
-lossy copy of a bundle — the disk image preserves it exactly. If you do end up with a
-`.app` that macOS calls *"damaged and can't be opened"*, its signature did not
-survive the trip; repair it in place rather than re-downloading:
+## License
 
-```bash
-xattr -dr com.apple.quarantine /Applications/Analog.app && codesign --force --deep --sign - /Applications/Analog.app
-```
+[Apache-2.0](LICENSE). Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md);
+there is no CLA, just a `Signed-off-by` line.
 
-The macOS bundle carries a **valid ad-hoc signature**, and Gatekeeper will still
-refuse it. Ad-hoc proves the bundle is intact, not who made it, and Gatekeeper only
-checks the second — no local flag changes that. For a build you made yourself:
-
-```bash
-xattr -dr com.apple.quarantine /Applications/Analog.app
-```
-
-For builds other people can open you need a Developer ID. The workflow is already
-wired for it; see [deploy/SIGNING.md](deploy/SIGNING.md) for the certificate and the
-six secrets. Windows is unsigned; SmartScreen warns on first launch.
-
-Intel macOS is deliberately not built: GitHub's `macos-13` runners are deprecated
-and that leg queues without a runner.
+`contracts/` and `server/schema.sql` are the wire format and are changed only through
+the amendment process, which is the one thing worth reading before opening a pull
+request.

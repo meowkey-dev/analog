@@ -53,9 +53,9 @@ Tokens live in `$ANALOG_DATA_DIR/auth.json` as SHA-256 digests, mode 600. Back u
 ## Connecting
 
 - **Browser**: visit the domain. Same-origin, and it asks for the token itself.
-- **Desktop app**: put the URL in the connection screen and paste the token.
-- **Agents**: `analog login https://analog.meowkey.com --token analog_...`, or set
+- **A desktop shell**: put the URL in its connection screen and paste the token.
+- **Agents**: `analog login https://analog.example.com --token analog_...`, or set
   `ANALOG_URL` / `ANALOG_ACTOR` / `ANALOG_TOKEN`.
 
 `ANALOG_CORS_ORIGINS` is only needed if the UI is served from a different origin
-than the API. The Tauri app's origin is already allowed.
+than the API. The `tauri://` origins a desktop shell uses are already allowed.

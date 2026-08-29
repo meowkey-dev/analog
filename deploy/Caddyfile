@@ -6,9 +6,9 @@
 # the network in the clear on every request, and anyone who sees one can write to
 # your canvas as you. On a home LAN that may be an acceptable risk; anywhere else
 # it is not.
-# A subdomain keeps Analog separate from whatever else meowkey.com serves; the apex
-# works identically if you would rather.
-analog.meowkey.com {
+# Your domain here. A subdomain keeps Analog separate from whatever else the apex
+# serves; the apex works identically if you would rather.
+analog.example.com {
     # SSE: no buffering, and no idle timeout, or the event stream dies every 30s
     # and the UI silently falls back to polling.
     reverse_proxy 127.0.0.1:8787 {

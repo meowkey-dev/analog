@@ -104,15 +104,10 @@ touches the filesystem. Accepted types: PNG, JPEG, GIF, WebP, SVG, PDF. 25 MB ca
 - **Media is fetched into a blob URL**, because `<img src>` carries no header either.
 - **The web bundle takes its server as data** (`web/src/connection.ts`), so one build
   serves both the same-origin browser and the Tauri shell.
-- **The Tauri app has no Rust-side API client.** It loads the same bundle the server
-  serves. A second implementation of the auth rules is a second thing to get wrong.
-- **The Rust toolchain is pinned in `app/src-tauri/rust-toolchain.toml`** (Tauri 2
-  needs ≥1.88) rather than deciding what `rustup default` points at on a machine
-  that builds other things too.
-- If the Tauri build fails with `unknown option '-lSystem'`, something earlier on
-  `PATH` is shadowing `cc`: rustc drives the linker by invoking it by name. A
-  `.cargo/config.toml` with a per-target `linker` fixes it, but check for the shim
-  first — a hardcoded compiler path is worth keeping only while it is load-bearing.
+- **A desktop shell gets no second API client.** It loads the bundle this server
+  serves; a second implementation of the auth rules is a second thing to get wrong.
+  `server/config.py` allows the `tauri://localhost` origins for that reason, and
+  `web/src/connection.ts` is what makes one build serve both cases.
 
 ## Toolchain
 

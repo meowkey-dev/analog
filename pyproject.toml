@@ -3,6 +3,9 @@ name = "analog"
 version = "0.1.0"
 description = "A shared canvas for one human and their agents."
 requires-python = ">=3.11"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+readme = "README.md"
 
 # Pinned exactly. Resolved 2026-08-28 against Python 3.14.
 dependencies = [

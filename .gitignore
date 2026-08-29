@@ -11,10 +11,6 @@ node_modules/
 web/dist/
 *.tsbuildinfo
 
-# Tauri
-app/src-tauri/target/
-app/src-tauri/gen/
-
 # Runtime data (SQLite DB + uploaded media)
 data/
 !data/.gitkeep

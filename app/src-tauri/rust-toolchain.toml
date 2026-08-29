@@ -1,6 +1,0 @@
-# Pinned rather than tracking your default toolchain: the Tauri 2 dependency tree
-# needs >= 1.88, and this repo should not decide what `rustup default` points at on
-# a machine that builds other things too.
-[toolchain]
-channel = "1.98.0"
-profile = "minimal"
