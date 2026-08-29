@@ -14,6 +14,24 @@ exists precisely to stop that.
 So there are two honest options: remove the quarantine flag on machines you control,
 or get a Developer ID.
 
+## "Analog is damaged and can't be opened"
+
+Not a Gatekeeper refusal — that one says the developer "cannot be verified".
+*Damaged* means the signature does not validate at all: usually a bundle with no
+`Contents/_CodeSignature` while its embedded signature claims resources exist. A
+zipped `.app` can arrive that way, and builds before the `signingIdentity` setting
+always did.
+
+Repair it in place; there is no need to download it again:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/Analog.app
+codesign --force --deep --sign - /Applications/Analog.app
+```
+
+`codesign --verify --deep --strict /Applications/Analog.app` should then say nothing,
+which is what success looks like.
+
 ## Right now, on your own machine
 
 An app you built yourself is quarantined only because it arrived via a browser.

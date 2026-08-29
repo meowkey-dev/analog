@@ -183,6 +183,15 @@ typecheck. `.github/workflows/build-app.yml` bundles the desktop app for macOS
 (arm64 `.app` + `.dmg`) and Windows (`.msi` + NSIS `.exe`) and uploads them as
 artifacts.
 
+**Grab the `.dmg`, not the `.app`.** GitHub zips artifacts, and a zipped `.app` is a
+lossy copy of a bundle — the disk image preserves it exactly. If you do end up with a
+`.app` that macOS calls *"damaged and can't be opened"*, its signature did not
+survive the trip; repair it in place rather than re-downloading:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/Analog.app && codesign --force --deep --sign - /Applications/Analog.app
+```
+
 The macOS bundle carries a **valid ad-hoc signature**, and Gatekeeper will still
 refuse it. Ad-hoc proves the bundle is intact, not who made it, and Gatekeeper only
 checks the second — no local flag changes that. For a build you made yourself:
