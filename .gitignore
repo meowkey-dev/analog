@@ -26,3 +26,10 @@ auth.json
 
 # Built distributions
 dist/
+
+# The web bundle is copied in at build time; only the placeholder is tracked.
+internal/web/dist/*
+!internal/web/dist/.gitkeep
+
+# Built binaries
+/bin/
