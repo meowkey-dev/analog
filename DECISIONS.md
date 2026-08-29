@@ -109,17 +109,16 @@ touches the filesystem. Accepted types: PNG, JPEG, GIF, WebP, SVG, PDF. 25 MB ca
 - **The Rust toolchain is pinned in `app/src-tauri/rust-toolchain.toml`** (Tauri 2
   needs ≥1.88) rather than deciding what `rustup default` points at on a machine
   that builds other things too.
-- There was briefly a `.cargo/config.toml` redirecting the linker to `/usr/bin/cc`,
-  because a `~/bin/cc` shim shadowed the compiler. That shim is gone, so the
-  workaround is too — a hardcoded compiler path is worth keeping only as long as it
-  is load-bearing.
+- If the Tauri build fails with `unknown option '-lSystem'`, something earlier on
+  `PATH` is shadowing `cc`: rustc drives the linker by invoking it by name. A
+  `.cargo/config.toml` with a per-target `linker` fixes it, but check for the shim
+  first — a hardcoded compiler path is worth keeping only while it is load-bearing.
 
 ## Toolchain
 
 - Python **3.11+**, pinned deps in `pyproject.toml` (resolved 2026-08-28 on 3.14).
-- Node: use **`/opt/homebrew/bin/npm`**. `node`/`npm` on this machine's `PATH` are
-  Bun's shims (`~/bin/node` is a Bun binary reporting version 1.3.6), which will not
-  run Vite 8.
+- Node **22+** with a real `npm`. Vite 8 will not run under a Bun or Volta shim, so
+  if `npm --version` looks wrong, resolve it to an actual Node install first.
 - The MCP package directory is **`mcp_server/`**, not `mcp/` as in SPEC §6. A
   top-level `mcp/` on `sys.path` shadows the `mcp` PyPI package that FastMCP imports,
   which breaks the MCP server and every test run from the repo root.

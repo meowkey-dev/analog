@@ -1,0 +1,54 @@
+name: test
+
+# The contract suite is the point: tests/contract/ is written against contracts/
+# and SPEC.md rather than against the implementation, so a red build here means
+# the server stopped describing the contract, not that a refactor moved a symbol.
+on:
+  push:
+    branches-ignore: ['dependabot/**']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    name: contract + unit suite
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install
+        run: uv pip install --system -e ".[dev,mcp]"
+
+      - name: Run the suite
+        run: python -m pytest -q
+
+  web:
+    name: typecheck + build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install
+        working-directory: web
+        run: npm ci
+
+      - name: tsc --noEmit && vite build
+        working-directory: web
+        run: npm run build

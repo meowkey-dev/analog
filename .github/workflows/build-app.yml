@@ -1,0 +1,86 @@
+name: build app
+
+# Bundles the Tauri desktop shell for macOS and Windows.
+#
+# The shell has no API client of its own — it loads the same web bundle the server
+# serves — so `npm --prefix ../web run build` (tauri's beforeBuildCommand) is a real
+# build step here, not an afterthought.
+#
+# Intel macOS is deliberately absent: GitHub's macos-13 Intel runners are deprecated
+# and that leg queues without a runner. Cross-compile on the arm64 runner if Intel
+# coverage is ever needed.
+#
+# Neither bundle is signed. macOS Gatekeeper will want a right-click → Open, and
+# Windows SmartScreen will warn. Signing needs secrets this repo does not have.
+on:
+  push:
+    branches-ignore: ['dependabot/**']
+  pull_request:
+    paths:
+      - 'app/**'
+      - 'web/**'
+      - '.github/workflows/build-app.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            label: macOS aarch64
+            artifact: analog-macos-aarch64
+            paths: |
+              app/src-tauri/target/release/bundle/macos/*.app
+              app/src-tauri/target/release/bundle/dmg/*.dmg
+          - os: windows-latest
+            label: Windows x86_64
+            artifact: analog-windows-x86_64
+            paths: |
+              app/src-tauri/target/release/bundle/msi/*.msi
+              app/src-tauri/target/release/bundle/nsis/*.exe
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            web/package-lock.json
+            app/package-lock.json
+
+      # rust-toolchain.toml in app/src-tauri pins the version; rustup honours it.
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app/src-tauri
+
+      - name: Install web dependencies
+        working-directory: web
+        run: npm ci
+
+      - name: Install app dependencies
+        working-directory: app
+        run: npm ci
+
+      - name: Build the bundle
+        working-directory: app
+        run: npm run build
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.paths }}
+          if-no-files-found: error
+          retention-days: 14

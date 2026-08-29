@@ -10,11 +10,11 @@ found in the contract are in [AMENDMENTS.md](AMENDMENTS.md).
 
 ```bash
 uv venv --python 3.14 && uv pip install -e ".[dev,mcp]"
-(cd web && /opt/homebrew/bin/npm install && /opt/homebrew/bin/npm run build)
+(cd web && npm install && npm run build)
 ```
 
-`npm` on this machine's PATH is Bun's shim and will not run Vite — use the Homebrew
-path. See DECISIONS.md.
+If `npm --version` reports something implausible (a Bun or Volta shim, say), point at
+a real Node install — Vite 8 will not run under a shim.
 
 ## Run
 
@@ -78,25 +78,70 @@ npm run dev          # or: npm run build -> app/src-tauri/target/release/bundle/
 The Rust toolchain is pinned in `app/src-tauri/rust-toolchain.toml` (Tauri 2 needs
 ≥1.88) rather than taking over your `rustup default`.
 
-## Use it from an agent
+## Giving an agent access
+
+Three things have to line up: a **token** (the server decides who the agent is), a
+**surface** — MCP or the CLI — carrying that token, and the **skill**, which teaches
+the workflow the API cannot. One command sets up all three:
 
 ```bash
+.venv/bin/python scripts/onboard_agent.py claude-code --issue --url http://127.0.0.1:8787 --skill-into ~/.claude/skills --print-mcp
+```
+
+`--issue` mints the token, so it has to run on the server host; everything else runs
+wherever the agent does. Drop `--issue` and pass `--token` if you already have one.
+
+### MCP
+
+Ten tools over stdio (SPEC §4.1). The command above prints this filled in:
+
+```bash
+claude mcp add analog -e ANALOG_URL=http://127.0.0.1:8787 -e ANALOG_ACTOR=claude-code -e ANALOG_ACTOR_KIND=agent -e ANALOG_TOKEN=analog_... -- /path/to/.venv/bin/analog-mcp
+```
+
+Add `--scope user` to make it available in every project instead of just the current
+one. Check it with `claude mcp get analog`; a healthy server reports `✔ Connected`.
+
+The tools are `list_spaces`, `create_space`, `read_space`, `add_cards`,
+`update_card`, `delete_card`, `link_cards`, `get_feedback`, `resolve_annotation`,
+and `await_feedback` — the last one blocks until you do something, for a resident
+agent.
+
+### CLI
+
+For an agent that has a shell but no MCP config — CI steps, `bash` tool calls, you:
+
+```bash
+export ANALOG_URL=http://127.0.0.1:8787
 export ANALOG_ACTOR=claude-code        # no default: an unnamed agent fails loudly
+export ANALOG_TOKEN=analog_...         # only if the server has tokens
+analog whoami                          # who the server thinks you are
 analog feedback redesign               # the important one
 analog add redesign --title "Option E" --kind md --file draft.md
 cat chart.svg | analog add redesign --title "Revenue" --kind svg -
 analog resolve a_01... --reply "rebased axis at 0"
 ```
 
-`analog --help` lists the rest. For MCP, point your client at
-`mcp_server/server.py` (stdio) with `ANALOG_ACTOR` set. `skill/analog/SKILL.md`
-teaches either surface the workflow — copy it into `.claude/skills/`.
+`analog --help` lists the rest. Every read command takes `--json`. Failure is always
+non-zero, and exit **3** specifically means auth.
+
+### The skill
+
+`skill/analog/SKILL.md`, copied into `~/.claude/skills/` or a project's
+`.claude/skills/`. `--skill-into` does it for you.
+
+**This is the half that matters.** MCP and the CLI give an agent the operations; the
+skill teaches the conventions that decide whether the tool stays usable — read
+feedback *first*, one idea per card, always label links, don't resolve what you
+haven't acted on, don't rearrange the human's canvas. An agent with the tools and no
+skill will use Analog as a dumping ground. It loads on demand, so it costs nothing
+in unrelated sessions.
 
 ## Test
 
 ```bash
-.venv/bin/python -m pytest              # 371 tests
-(cd web && /opt/homebrew/bin/npm run build)   # tsc --noEmit + vite build
+.venv/bin/python -m pytest              # 445 tests
+(cd web && npm run build)               # tsc --noEmit + vite build
 ```
 
 `tests/contract/` is written against `contracts/` and SPEC.md rather than against the
@@ -126,5 +171,17 @@ the annotation Agent B resolved is gone.
     mcp_server/  FastMCP stdio server (not `mcp/` — it would shadow the `mcp` package)
     skill/       the agent skill
     web/         React + Vite
-    scripts/     seed.py, demo.py
+    app/         Tauri 2 desktop shell around the web bundle
+    scripts/     seed.py, demo.py, onboard_agent.py, make_icon.py
     tests/       contract/ and unit/
+
+## CI
+
+`.github/workflows/test.yml` runs the contract and unit suites plus the web
+typecheck. `.github/workflows/build-app.yml` bundles the desktop app for macOS
+(arm64 `.app` + `.dmg`) and Windows (`.msi` + NSIS `.exe`) and uploads them as
+artifacts.
+
+Neither bundle is signed, so macOS Gatekeeper wants a right-click → Open and Windows
+SmartScreen will warn. Intel macOS is deliberately not built: GitHub's `macos-13`
+runners are deprecated and that leg queues without a runner.
