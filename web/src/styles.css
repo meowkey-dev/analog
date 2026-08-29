@@ -221,6 +221,8 @@ input, textarea, select {
 .composer-head { color: var(--dim); }
 .composer textarea { min-height: 72px; resize: vertical; }
 .composer-foot { display: flex; gap: 8px; align-items: center; }
+.composer-foot .hint { flex: 1; color: var(--dim); font-size: 11px; }
+.link-composer { z-index: 61; }
 .composer-foot select { flex: 1; }
 
 /* --- panels --------------------------------------------------------------- */

@@ -1,0 +1,14 @@
+<svg viewBox="0 0 220 130" xmlns="http://www.w3.org/2000/svg">
+  <text x="6" y="12" font-family="system-ui" font-size="9" fill="#333">Render time by option (ms) — y-axis from 0</text>
+  <line x1="24" y1="20" x2="24" y2="108" stroke="#333"/>
+  <line x1="24" y1="108" x2="212" y2="108" stroke="#333"/>
+  <text x="4" y="24" font-family="system-ui" font-size="7" fill="#666">120</text>
+  <text x="10" y="66" font-family="system-ui" font-size="7" fill="#666">60</text>
+  <text x="14" y="110" font-family="system-ui" font-size="7" fill="#666">0</text>
+  <rect x="40"  y="38" width="34" height="70" fill="#4a7"/>
+  <rect x="92"  y="63" width="34" height="45" fill="#4a7"/>
+  <rect x="144" y="28" width="34" height="80" fill="#4a7"/>
+  <text x="47"  y="120" font-family="system-ui" font-size="8" fill="#333">A</text>
+  <text x="99"  y="120" font-family="system-ui" font-size="8" fill="#333">B</text>
+  <text x="151" y="120" font-family="system-ui" font-size="8" fill="#333">C</text>
+</svg>

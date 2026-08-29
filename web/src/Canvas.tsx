@@ -56,6 +56,8 @@ export function Canvas(props: CanvasProps) {
   const [ghost, setGhost] = useState<Record<string, Partial<Node>>>({});
   const [linkTo, setLinkTo] = useState<[number, number] | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
+  const [pendingLink, setPendingLink] = useState<{ from: string; to: string } | null>(null);
+  const [linkLabel, setLinkLabel] = useState("");
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
   const nodes = useMemo(
@@ -106,10 +108,13 @@ export function Canvas(props: CanvasProps) {
 
   const toWorld = useCallback(
     (clientX: number, clientY: number): [number, number] => {
-      const box = container.current!.getBoundingClientRect();
+      const element = container.current!;
+      const box = element.getBoundingClientRect();
+      // scrollTop/Left are pinned to 0 by onScroll below, but subtract them anyway:
+      // being wrong here silently misplaces every drag and every annotation pin.
       return [
-        (clientX - box.left - viewport.x) / viewport.scale,
-        (clientY - box.top - viewport.y) / viewport.scale,
+        (clientX - box.left + element.scrollLeft - viewport.x) / viewport.scale,
+        (clientY - box.top + element.scrollTop - viewport.y) / viewport.scale,
       ];
     },
     [viewport],
@@ -233,9 +238,10 @@ export function Canvas(props: CanvasProps) {
         const element = document.elementFromPoint(event.clientX, event.clientY);
         const target = element?.closest<HTMLElement>("[data-card-id]")?.dataset.cardId;
         if (target && target !== drag.id) {
-          // SPEC §4.3: always label. An unlabelled edge is noise.
-          const label = window.prompt("Label this link (e.g. \"depends on\")", "");
-          if (label && label.trim()) props.onCreateLink(drag.id!, target, label.trim());
+          // SPEC §4.3: always label. An unlabelled edge is noise, so the edge is
+          // not created until a label exists.
+          setLinkLabel("");
+          setPendingLink({ from: drag.id!, to: target });
         }
         setLinkTo(null);
       }
@@ -297,6 +303,16 @@ export function Canvas(props: CanvasProps) {
       className={`canvas${props.annotateMode ? " annotating" : ""}${drag?.kind === "pan" ? " panning" : ""}`}
       onPointerDown={startPan}
       onWheel={onWheel}
+      onScroll={(event) => {
+        // An overflow:hidden box is still scrollable programmatically — focusing a
+        // control inside the transformed content makes the browser scroll it into
+        // view, which shifts every card away from where the transform says it is.
+        const element = event.currentTarget;
+        if (element.scrollTop || element.scrollLeft) {
+          element.scrollTop = 0;
+          element.scrollLeft = 0;
+        }
+      }}
       onDoubleClick={(event) => {
         if (event.target !== event.currentTarget) return;
         const [x, y] = toWorld(event.clientX, event.clientY);
@@ -350,6 +366,44 @@ export function Canvas(props: CanvasProps) {
           />
         ))}
       </div>
+
+      {pendingLink && (
+        <form
+          className="composer link-composer"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!linkLabel.trim()) return;
+            props.onCreateLink(pendingLink.from, pendingLink.to, linkLabel.trim());
+            setPendingLink(null);
+          }}
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <div className="composer-head">
+            Link <strong>{nodeMap.get(pendingLink.from)?.sp_title ?? pendingLink.from}</strong>
+            {" → "}
+            <strong>{nodeMap.get(pendingLink.to)?.sp_title ?? pendingLink.to}</strong>
+          </div>
+          <input
+            autoFocus
+            value={linkLabel}
+            placeholder="How do they relate? e.g. depends on, contradicts"
+            onChange={(event) => setLinkLabel(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") setPendingLink(null);
+              if (event.key === "Enter" && linkLabel.trim()) {
+                event.preventDefault();
+                props.onCreateLink(pendingLink.from, pendingLink.to, linkLabel.trim());
+                setPendingLink(null);
+              }
+            }}
+          />
+          <div className="composer-foot">
+            <span className="hint">Unlabelled edges are noise, so a label is required.</span>
+            <button type="button" className="ghost" onClick={() => setPendingLink(null)}>Cancel</button>
+            <button type="submit" disabled={!linkLabel.trim()}>Link</button>
+          </div>
+        </form>
+      )}
 
       <div className="zoom">
         <button onClick={() => zoomBy(1.2)} title="Zoom in">+</button>
