@@ -114,11 +114,19 @@ jobs:
           security list-keychain -d user -s "$KEYCHAIN" login.keychain
           rm -f /tmp/certificate.p12
 
-      - name: Build the bundle
+      # Two separate steps rather than one with maybe-empty env: an empty
+      # APPLE_SIGNING_IDENTITY does not mean "unset" to tauri, it means "sign with
+      # the identity named ''", which fails with "item could not be found in the
+      # keychain". The env var has to be absent, not blank.
+      - name: Build the bundle (ad-hoc)
+        if: matrix.os != 'macos-14' || steps.signing.outputs.enabled != 'true'
+        working-directory: app
+        run: npm run build
+
+      - name: Build the bundle (Developer ID, notarized)
+        if: matrix.os == 'macos-14' && steps.signing.outputs.enabled == 'true'
         working-directory: app
         env:
-          # Empty when the secrets are absent, which is how tauri decides to fall
-          # back to the ad-hoc identity in tauri.conf.json.
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
