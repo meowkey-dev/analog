@@ -6,7 +6,10 @@ import react from "@vitejs/plugin-react";
 // the sandboxed-iframe reasoning in SPEC §5 holds in dev exactly as it does in prod.
 export default defineConfig({
   plugins: [react()],
+  // WP3/WP4 render contracts/fixtures/ with no server behind them (?fixture),
+  // which means importing JSON from outside web/.
   server: {
+    fs: { allow: [".."] },
     port: 5173,
     strictPort: true,
     proxy: {

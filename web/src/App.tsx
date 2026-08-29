@@ -1,0 +1,356 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Canvas } from "./Canvas";
+import { Activity } from "./Activity";
+import { AnnotationComposer, AnnotationPanel, type DraftAnnotation } from "./Annotations";
+import { api, subscribe, ApiError } from "./api";
+import type { AnalogEvent, Annotation, Canvas as CanvasData, Motivation, Node, Space } from "./api";
+import fixtureCanvas from "../../contracts/fixtures/canvas.json";
+import fixtureAnnotations from "../../contracts/fixtures/annotations.json";
+import fixtureEvents from "../../contracts/fixtures/events.json";
+import fixtureSpace from "../../contracts/fixtures/space.json";
+
+const EMPTY: CanvasData = { nodes: [], edges: [] };
+
+function slugFromLocation(): string {
+  const match = window.location.pathname.match(/^\/s\/([a-z0-9-]{1,64})/);
+  return match?.[1] ?? "";
+}
+
+export default function App() {
+  const slug = slugFromLocation();
+  // WP3/WP4 render the fixture space with no database behind it: /s/redesign?fixture
+  const fixtureMode = new URLSearchParams(window.location.search).has("fixture");
+
+  const [space, setSpace] = useState<Space | null>(null);
+  const [canvas, setCanvas] = useState<CanvasData>(EMPTY);
+  const [annotations, setAnnotations] = useState<Annotation[]>([]);
+  const [events, setEvents] = useState<AnalogEvent[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const [connection, setConnection] = useState<"live" | "polling">("polling");
+
+  const [annotateMode, setAnnotateMode] = useState(false);
+  const [draft, setDraft] = useState<DraftAnnotation | null>(null);
+  const [selectedCard, setSelectedCard] = useState<string | null>(null);
+  const [selectedEdge, setSelectedEdge] = useState<string | null>(null);
+  const [selectedAnnotation, setSelectedAnnotation] = useState<string | null>(null);
+  const [focus, setFocus] = useState<{ id: string; nonce: number } | null>(null);
+  const [showResolved, setShowResolved] = useState(false);
+  const [rightPanel, setRightPanel] = useState<"comments" | "activity" | null>("comments");
+  const [popOut, setPopOut] = useState<Node | null>(null);
+
+  const notify = useCallback((message: string) => {
+    setToast(message);
+    window.setTimeout(() => setToast(null), 4000);
+  }, []);
+
+  const failed = useCallback((exc: unknown) => {
+    const message = exc instanceof ApiError
+      ? (exc.code === "conflict"
+        ? "Someone else changed that card first — reloading."
+        : `${exc.code}: ${exc.message}`)
+      : String(exc);
+    notify(message);
+  }, [notify]);
+
+  // --- loading ---------------------------------------------------------------
+
+  const refresh = useCallback(async () => {
+    if (fixtureMode) return;
+    try {
+      const [nextCanvas, nextAnnotations] = await Promise.all([
+        api.getCanvas(slug, true),
+        api.listAnnotations(slug),
+      ]);
+      setCanvas(nextCanvas);
+      setAnnotations(nextAnnotations);
+    } catch (exc) {
+      failed(exc);
+    }
+  }, [slug, fixtureMode, failed]);
+
+  useEffect(() => {
+    if (fixtureMode) {
+      setSpace(fixtureSpace as Space);
+      setCanvas(fixtureCanvas as CanvasData);
+      setAnnotations(fixtureAnnotations as Annotation[]);
+      setEvents((fixtureEvents as { events: AnalogEvent[] }).events);
+      return;
+    }
+    if (!slug) {
+      setError("No space in the URL. Try /s/<slug>.");
+      return;
+    }
+    (async () => {
+      try {
+        const [nextSpace, nextCanvas, nextAnnotations, log] = await Promise.all([
+          api.getSpace(slug),
+          api.getCanvas(slug, true),
+          api.listAnnotations(slug),
+          api.listEvents(slug),
+        ]);
+        setSpace(nextSpace);
+        setCanvas(nextCanvas);
+        setAnnotations(nextAnnotations);
+        setEvents(log.events);
+      } catch (exc) {
+        setError(exc instanceof ApiError ? `${exc.code}: ${exc.message}` : String(exc));
+      }
+    })();
+  }, [slug, fixtureMode]);
+
+  // --- live (SSE, falling back to polling) -----------------------------------
+
+  const seenSeq = useRef(0);
+  useEffect(() => {
+    if (fixtureMode || !slug || !space) return;
+    seenSeq.current = space.seq;
+    const stop = subscribe(slug, space.seq, (event) => {
+      if (event.seq <= seenSeq.current) return;
+      seenSeq.current = event.seq;
+      setEvents((previous) => (previous.some((e) => e.seq === event.seq)
+        ? previous
+        : [...previous, event]));
+      void refresh();
+    }, setConnection);
+    return stop;
+    // Re-subscribing on every seq change would thrash; space identity is enough.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slug, fixtureMode, space?.id, refresh]);
+
+  // --- mutations -------------------------------------------------------------
+
+  const guard = <T,>(work: () => Promise<T>) => {
+    if (fixtureMode) {
+      notify("Fixture mode is read-only.");
+      return;
+    }
+    work().catch(failed);
+  };
+
+  const liveNodes = useMemo(
+    () => canvas.nodes.filter((node) => !node.sp_deleted_at),
+    [canvas.nodes],
+  );
+
+  const moveCard = (id: string, x: number, y: number) => {
+    setCanvas((c) => ({ ...c, nodes: c.nodes.map((n) => (n.id === id ? { ...n, x, y } : n)) }));
+    guard(() => api.updateCard(slug, id, { x, y }));
+  };
+
+  const resizeCard = (id: string, width: number, height: number) => {
+    setCanvas((c) => ({
+      ...c,
+      nodes: c.nodes.map((n) => (n.id === id ? { ...n, width, height } : n)),
+    }));
+    guard(() => api.updateCard(slug, id, { width, height }));
+  };
+
+  const editCard = (id: string, text: string) => {
+    const current = canvas.nodes.find((n) => n.id === id);
+    guard(async () => {
+      const node = await api.updateCard(slug, id, { text }, current?.sp_rev);
+      setCanvas((c) => ({ ...c, nodes: c.nodes.map((n) => (n.id === id ? node : n)) }));
+    });
+  };
+
+  const deleteCard = (id: string) => {
+    guard(async () => {
+      await api.deleteCard(slug, id);
+      await refresh();
+    });
+    setSelectedCard(null);
+  };
+
+  const createCardAt = (x: number, y: number) => {
+    guard(async () => {
+      const [node] = await api.createCards(slug, [
+        { title: "Untitled", content: "", kind: "md", x, y },
+      ]);
+      await refresh();
+      setSelectedCard(node!.id);
+    });
+  };
+
+  const createLink = (from: string, to: string, label: string) => {
+    guard(async () => {
+      await api.createLink(slug, from, to, label);
+      await refresh();
+    });
+  };
+
+  const deleteLink = (id: string) => {
+    guard(async () => {
+      await api.deleteLink(slug, id);
+      await refresh();
+    });
+    setSelectedEdge(null);
+  };
+
+  const submitAnnotation = (body: string, motivation: Motivation) => {
+    if (!draft) return;
+    guard(async () => {
+      await api.createAnnotation(slug, draft.cardId, body, draft.selector, motivation);
+      await refresh();
+    });
+    setDraft(null);
+  };
+
+  const resolveAnnotation = (id: string, reply: string) => {
+    guard(async () => {
+      await api.resolveAnnotation(slug, id, reply || undefined);
+      await refresh();
+    });
+  };
+
+  const reopenAnnotation = (id: string) => {
+    guard(async () => {
+      await api.resolveAnnotation(slug, id, undefined, false);
+      await refresh();
+    });
+  };
+
+  // --- keyboard --------------------------------------------------------------
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const tag = (event.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if (event.key === "Escape") {
+        setDraft(null);
+        setAnnotateMode(false);
+        setPopOut(null);
+        setSelectedCard(null);
+        setSelectedEdge(null);
+      }
+      if (event.key === "c" && !event.metaKey && !event.ctrlKey) {
+        setAnnotateMode((on) => !on);
+      }
+      if (event.key === "Backspace" || event.key === "Delete") {
+        if (selectedEdge) deleteLink(selectedEdge);
+        else if (selectedCard) deleteCard(selectedCard);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
+
+  if (error) {
+    return (
+      <div className="fatal">
+        <h1>Analog</h1>
+        <p>{error}</p>
+        <p className="hint">
+          Start the server with <code>uvicorn server.main:app --port 8787</code>, or open{" "}
+          <a href="/s/redesign?fixture">/s/redesign?fixture</a> to render the fixture space
+          with no database.
+        </p>
+      </div>
+    );
+  }
+
+  const draftCard = draft ? canvas.nodes.find((n) => n.id === draft.cardId) : null;
+
+  return (
+    <div className="app">
+      <header className="topbar">
+        <div className="brand">analog</div>
+        <div className="space-name">
+          {space?.title ?? slug}
+          <span className="slug">/{slug}</span>
+          {fixtureMode && <span className="badge">fixture</span>}
+        </div>
+        <div className="spacer" />
+        <button className={annotateMode ? "on" : ""} onClick={() => setAnnotateMode((on) => !on)}
+                title="Click a card to pin a comment; shift-drag for a region (c)">
+          {annotateMode ? "commenting…" : "comment"}
+        </button>
+        <button onClick={() => setRightPanel(rightPanel === "comments" ? null : "comments")}
+                className={rightPanel === "comments" ? "on" : ""}>
+          comments{annotations.filter((a) => !a.resolved).length > 0
+            ? ` (${annotations.filter((a) => !a.resolved).length})` : ""}
+        </button>
+        <button onClick={() => setRightPanel(rightPanel === "activity" ? null : "activity")}
+                className={rightPanel === "activity" ? "on" : ""}>
+          activity
+        </button>
+        <span className={`conn ${connection}`} title={connection === "live" ? "live over SSE" : "polling"}>
+          {connection === "live" ? "live" : "poll"}
+        </span>
+      </header>
+
+      <div className="body">
+        <Canvas
+          nodes={liveNodes}
+          edges={canvas.edges}
+          annotations={annotations}
+          annotateMode={annotateMode}
+          draft={draft}
+          selectedCard={selectedCard}
+          selectedEdge={selectedEdge}
+          selectedAnnotation={selectedAnnotation}
+          focus={focus}
+          onSelectCard={setSelectedCard}
+          onSelectEdge={setSelectedEdge}
+          onSelectAnnotation={setSelectedAnnotation}
+          onDraft={setDraft}
+          onMoveCard={moveCard}
+          onResizeCard={resizeCard}
+          onEditCard={editCard}
+          onDeleteCard={deleteCard}
+          onCreateLink={createLink}
+          onDeleteLink={deleteLink}
+          onPopOut={setPopOut}
+          onCreateCardAt={createCardAt}
+        />
+
+        {rightPanel === "comments" && (
+          <AnnotationPanel
+            annotations={annotations}
+            showResolved={showResolved}
+            selectedId={selectedAnnotation}
+            onToggleResolved={() => setShowResolved((s) => !s)}
+            onSelect={(id) => {
+              setSelectedAnnotation(id);
+              const annotation = annotations.find((a) => a.id === id);
+              if (annotation) setFocus({ id: annotation.card_id, nonce: Date.now() });
+            }}
+            onResolve={resolveAnnotation}
+            onReopen={reopenAnnotation}
+          />
+        )}
+        {rightPanel === "activity" && (
+          <Activity events={events} nodes={canvas.nodes}
+                    onFocus={(id) => setFocus({ id, nonce: Date.now() })} />
+        )}
+      </div>
+
+      {draft && draftCard && (
+        <AnnotationComposer
+          draft={draft}
+          cardTitle={draftCard.sp_title || draftCard.id}
+          onCancel={() => setDraft(null)}
+          onSubmit={submitAnnotation}
+        />
+      )}
+
+      {popOut && (
+        <div className="popout" onClick={() => setPopOut(null)}>
+          <div className="popout-inner" onClick={(e) => e.stopPropagation()}>
+            <header>
+              {popOut.sp_title || popOut.id}
+              <button onClick={() => setPopOut(null)}>close</button>
+            </header>
+            <iframe sandbox="allow-scripts" srcDoc={popOut.text ?? ""} title={popOut.sp_title ?? popOut.id} />
+          </div>
+        </div>
+      )}
+
+      {toast && <div className="toast">{toast}</div>}
+      <footer className="hints">
+        drag to pan · ⌘/ctrl-scroll to zoom · double-click empty space for a card ·
+        drag the ◇ handle to link · double-click a card to edit · c to comment
+      </footer>
+    </div>
+  );
+}
