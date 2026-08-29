@@ -1,0 +1,33 @@
+# systemd unit for an Analog server.
+#
+#   sudo cp deploy/analog.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now analog
+#
+# Binds loopback on purpose. Put a TLS reverse proxy in front (see Caddyfile) rather
+# than exposing 8787 directly — tokens are bearer credentials and travel in the
+# clear over plain HTTP.
+[Unit]
+Description=Analog — a shared canvas for one human and their agents
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=analog
+Group=analog
+WorkingDirectory=/opt/analog
+Environment=ANALOG_DATA_DIR=/var/lib/analog
+# The proxy terminates TLS and forwards here.
+ExecStart=/opt/analog/.venv/bin/python -m server --host 127.0.0.1 --port 8787
+Restart=on-failure
+RestartSec=3
+
+# The DB, the media and the token file are all it should be able to write.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/analog
+
+[Install]
+WantedBy=multi-user.target

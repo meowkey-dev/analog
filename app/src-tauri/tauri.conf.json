@@ -38,6 +38,10 @@
       "icons/icon.ico"
     ],
     "category": "Productivity",
+    "macOS": {
+      "signingIdentity": "-",
+      "minimumSystemVersion": "11.0"
+    },
     "shortDescription": "A shared canvas for one human and their agents",
     "longDescription": "Analog is a shared canvas an agent writes to and a human annotates. This app connects to an Analog server on this machine or anywhere else."
   }

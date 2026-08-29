@@ -10,8 +10,11 @@ name: build app
 # and that leg queues without a runner. Cross-compile on the arm64 runner if Intel
 # coverage is ever needed.
 #
-# Neither bundle is signed. macOS Gatekeeper will want a right-click → Open, and
-# Windows SmartScreen will warn. Signing needs secrets this repo does not have.
+# Signing: the macOS leg signs with a Developer ID and notarizes IF the repository
+# has the secrets for it (see deploy/SIGNING.md). Without them it falls back to an
+# ad-hoc signature, which is a *valid* signature but carries no trusted authority —
+# Gatekeeper still refuses a downloaded copy, and no local trick changes that.
+# Windows is unsigned either way; Authenticode needs a CA-issued certificate.
 on:
   push:
     branches-ignore: ['dependabot/**']
@@ -74,9 +77,46 @@ jobs:
         working-directory: app
         run: npm ci
 
+      # Developer ID signing needs the certificate in a keychain before `tauri build`
+      # runs. Skipped entirely when the secret is absent, so forks and this repo
+      # keep building.
+      - name: Import the signing certificate
+        if: matrix.os == 'macos-14' && secrets.APPLE_CERTIFICATE != ''
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          KEYCHAIN=build.keychain
+          KEYCHAIN_PASSWORD=$(uuidgen)
+          echo "$APPLE_CERTIFICATE" | base64 --decode > /tmp/certificate.p12
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import /tmp/certificate.p12 -k "$KEYCHAIN" \
+            -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" > /dev/null
+          security list-keychain -d user -s "$KEYCHAIN" login.keychain
+          rm -f /tmp/certificate.p12
+
       - name: Build the bundle
         working-directory: app
+        env:
+          # Empty when the secrets are absent, which is how tauri decides to fall
+          # back to the ad-hoc identity in tauri.conf.json.
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: npm run build
+
+      - name: Report what the bundle is actually signed with
+        if: matrix.os == 'macos-14'
+        run: |
+          APP=app/src-tauri/target/release/bundle/macos/Analog.app
+          codesign -dv --verbose=2 "$APP" 2>&1 | grep -E 'Identifier|Authority|Signature|flags' || true
+          echo "--- gatekeeper ---"
+          spctl -a -vv "$APP" 2>&1 || echo "(rejected — expected unless signed with a Developer ID and notarized)"
 
       - uses: actions/upload-artifact@v4
         with:
