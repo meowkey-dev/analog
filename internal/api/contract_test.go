@@ -1,9 +1,12 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"net/textproto"
 	"os"
 	"path/filepath"
 	"sort"
@@ -11,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/meowkey-dev/analog/internal/auth"
+	"github.com/meowkey-dev/analog/internal/config"
 	"github.com/meowkey-dev/analog/internal/store"
 )
 
@@ -159,5 +163,49 @@ func TestAMalformedBodyIsAContractShapedError(t *testing.T) {
 	}
 	if _, ok := body["message"].(string); !ok {
 		t.Error("the Error schema requires a message")
+	}
+}
+
+// TestAnOversizedUploadIsRejectedWithTheCap covers what the contract suite does not:
+// there is no fixture for a 25MB file, and one has no business being in the repo.
+func TestAnOversizedUploadIsRejectedWithTheCap(t *testing.T) {
+	server := newTestServer(t)
+	if _, err := server.Store.CreateSpace("demo", "D", "", "kai", "human"); err != nil {
+		t.Fatal(err)
+	}
+
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	header := make(textproto.MIMEHeader)
+	header.Set("Content-Disposition", `form-data; name="file"; filename="big.png"`)
+	header.Set("Content-Type", "image/png")
+	part, err := writer.CreatePart(header)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := part.Write(make([]byte, config.MaxUploadBytes+1)); err != nil {
+		t.Fatal(err)
+	}
+	writer.Close()
+
+	request := httptest.NewRequest("POST",
+		API+"/spaces/demo/media?actor=kai&actor_kind=human", &body)
+	request.Header.Set("Content-Type", writer.FormDataContentType())
+	recorder := httptest.NewRecorder()
+	server.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", recorder.Code)
+	}
+	var parsed map[string]any
+	if err := json.Unmarshal(recorder.Body.Bytes(), &parsed); err != nil {
+		t.Fatal(err)
+	}
+	if parsed["error"] != "validation_failed" {
+		t.Errorf("error = %v", parsed["error"])
+	}
+	// The message has to say what the limit is, or the caller cannot act on it.
+	if message, _ := parsed["message"].(string); !strings.Contains(message, "exceeds") {
+		t.Errorf("message = %q", message)
 	}
 }
