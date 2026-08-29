@@ -14,8 +14,14 @@ permissions:
 
 jobs:
   python:
-    name: contract + unit suite
+    # Both ends of the range pyproject claims, so `requires-python = ">=3.11"` is
+    # a tested statement rather than an aspiration.
+    name: suite (py${{ matrix.python }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.13"]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -25,11 +31,15 @@ jobs:
         with:
           enable-cache: true
 
+      # A venv, not --system: Ubuntu's system Python is externally managed, and a
+      # venv is how the repo is actually used anyway.
       - name: Install
-        run: uv pip install --system -e ".[dev,mcp]"
+        run: |
+          uv venv --python ${{ matrix.python }}
+          uv pip install -e ".[dev,mcp]"
 
       - name: Run the suite
-        run: python -m pytest -q
+        run: .venv/bin/python -m pytest -q
 
   web:
     name: typecheck + build
