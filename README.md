@@ -151,18 +151,34 @@ the **user**, so an agent running as you would inherit your identity and post un
 your name. The wrapper pins its own actor and ignores that file. It contains a token,
 so it is mode 700 and lives outside the repo.
 
-### The skill
+### The skill, without MCP
 
-`skill/analog/SKILL.md`, copied into `~/.claude/skills/` or a project's
-`.claude/skills/`. `--skill-into` does it for you. New sessions pick it up; a running
-one will not.
+The skill teaches the CLI, so it needs the CLI configured — it is documentation, not
+credentials. Three pieces:
 
-**This is the half that matters.** MCP and the CLI give an agent the operations; the
+```bash
+ln -sf "$PWD/.venv/bin/analog" ~/.local/bin/analog     # `analog` on PATH, as the skill writes it
+.venv/bin/python scripts/onboard_agent.py claude-code --url https://analog.meowkey.com --token analog_... --skill-into ~/.claude/skills --claude-env ~/code/that-project
+```
+
+`--claude-env` merges `ANALOG_URL` / `ANALOG_ACTOR` / `ANALOG_ACTOR_KIND` /
+`ANALOG_TOKEN` into that project's `.claude/settings.local.json`, which Claude Code
+applies to its Bash tool calls. It merges rather than overwrites, and
+`settings.local.json` is the gitignored one — the token stays out of git. It also
+sets `ANALOG_CONFIG=/nonexistent` so a `~/.analog.toml` belonging to *you* cannot
+make the agent post under your name.
+
+Then **restart the agent**: both the skill listing and `settings.local.json` are read
+at session start.
+
+Mint the token on whichever machine runs the server — `analog token add claude-code
+--kind agent` — since that is where the token store lives.
+
+This is the half that matters. MCP and the CLI give an agent the operations; the
 skill teaches the conventions that decide whether the tool stays usable — read
 feedback *first*, one idea per card, always label links, don't resolve what you
 haven't acted on, don't rearrange the human's canvas. An agent with the tools and no
-skill will use Analog as a dumping ground. It loads on demand, so it costs nothing
-in unrelated sessions.
+skill will use Analog as a dumping ground.
 
 ## Test
 

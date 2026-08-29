@@ -74,6 +74,40 @@ def write_wrapper(into: Path, actor: str, kind: str, url: str,
     return path
 
 
+def write_claude_env(project: Path, actor: str, kind: str, url: str,
+                     token: str | None) -> Path:
+    """Merge the ANALOG_* env into a project's .claude/settings.local.json.
+
+    `settings.local.json` rather than `settings.json` because it holds a token and
+    is the gitignored one. Claude Code applies `env` to its Bash tool calls, so the
+    skill's plain `analog ...` commands work with no wrapper and no exports —
+    but it is read at session start, so an already-running agent needs a restart.
+    """
+    import json
+
+    target = project.expanduser() / ".claude" / "settings.local.json"
+    target.parent.mkdir(parents=True, exist_ok=True)
+
+    settings = {}
+    if target.is_file() and target.read_text().strip():
+        settings = json.loads(target.read_text())      # merge, never clobber
+
+    env = dict(settings.get("env") or {})
+    env.update({
+        "ANALOG_URL": url,
+        "ANALOG_ACTOR": actor,
+        "ANALOG_ACTOR_KIND": kind,
+        # Otherwise a ~/.analog.toml belonging to a different actor wins.
+        "ANALOG_CONFIG": "/nonexistent",
+    })
+    if token:
+        env["ANALOG_TOKEN"] = token
+    settings["env"] = env
+
+    target.write_text(json.dumps(settings, indent=2) + "\n")
+    return target
+
+
 def install_skill(into: Path) -> Path:
     """Skills are a folder with a SKILL.md; copying is the whole install."""
     target = into.expanduser() / "analog"
@@ -101,6 +135,9 @@ def main(argv: list[str] | None = None) -> int:
                     help="print the `claude mcp add` command")
     ap.add_argument("--print-env", action="store_true",
                     help="print the exports an agent with only a shell needs")
+    ap.add_argument("--claude-env", nargs="?", const=".", default=None, metavar="PROJECT",
+                    help="merge ANALOG_* into PROJECT/.claude/settings.local.json, so "
+                         "the skill's plain `analog` commands work in that project")
     ap.add_argument("--wrapper", nargs="?", const="~/.local/bin", default=None,
                     metavar="DIR",
                     help="write a wrapper command carrying this actor's config, for "
@@ -116,6 +153,14 @@ def main(argv: list[str] | None = None) -> int:
         target = install_skill(args.skill_into)
         print(f"skill installed: {target}")
         print("  it loads on demand, so it costs nothing in unrelated sessions.\n")
+
+    if args.claude_env is not None:
+        target = write_claude_env(Path(args.claude_env), args.actor, args.kind,
+                                  args.url, token)
+        print(f"claude env: {target}")
+        if not token:
+            print("  no token written — add ANALOG_TOKEN there once the server issues one.")
+        print("  Read at session start, so restart the agent for it to take effect.\n")
 
     python = Path(sys.executable)
     if args.wrapper is not None:
