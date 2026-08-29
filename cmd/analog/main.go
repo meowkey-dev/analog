@@ -7,7 +7,6 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -98,10 +97,9 @@ func readSource(source, file string) (string, error) {
 }
 
 func main() {
+	// Server failures have already exited with their own code in fail(); anything
+	// reaching here is a usage error, which cobra has printed.
 	if err := root().Execute(); err != nil {
-		if errors.Is(err, io.EOF) {
-			os.Exit(exitError)
-		}
 		os.Exit(exitError)
 	}
 }

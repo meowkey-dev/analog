@@ -21,7 +21,7 @@ import (
 const Version = "0.3.0"
 
 // API is the prefix every documented operation sits behind.
-var API = config.APIPrefix
+const API = config.APIPrefix
 
 // publicPaths are reachable without a token: it is how a client discovers whether
 // it needs one.
