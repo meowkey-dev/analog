@@ -2,8 +2,17 @@
 
 from __future__ import annotations
 
+import os
+import socket
+import subprocess
+import sys
+import time
+
+import httpx
 import pytest
 from openapi_spec_validator import validate as validate_spec
+
+from tests.conftest import STARTUP_TIMEOUT, env_for, server_bin
 
 pytestmark = pytest.mark.contract
 
@@ -48,12 +57,43 @@ def test_every_spec_endpoint_is_documented(openapi):
 
 
 def test_base_url_pins_the_port(openapi):
-    """The port is contract, not a runtime choice: server/config.py must match."""
-    from analog.server import config
-
+    """The port is contract, not a runtime choice."""
     assert openapi["servers"][0]["url"] == "http://127.0.0.1:8787/api"
-    assert config.PORT == 8787
-    assert config.API_PREFIX == "/api"
+
+
+def test_the_server_defaults_to_the_contracts_address(data_root):
+    """...and the binary must actually default to it.
+
+    Asserted by running the server with no --host/--port and knocking on the
+    address openapi.json advertises, rather than by reading a constant out of the
+    implementation. Skipped when something else already holds the port.
+    """
+    host, port = "127.0.0.1", 8787
+    probe = socket.socket()
+    probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    try:
+        probe.bind((host, port))
+    except OSError:
+        pytest.skip(f"{host}:{port} is already in use")
+    finally:
+        probe.close()
+
+    proc = subprocess.Popen((server_bin() or [sys.executable, "-m", "analog.server"]),
+                            env={**os.environ, **env_for(data_root)},
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        deadline = time.monotonic() + STARTUP_TIMEOUT
+        while time.monotonic() < deadline:
+            try:
+                r = httpx.get(f"http://{host}:{port}/api/health", timeout=1.0)
+                assert r.status_code == 200 and r.json()["ok"] is True
+                return
+            except httpx.HTTPError:
+                time.sleep(0.05)
+        raise AssertionError(f"nothing answered http://{host}:{port}/api/health")
+    finally:
+        proc.terminate()
+        proc.wait(timeout=5)
 
 
 @pytest.mark.parametrize("path,method", sorted(MUTATING))

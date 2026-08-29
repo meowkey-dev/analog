@@ -8,6 +8,11 @@ from tests.conftest import AGENT, HUMAN, add_cards, assert_valid, make_space, on
 
 pytestmark = pytest.mark.contract
 
+# SPEC §5, and DECISIONS.md on why a batch wraps at all. Stated here rather than
+# imported: this suite describes the behaviour, so reading the constant out of the
+# implementation would let the two drift together and still pass.
+LAYOUT_MAX_COLUMN = 900
+
 
 @pytest.fixture
 def space(client):
@@ -274,8 +279,6 @@ def test_deleting_an_unknown_card_is_404(space):
 def test_a_long_batch_wraps_into_a_new_column(space):
     """SPEC §5 says a column; five cards of one is a strip you have to zoom out to
     read, so a batch wraps once the column passes LAYOUT_MAX_COLUMN."""
-    from analog.server.store import LAYOUT_MAX_COLUMN
-
     nodes = add_cards(space, "demo", [
         {"title": str(i), "content": "c", "height": 200, "width": 320} for i in range(6)])
     columns: dict[float, list[dict]] = {}
