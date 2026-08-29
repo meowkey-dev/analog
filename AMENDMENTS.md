@@ -5,7 +5,7 @@ changes**. Each says what I implemented in the meantime so nothing was blocked.
 
 **#1, #2, #4, #5 and #6 were approved on 2026-08-29** (on the `decisions` space) and
 are applied: `openapi.json` is at **0.2.0**, `schema.sql` gained the two `space.*`
-event types, and the server matches. **#3 is still open.** **#8 is new.**
+event types, and the server matches. **#3 was approved and applied on the same space (0.2.1).** **#8 and #9 are new.**
 
 ---
 
@@ -39,7 +39,7 @@ under `include_deleted=true`.
 
 ---
 
-### 3. `c_opt_d`'s tombstone disagrees with its deletion event — STILL OPEN
+### 3. `c_opt_d`'s tombstone disagreed with its deletion event — APPLIED in 0.2.1
 
 `canvas.with-deleted.json` has `sp_deleted_at: "2026-08-28T11:00:00Z"`, but
 `events.json` event 14 (`card.deleted`, subject `c_opt_d`) has
@@ -52,12 +52,9 @@ compares byte-for-byte.
 
 **Ask:** set `sp_deleted_at` to `2026-08-28T14:00:00Z` to match the event.
 
-**2026-08-29 — you said "i don't understand".** Restated: the fixture says this card
-was deleted at 11:00, while the deletion event in the same fixture set says 14:00.
-One of the two is a typo, and 11:00 happens to be the card's *creation* time, so it
-looks copied from there. Nothing depends on which wins — it is one character in one
-fixture — but a fixture that contradicts itself gets trusted by someone eventually.
-Say the word and I will change it to 14:00.
+**Applied 2026-08-29** ("okay. you fix it."): `canvas.with-deleted.json` now says
+`14:00:00Z`, matching event 14. `scripts/seed.py` reads the fixture directly, so a
+re-seed is the whole migration.
 
 ---
 
@@ -161,3 +158,36 @@ isolation is exactly what makes agent-authored HTML safe to render at all.
 **Ask:** confirm you want text-quote selectors, and whether v1 may restrict them to
 text-node kinds (`md`, `plain`), leaving `html` cards with point and rect. That
 restriction is what keeps the sandbox intact.
+
+---
+
+### 9. A human's reply on resolve never reaches the agent — *new, unanswered*
+
+Found the hard way. You resolved amendment #3's comment with the reply
+*"okay. you fix it."* — an instruction. `analog feedback decisions` did not show it.
+I only found it by reading the raw event log and `analog comments --all`.
+
+This is the design working as specified, and that is the problem. §4.1: every call
+returns *all unresolved annotations*, and `resolved` is the durable acknowledgment.
+So resolving is itself the signal, and `resolved_reply` is only ever read by a human
+in the UI. The field exists for the agent→human direction ("rebased axis at 0").
+
+The trap is that the UI puts a **reply box directly beside the resolve button** on
+every open comment, including comments the human wrote themselves. Typing an
+instruction there is the obvious move, and it silently goes nowhere. Either the
+affordance or the contract is wrong.
+
+Three ways out, cheapest first:
+
+1. **UI only, no contract change.** Relabel the box "reply (for your own record)",
+   or hide it on comments the human authored. Honest, and free.
+2. **Feed replies back.** Add `replies` to `Feedback`: annotations resolved by
+   *another* actor since the cursor, carrying `resolved_reply`. Cursor-governed, so
+   each is delivered once. Fits the existing model; needs a `Feedback` field.
+3. **Say resolve means done, and route instructions elsewhere.** In the UI, a reply
+   on your own open comment becomes a *new* annotation instead of a resolution —
+   which `get_feedback` already delivers, with no contract change at all.
+
+I would take (3), with (1) as the fallback if it feels like sleight of hand.
+
+**Ask:** which, or neither.

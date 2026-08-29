@@ -73,8 +73,16 @@ Requested in `../AMENDMENTS.md`, approved on the `decisions` space.
 
 Fixtures were **not** renumbered: they depict a space whose log begins at
 `card.created`, which stays valid — `link.deleted` has likewise always been an enum
-member with no fixture. Amendment #3 (`c_opt_d`'s tombstone) is still open, so no
-fixture changed in this round.
+member with no fixture.
+
+### 0.2.1 — 2026-08-29
+
+| # | Change |
+|---|---|
+| 3 | `canvas.with-deleted.json`: `c_opt_d.sp_deleted_at` `11:00:00Z` → `14:00:00Z`, to agree with event 14, the `card.deleted` that produced it. 11:00 was the card's creation time and had been copied by mistake. |
+
+The only fixture edit so far. `scripts/seed.py` reads the value straight from the
+fixture, so re-seeding is all that is needed to pick it up.
 
 ## One correction to the spec
 
