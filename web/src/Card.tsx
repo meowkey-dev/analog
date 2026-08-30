@@ -135,8 +135,11 @@ function CardView(props: CardProps) {
         <div className="card-head" onPointerDown={(e) => props.onPointerDownHeader(e, node)}>
           <span className="card-title">{node.sp_title || node.id}</span>
           <span className="badge">rev {revisions}</span>
+          {/* Same trailing buttons, same order, as the expanded header: toggling
+              must not move the collapse control onto where delete lands (#9). */}
           <button className="icon" title="Show the superseded content"
                   onClick={() => props.onToggleCollapsed(node.id)}>▾</button>
+          <button className="icon danger" title="Delete card" onClick={() => props.onDelete(node.id)}>×</button>
         </div>
       </div>
     );

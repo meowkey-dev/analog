@@ -73,7 +73,12 @@ input, textarea, select {
 .canvas {
   position: relative;
   flex: 1;
+  /* clip, not hidden: hidden is still programmatically scrollable, so focusing a
+     button inside the transformed content lets the browser scroll-into-view it and
+     drag every card off its transform (focus-scroll centers the focused element).
+     clip makes the canvas a non-scroll-container, so nothing can shift it. */
   overflow: hidden;
+  overflow: clip;
   touch-action: none;
   background-color: var(--bg);
   background-image:
@@ -84,6 +89,8 @@ input, textarea, select {
 }
 .canvas.panning { cursor: grabbing; }
 .canvas.annotating { cursor: crosshair; }
+/* A drag must never leave a text selection behind it (#18). */
+.canvas.dragging { user-select: none; -webkit-user-select: none; }
 
 .viewport { position: absolute; inset: 0; transform-origin: 0 0; }
 
@@ -184,6 +191,10 @@ input, textarea, select {
 .links .edge-line { fill: none; stroke: #4c566a; stroke-width: 1.75; }
 .links marker path { fill: #4c566a; }
 .links .edge.selected .edge-line { stroke: var(--accent); stroke-width: 2.5; }
+/* An edge into a soft-deleted card is still deletable, but reads as unattached (#15). */
+.links .edge.dangling .edge-line { stroke: #3a4152; stroke-dasharray: 4 4; }
+.links .edge.dangling .edge-label { opacity: .6; }
+.links .edge.dangling.selected .edge-line { stroke: var(--accent); }
 .links .edge-label {
   fill: var(--dim); font-size: 11px; paint-order: stroke;
   stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round;

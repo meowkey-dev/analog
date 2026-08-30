@@ -100,3 +100,15 @@ def test_deleting_a_card_leaves_its_links_alone(space):
     client.delete(f"/api/spaces/demo/cards/{a}", params=HUMAN)
     full = client.get("/api/spaces/demo/canvas", params={"include_deleted": True}).json()
     assert edge["id"] in {e["id"] for e in full["edges"]}
+
+
+def test_deleted_links_are_absent_even_with_include_deleted(space):
+    """include_deleted is a card-tombstone flag (node-only sp_deleted_at). A
+    deleted link has no wire shape marking it, so returning one would give the
+    client an edge indistinguishable from a live one."""
+    client, a, b = space
+    edge = client.post("/api/spaces/demo/links", params=AGENT,
+                       json={"edges": [{"fromNode": a, "toNode": b}]}).json()[0]
+    assert client.delete(f"/api/spaces/demo/links/{edge['id']}", params=HUMAN).status_code == 204
+    full = client.get("/api/spaces/demo/canvas", params={"include_deleted": True}).json()
+    assert edge["id"] not in {e["id"] for e in full["edges"]}

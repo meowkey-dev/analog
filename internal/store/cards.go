@@ -100,8 +100,11 @@ func (s *Store) Canvas(slug string, includeDeleted bool) (Canvas, error) {
 		return out, err
 	}
 
+	// include_deleted is a card-tombstone flag (node-only sp_deleted_at). A
+	// deleted link has no wire shape that says so, so one returned here would be
+	// indistinguishable from a live edge — always exclude them.
 	edges, err := s.read.Query(
-		"SELECT edge_json FROM link WHERE space_id = ?"+where+" ORDER BY rowid", space.ID)
+		"SELECT edge_json FROM link WHERE space_id = ? AND deleted_at IS NULL ORDER BY rowid", space.ID)
 	if err != nil {
 		return out, err
 	}

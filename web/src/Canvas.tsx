@@ -27,6 +27,8 @@ interface DragState {
 
 export interface CanvasProps {
   nodes: Node[];
+  /** Every node including soft-deleted ones, so edges into deleted cards can render (#15). */
+  allNodes: Node[];
   edges: Edge[];
   annotations: Annotation[];
   annotateMode: boolean;
@@ -65,6 +67,10 @@ export function Canvas(props: CanvasProps) {
     [props.nodes, ghost],
   );
   const nodeMap = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes]);
+  const linkNodes = useMemo(
+    () => new Map(props.allNodes.map((n) => [n.id, n])),
+    [props.allNodes],
+  );
 
   const openByCard = useMemo(() => {
     const counts = new Map<string, number>();
@@ -110,11 +116,11 @@ export function Canvas(props: CanvasProps) {
     (clientX: number, clientY: number): [number, number] => {
       const element = container.current!;
       const box = element.getBoundingClientRect();
-      // scrollTop/Left are pinned to 0 by onScroll below, but subtract them anyway:
-      // being wrong here silently misplaces every drag and every annotation pin.
+      // overflow: clip keeps the canvas from ever scrolling (see styles.css), so
+      // client coords map onto the transform directly.
       return [
-        (clientX - box.left + element.scrollLeft - viewport.x) / viewport.scale,
-        (clientY - box.top + element.scrollTop - viewport.y) / viewport.scale,
+        (clientX - box.left - viewport.x) / viewport.scale,
+        (clientY - box.top - viewport.y) / viewport.scale,
       ];
     },
     [viewport],
@@ -179,6 +185,8 @@ export function Canvas(props: CanvasProps) {
   };
 
   const startLink = (event: React.PointerEvent, node: Node) => {
+    // Canceling the pointerdown stops the drag from starting a text selection (#18).
+    event.preventDefault();
     event.stopPropagation();
     setLinkTo(toWorld(event.clientX, event.clientY));
     setDrag({
@@ -257,9 +265,11 @@ export function Canvas(props: CanvasProps) {
   }, [drag, ghost, viewport.scale, toWorld, props]);
 
   /**
-   * Whether some element between `start` and the canvas can still absorb this
-   * wheel delta itself. A card body with overflow:auto scrolls natively AND
-   * bubbles the wheel up here, so without this the board pans at the same time.
+   * Whether some element between `start` and the canvas can absorb this wheel
+   * delta itself. A card body with overflow:auto scrolls natively AND bubbles
+   * the wheel up here, so without this the board pans at the same time. A
+   * scrollable card owns the wheel outright — even scrolled to its end the
+   * delta must not spill into a board pan (#8); pan by dragging instead.
    */
   const consumedByScrollable = (start: Element | null, dx: number, dy: number): boolean => {
     for (let el = start; el && el !== container.current; el = el.parentElement) {
@@ -267,20 +277,7 @@ export function Canvas(props: CanvasProps) {
       const style = getComputedStyle(el);
       const scrollableY = /auto|scroll/.test(style.overflowY) && el.scrollHeight > el.clientHeight;
       const scrollableX = /auto|scroll/.test(style.overflowX) && el.scrollWidth > el.clientWidth;
-      // Only claim the event if there is actually room left to move that way,
-      // so reaching the end of a card hands panning back to the board.
-      if (scrollableY && dy !== 0) {
-        const room = dy > 0
-          ? el.scrollHeight - el.clientHeight - el.scrollTop
-          : el.scrollTop;
-        if (room > 1) return true;
-      }
-      if (scrollableX && dx !== 0) {
-        const room = dx > 0
-          ? el.scrollWidth - el.clientWidth - el.scrollLeft
-          : el.scrollLeft;
-        if (room > 1) return true;
-      }
+      if ((scrollableY && dy !== 0) || (scrollableX && dx !== 0)) return true;
     }
     return false;
   };
@@ -330,19 +327,9 @@ export function Canvas(props: CanvasProps) {
   return (
     <div
       ref={container}
-      className={`canvas${props.annotateMode ? " annotating" : ""}${drag?.kind === "pan" ? " panning" : ""}`}
+      className={`canvas${props.annotateMode ? " annotating" : ""}${drag?.kind === "pan" ? " panning" : ""}${drag ? " dragging" : ""}`}
       onPointerDown={startPan}
       onWheel={onWheel}
-      onScroll={(event) => {
-        // An overflow:hidden box is still scrollable programmatically — focusing a
-        // control inside the transformed content makes the browser scroll it into
-        // view, which shifts every card away from where the transform says it is.
-        const element = event.currentTarget;
-        if (element.scrollTop || element.scrollLeft) {
-          element.scrollTop = 0;
-          element.scrollLeft = 0;
-        }
-      }}
       onDoubleClick={(event) => {
         if (event.target !== event.currentTarget) return;
         const [x, y] = toWorld(event.clientX, event.clientY);
@@ -353,7 +340,7 @@ export function Canvas(props: CanvasProps) {
            style={{ transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.scale})` }}>
         <Links
           edges={props.edges}
-          nodes={nodeMap}
+          nodes={linkNodes}
           bounds={bounds}
           selectedId={props.selectedEdge}
           onSelect={props.onSelectEdge}
