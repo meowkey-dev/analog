@@ -12,6 +12,21 @@ Three binaries — `analog-server`, `analog`, `analog-mcp` — with no runtime t
 beside them. The web UI is inside `analog-server`.
 
 ```bash
+brew install meowkey-dev/tap/analog
+```
+
+Or the installer script:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/meowkey-dev/analog/main/scripts/install.sh | sh
+```
+
+That detects your platform, checks the download against the release's `SHA256SUMS`,
+and installs the three binaries to `/usr/local/bin` — or `~/.local/bin` when that
+would need sudo (`ANALOG_INSTALL_DIR` overrides). Re-run it to upgrade. Or unpack a
+release by hand:
+
+```bash
 curl -L https://github.com/meowkey-dev/analog/releases/latest/download/analog-darwin-arm64.tar.gz | tar xz
 ./analog-server
 ```
