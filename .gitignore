@@ -20,13 +20,17 @@ auth.json
 .env
 .DS_Store
 
-# Release archives
-dist/
+# Release archives. Anchored: an unanchored `dist/` also matches
+# internal/web/dist/, and git will not descend into an ignored directory to honour
+# the negation below — which left .gitkeep untracked and //go:embed with nothing to
+# match on a fresh checkout.
+/dist/
 
 # npm is the supported toolchain; Vite 8 will not run under a Bun shim.
 web/bun.lock
 
-# The web bundle is copied in at build time; only the placeholder is tracked.
+# The web bundle is copied in at build time; only the placeholder is tracked, and
+# it has to be, or //go:embed all:dist fails to compile.
 internal/web/dist/*
 !internal/web/dist/.gitkeep
 
