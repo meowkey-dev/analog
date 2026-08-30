@@ -19,6 +19,7 @@ another is the exact failure this directory exists to prevent.
 | `fixtures/annotations.json` | 3 annotations: one stale, one current, one resolved. |
 | `fixtures/events.json` | 19 events, contiguous seq. |
 | `fixtures/feedback.claude-code.since-12.json` | Expected `GET /feedback` for actor `claude-code`. |
+| `fixtures/feedback.human.json` | Expected `GET /feedback` for actor `human`, who has no stored cursor and so starts at zero. |
 
 ## What the fixtures deliberately exercise
 
@@ -27,6 +28,11 @@ to get wrong:
 
 - **Own-event filtering.** Events 18 and 19 are authored by `claude-code`. Neither
   appears in that actor's feedback. An agent must never read its own writes back.
+- **Reply delivery.** Event 18 resolved `a_3` with the reply `added position:sticky`.
+  For `human`, whose window includes it, that is one entry in `replies` — the answer
+  reaches the resolver's counterpart exactly once. For `claude-code` itself the
+  resolve is its own event, so its `replies` is empty: nobody reads their own reply
+  back. A resolve without a reply is pure acknowledgment and lands in no bucket.
 - **Cursor-independent annotations.** `a_1` was created at seq 12, before the cursor.
   It still appears, because unresolved annotations ignore the cursor entirely.
 - **Resolved exclusion.** `a_3` is resolved and therefore absent.
@@ -109,6 +115,24 @@ a cookie would have handed it one. That is the concern SPEC §8 filed under
 "separate-origin artifact serving ... before this touches a network".
 
 No fixture changed: none of them contain a token or an identity.
+
+### 0.4.0 — 2026-08-30 · replies on resolve reach the agent
+
+Requested in `../AMENDMENTS.md` #9, filed as issue #22. Resolving is the durable
+acknowledgment (§4.1), and `resolved_reply` was only ever read by a human in the
+UI — so when the human typed an instruction into the reply box beside resolve
+("okay. you fix it."), the agent never saw it. The affordance invited the gesture;
+the contract swallowed it.
+
+| Change |
+|---|
+| `Feedback.replies` added: comments *another* actor resolved with a non-empty reply since the cursor, one entry per resolve event, carrying the reply and the comment's context. Cursor-governed like the card/link deltas, so each is delivered exactly once and own-event filtering holds. |
+| New schema `Reply`; `replies` is required on `Feedback`. |
+| `fixtures/feedback.human.json` added — the same log viewed by `human` (no stored cursor, starts at zero), where event 18 arrives as one reply. `feedback.claude-code.since-12.json` gains only `"replies": []`: its window contains no other-actor resolve. |
+
+Deliberately *not* changed: a resolve **without** a reply still lands in no bucket.
+Resolving remains the acknowledgment; only an answer is a message. Whether
+replies-on-resolve become a conversational channel is issue #22's open question.
 
 ## One correction to the spec
 

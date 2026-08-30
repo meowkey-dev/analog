@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Analog API",
-    "version": "0.3.0",
+    "version": "0.4.0",
     "description": "Shared canvas for a human and their agents. FROZEN CONTRACT — amendments go through WP0 only. Every mutating operation requires actor and actor_kind and emits an event for each object it creates or changes."
   },
   "servers": [{ "url": "http://127.0.0.1:8787/api" }],
@@ -195,11 +195,12 @@
       },
       "Feedback": {
         "type": "object",
-        "description": "Annotations are cursor-independent: all unresolved ones are returned every call. Card and link deltas are cursor-governed and exclude events authored by the calling actor.",
-        "required": ["cursor", "annotations", "cards_edited", "cards_deleted", "cards_moved", "links_added", "links_removed", "summary"],
+        "description": "Annotations are cursor-independent: all unresolved ones are returned every call. Card, link and reply deltas are cursor-governed and exclude events authored by the calling actor. `replies` carries comments another actor resolved with a non-empty reply since the cursor, so a human's reply on resolve reaches the agent exactly once.",
+        "required": ["cursor", "annotations", "replies", "cards_edited", "cards_deleted", "cards_moved", "links_added", "links_removed", "summary"],
         "properties": {
           "cursor": { "type": "integer" },
           "annotations": { "type": "array", "items": { "$ref": "#/components/schemas/Annotation" } },
+          "replies": { "type": "array", "items": { "$ref": "#/components/schemas/Reply" } },
           "cards_edited": { "type": "array", "items": {
             "type": "object",
             "properties": {
@@ -228,6 +229,23 @@
             "properties": { "id": { "type": "string" }, "actor": { "type": "string" } }
           }},
           "summary": { "type": "string", "description": "One human-readable line. Empty string when nothing changed." }
+        }
+      },
+      "Reply": {
+        "type": "object",
+        "description": "A comment another actor resolved with a reply, delivered once via the cursor. Resolving without a reply is still pure acknowledgment and lands in no bucket.",
+        "required": ["id", "card_id", "body", "motivation", "creator", "creator_kind", "reply", "actor", "resolved_at"],
+        "properties": {
+          "id": { "type": "string" },
+          "card_id": { "type": "string" },
+          "card_title": { "type": "string" },
+          "body": { "type": "string" },
+          "motivation": { "type": "string", "enum": ["commenting", "assessing", "editing"] },
+          "creator": { "type": "string" },
+          "creator_kind": { "type": "string", "enum": ["human", "agent"] },
+          "reply": { "type": "string" },
+          "actor": { "type": "string" },
+          "resolved_at": { "type": "string", "format": "date-time" }
         }
       }
     },
@@ -563,7 +581,7 @@
       "parameters": [{ "$ref": "#/components/parameters/slug" }],
       "get": {
         "operationId": "getFeedback",
-        "description": "The delta an agent reads at the start of a turn. Delta computation lives here, not in the clients — MCP and CLI are thin proxies over this endpoint.",
+        "description": "The delta an agent reads at the start of a turn. Delta computation lives here, not in the clients — MCP and CLI are thin proxies over this endpoint. `replies` delivers comments another actor resolved with a reply since the cursor: a human's answer on resolve is an instruction, not a throwaway.",
         "parameters": [
           { "$ref": "#/components/parameters/actor" },
           {

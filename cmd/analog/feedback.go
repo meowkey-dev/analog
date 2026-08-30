@@ -42,6 +42,22 @@ func renderFeedback(f client.Feedback) {
 		}
 	}
 
+	if len(f.Replies) > 0 {
+		fmt.Println("\nreplies on resolve")
+		for _, r := range f.Replies {
+			subject := str(r["card_title"])
+			if subject == "" {
+				subject = str(r["card_id"])
+			}
+			fmt.Printf("  %s  [%s] %s  · %v\n",
+				str(r["id"]), str(r["motivation"]), subject, r["actor"])
+			for _, line := range strings.Split(str(r["body"]), "\n") {
+				fmt.Printf("      %s\n", line)
+			}
+			fmt.Printf("      reply: %s\n", str(r["reply"]))
+		}
+	}
+
 	for _, section := range []struct {
 		heading string
 		rows    []map[string]any

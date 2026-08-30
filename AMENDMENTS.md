@@ -5,7 +5,8 @@ changes**. Each says what I implemented in the meantime so nothing was blocked.
 
 **#1, #2, #4, #5 and #6 were approved on 2026-08-29** (on the `decisions` space) and
 are applied: `openapi.json` is at **0.2.0**, `schema.sql` gained the two `space.*`
-event types, and the server matches. **#3 was approved and applied on the same space (0.2.1).** **#8 and #9 are open.**
+event types, and the server matches. **#3 was approved and applied on the same space (0.2.1).** **#8 is open.**
+**#9 was approved and applied in 0.4.0** (issue #22).
 **#10 and #11 came out of going remote and are applied in 0.3.0.**
 
 ---
@@ -162,7 +163,7 @@ restriction is what keeps the sandbox intact.
 
 ---
 
-### 9. A human's reply on resolve never reaches the agent — *new, unanswered*
+### 9. A human's reply on resolve never reaches the agent — APPLIED in 0.4.0
 
 Found the hard way. You resolved amendment #3's comment with the reply
 *"okay. you fix it."* — an instruction. `analog feedback decisions` did not show it.
@@ -192,6 +193,14 @@ Three ways out, cheapest first:
 I would take (3), with (1) as the fallback if it feels like sleight of hand.
 
 **Ask:** which, or neither.
+
+**Applied, as (2) — decided on issue #22, 2026-08-30:** `Feedback` gains `replies`:
+comments *another* actor resolved with a non-empty reply since the cursor,
+delivered exactly once. Resolving without a reply stays pure acknowledgment and
+lands in no bucket, so the acknowledgment model is untouched — only an answer is
+now a message. The expensive option after all: the question was whether
+replies-on-resolve are a real channel, and swallowing an instruction was the one
+failure mode this design exists to prevent. See `contracts/README.md` 0.4.0.
 
 ---
 

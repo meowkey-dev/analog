@@ -108,6 +108,75 @@ def test_annotations_on_deleted_cards_still_surface(space):
     assert [a["body"] for a in fb["annotations"]] == ["why?"]
 
 
+# --- replies on resolve (AMENDMENTS #9, issue #22) ---------------------------
+#
+# The incident: the human answered a comment by resolving it with a reply, and
+# the answer was stored where nobody reads it. It is now a cursor-governed
+# bucket, delivered exactly once to the resolver's counterpart.
+
+def test_a_reply_on_resolve_reaches_the_other_side_once(space):
+    card = one_card(space, "demo")
+    ann = space.post("/api/spaces/demo/annotations", params=HUMAN,
+                     json={"card_id": card["id"], "body": "can you rebase the axis?"}).json()
+    space.patch(f"/api/spaces/demo/annotations/{ann['id']}", params=AGENT,
+                json={"resolved": True, "reply": "rebased axis at 0"})
+
+    fb = feedback(space, "codex")
+    [reply] = fb["replies"]
+    assert reply["id"] == ann["id"]
+    assert reply["reply"] == "rebased axis at 0"
+    assert reply["actor"] == "claude-code"
+    assert reply["body"] == "can you rebase the axis?"
+    assert reply["card_title"] == "Card"
+    assert "1 reply on resolve" in fb["summary"]
+
+    # Cursor-governed: consumed with everything else.
+    assert feedback(space, "codex")["replies"] == []
+
+
+def test_nobody_reads_their_own_reply_back(space):
+    """The human's reply reaches the agent; the agent's own reaches the human."""
+    card = one_card(space, "demo")
+    ann = space.post("/api/spaces/demo/annotations", params=HUMAN,
+                     json={"card_id": card["id"], "body": "b"}).json()
+    space.patch(f"/api/spaces/demo/annotations/{ann['id']}", params=AGENT,
+                json={"resolved": True, "reply": "done"})
+
+    fb = feedback(space, "claude-code")
+    assert fb["replies"] == []
+    assert "reply" not in fb["summary"]
+
+
+def test_resolving_without_a_reply_is_still_pure_acknowledgment(space):
+    """Only an answer is a message. No reply key, an explicit null and "" land nowhere."""
+    card = one_card(space, "demo")
+    anns = [space.post("/api/spaces/demo/annotations", params=HUMAN,
+                       json={"card_id": card["id"], "body": body}).json()
+            for body in ("no reply key", "explicit null", "empty string")]
+    space.patch(f"/api/spaces/demo/annotations/{anns[0]['id']}", params=AGENT,
+                json={"resolved": True})
+    space.patch(f"/api/spaces/demo/annotations/{anns[1]['id']}", params=AGENT,
+                json={"resolved": True, "reply": None})
+    space.patch(f"/api/spaces/demo/annotations/{anns[2]['id']}", params=AGENT,
+                json={"resolved": True, "reply": ""})
+    assert feedback(space, "codex")["replies"] == []
+
+
+def test_reopening_and_resolving_again_delivers_again(space):
+    """One entry per resolve event: a re-resolved answer is a second message."""
+    card = one_card(space, "demo")
+    ann = space.post("/api/spaces/demo/annotations", params=HUMAN,
+                     json={"card_id": card["id"], "body": "b"}).json()
+    space.patch(f"/api/spaces/demo/annotations/{ann['id']}", params=AGENT,
+                json={"resolved": True, "reply": "first"})
+    space.patch(f"/api/spaces/demo/annotations/{ann['id']}", params=HUMAN,
+                json={"resolved": False})
+    space.patch(f"/api/spaces/demo/annotations/{ann['id']}", params=AGENT,
+                json={"resolved": True, "reply": "second"})
+
+    assert [r["reply"] for r in feedback(space, "codex")["replies"]] == ["first", "second"]
+
+
 # --- cursor mechanics --------------------------------------------------------
 
 def test_a_fresh_actor_starts_at_zero(space):
@@ -227,10 +296,15 @@ def test_link_removal_is_reported(space):
 #
 #   "2 open comments (1 stale), 1 card edited, 1 deleted, 1 moved, 1 new link."
 #
+# and by contracts/fixtures/feedback.human.json:
+#
+#   "2 open comments (1 stale), 1 reply on resolve, 1 card edited, 3 new links."
+#
 # Parts, in this order, omitting any that are zero, joined with ", " and closed
 # with a full stop:
-#   {n} open comment[s][ ({k} stale)] · {n} card[s] edited · {n} deleted
-#   · {n} moved · {n} new link[s] · {n} link[s] removed
+#   {n} open comment[s][ ({k} stale)] · {n} repl(y|ies) on resolve
+#   · {n} card[s] edited · {n} deleted · {n} moved · {n} new link[s]
+#   · {n} link[s] removed
 # Empty string when every bucket is empty.
 
 def test_summary_is_empty_when_nothing_changed(space):
@@ -281,3 +355,12 @@ def test_summary_reports_removed_links(space):
     feedback(space, "claude-code")
     space.delete(f"/api/spaces/demo/links/{link['id']}", params=HUMAN)
     assert feedback(space, "claude-code")["summary"] == "1 link removed."
+
+
+def test_summary_slots_replies_after_comments(space):
+    card = one_card(space, "demo")
+    ann = space.post("/api/spaces/demo/annotations", params=HUMAN,
+                     json={"card_id": card["id"], "body": "b"}).json()
+    space.patch(f"/api/spaces/demo/annotations/{ann['id']}", params=AGENT,
+                json={"resolved": True, "reply": "done"})
+    assert feedback(space, "codex")["summary"] == "1 reply on resolve."

@@ -36,40 +36,55 @@
       "created_at": "2026-08-28T14:00:00Z"
     }
   ],
-  "replies": [],
+  "replies": [
+    {
+      "id": "a_3",
+      "card_id": "c_proto",
+      "card_title": "Prototype",
+      "body": "header should be sticky",
+      "motivation": "editing",
+      "creator": "human",
+      "creator_kind": "human",
+      "reply": "added position:sticky",
+      "actor": "claude-code",
+      "resolved_at": "2026-08-28T16:00:00Z"
+    }
+  ],
   "cards_edited": [
     {
-      "id": "c_opt_b",
-      "title": "Option B",
+      "id": "c_chart",
+      "title": "Render time by option",
       "changed": [
         "text"
       ],
-      "actor": "human"
+      "actor": "claude-code"
     }
   ],
-  "cards_deleted": [
-    {
-      "id": "c_opt_d",
-      "title": "Option D",
-      "actor": "human"
-    }
-  ],
-  "cards_moved": [
-    {
-      "id": "c_opt_a",
-      "title": "Option A",
-      "actor": "human"
-    }
-  ],
+  "cards_deleted": [],
+  "cards_moved": [],
   "links_added": [
     {
-      "id": "l_1",
+      "id": "l_2",
+      "from": "c_chart",
+      "to": "c_opt_b",
+      "label": "evidence for",
+      "actor": "claude-code"
+    },
+    {
+      "id": "l_3",
       "from": "c_opt_a",
-      "to": "c_opt_c",
-      "label": "depends on",
-      "actor": "human"
+      "to": "c_opt_b",
+      "label": "alternative to",
+      "actor": "claude-code"
+    },
+    {
+      "id": "l_4",
+      "from": "c_proto",
+      "to": "c_opt_b",
+      "label": "implements",
+      "actor": "claude-code"
     }
   ],
   "links_removed": [],
-  "summary": "2 open comments (1 stale), 1 card edited, 1 deleted, 1 moved, 1 new link."
+  "summary": "2 open comments (1 stale), 1 reply on resolve, 1 card edited, 3 new links."
 }

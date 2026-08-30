@@ -333,6 +333,8 @@ func TestSummarizeGrammar(t *testing.T) {
 		{"two comments, one stale",
 			Feedback{Annotations: []Annotation{{Stale: true}, {}}},
 			"2 open comments (1 stale)."},
+		{"one reply", Feedback{Replies: row}, "1 reply on resolve."},
+		{"two replies", Feedback{Replies: two}, "2 replies on resolve."},
 		{"one edit", Feedback{CardsEdited: row}, "1 card edited."},
 		{"two edits", Feedback{CardsEdited: two}, "2 cards edited."},
 		{"deleted and moved", Feedback{CardsDeleted: row, CardsMoved: two},
@@ -343,9 +345,123 @@ func TestSummarizeGrammar(t *testing.T) {
 			Feedback{Annotations: []Annotation{{Stale: true}, {}}, CardsEdited: row,
 				CardsDeleted: row, CardsMoved: row, LinksAdded: row},
 			"2 open comments (1 stale), 1 card edited, 1 deleted, 1 moved, 1 new link."},
+		{"the human fixture's sentence",
+			Feedback{Annotations: []Annotation{{Stale: true}, {}}, Replies: row,
+				CardsEdited: row, LinksAdded: two},
+			"2 open comments (1 stale), 1 reply on resolve, 1 card edited, 2 new links."},
 	} {
 		if got := Summarize(tc.in); got != tc.want {
 			t.Errorf("%s: Summarize = %q, want %q", tc.name, got, tc.want)
 		}
+	}
+}
+
+// --- replies on resolve --------------------------------------------------------------
+
+func TestFeedbackDeliversRepliesOnResolve(t *testing.T) {
+	s := newTestStore(t)
+	if _, err := s.CreateSpace("demo", "Demo", "", "kai", "human"); err != nil {
+		t.Fatal(err)
+	}
+	cards, err := s.CreateCards("demo", []CardDraft{{Title: "Option A"}}, nil,
+		"claude-code", "agent")
+	if err != nil {
+		t.Fatal(err)
+	}
+	card := stringOf(cards[0]["id"])
+
+	ann, err := s.CreateAnnotation("demo", card, "fix the axis", nil,
+		"editing", "kai", "human")
+	if err != nil {
+		t.Fatal(err)
+	}
+	reply := "rebased axis at 0"
+	if _, err := s.ResolveAnnotation("demo", ann.ID, true, &reply,
+		"claude-code", "agent"); err != nil {
+		t.Fatal(err)
+	}
+
+	zero := int64(0)
+	fb, err := s.Feedback("demo", "kai", &zero, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(fb.Replies) != 1 {
+		t.Fatalf("Feedback.Replies = %v, want one entry", fb.Replies)
+	}
+	entry := fb.Replies[0]
+	if stringOf(entry["id"]) != ann.ID || stringOf(entry["card_id"]) != card ||
+		stringOf(entry["card_title"]) != "Option A" ||
+		stringOf(entry["body"]) != "fix the axis" ||
+		stringOf(entry["motivation"]) != "editing" ||
+		stringOf(entry["creator"]) != "kai" ||
+		stringOf(entry["creator_kind"]) != "human" ||
+		stringOf(entry["reply"]) != "rebased axis at 0" ||
+		stringOf(entry["actor"]) != "claude-code" {
+		t.Errorf("reply entry = %v, want the resolved comment with its answer", entry)
+	}
+	if stringOf(entry["resolved_at"]) == "" {
+		t.Error("reply entry is missing resolved_at")
+	}
+
+	// Delivered exactly once: consuming the cursor empties the bucket.
+	if _, err := s.Feedback("demo", "kai", nil, true); err != nil {
+		t.Fatal(err)
+	}
+	fb, err = s.Feedback("demo", "kai", nil, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(fb.Replies) != 0 {
+		t.Errorf("replies survived the cursor: %v", fb.Replies)
+	}
+
+	// Nobody reads their own reply back.
+	fb, err = s.Feedback("demo", "claude-code", &zero, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(fb.Replies) != 0 {
+		t.Errorf("claude-code read its own resolve back: %v", fb.Replies)
+	}
+
+	// A resolve without a reply is the acknowledgment itself, not a message.
+	ann2, err := s.CreateAnnotation("demo", card, "also this", nil,
+		"commenting", "kai", "human")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.ResolveAnnotation("demo", ann2.ID, true, nil,
+		"claude-code", "agent"); err != nil {
+		t.Fatal(err)
+	}
+	// ...and so is an explicitly empty one.
+	empty := ""
+	if _, err := s.ResolveAnnotation("demo", ann2.ID, true, &empty,
+		"claude-code", "agent"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Reopen is silent; resolving again with a new reply is a second message.
+	if _, err := s.ResolveAnnotation("demo", ann.ID, false, nil,
+		"kai", "human"); err != nil {
+		t.Fatal(err)
+	}
+	again := "and moved the legend"
+	if _, err := s.ResolveAnnotation("demo", ann.ID, true, &again,
+		"claude-code", "agent"); err != nil {
+		t.Fatal(err)
+	}
+
+	fb, err = s.Feedback("demo", "kai", &zero, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(fb.Replies) != 2 {
+		t.Fatalf("replays = %v, want the two answered resolves", fb.Replies)
+	}
+	if stringOf(fb.Replies[0]["reply"]) != "rebased axis at 0" ||
+		stringOf(fb.Replies[1]["reply"]) != "and moved the legend" {
+		t.Errorf("replies are not in event order: %v", fb.Replies)
 	}
 }
