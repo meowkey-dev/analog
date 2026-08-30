@@ -381,6 +381,7 @@ export default function App() {
       <div className="body">
         <Canvas
           nodes={liveNodes}
+          allNodes={canvas.nodes}
           edges={canvas.edges}
           annotations={annotations}
           annotateMode={annotateMode}

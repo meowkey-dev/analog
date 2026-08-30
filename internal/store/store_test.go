@@ -227,6 +227,61 @@ func TestDeletedCardsAreExcludedFromTheBoundingBox(t *testing.T) {
 	}
 }
 
+func TestDeletedLinksStayDeletedEvenWithIncludeDeleted(t *testing.T) {
+	// include_deleted resurrects card tombstones; a deleted link has no wire
+	// shape that says so, so it must never come back looking like a live edge.
+	s := newTestStore(t)
+	if _, err := s.CreateSpace("demo", "Demo", "", "kai", "human"); err != nil {
+		t.Fatal(err)
+	}
+	cards, err := s.CreateCards("demo", []CardDraft{{Title: "A"}, {Title: "B"}}, nil,
+		"claude-code", "agent")
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, b := stringOf(cards[0]["id"]), stringOf(cards[1]["id"])
+	edges, err := s.CreateLinks("demo",
+		[]Edge{{"fromNode": a, "toNode": b, "label": "deleted"}, {"fromNode": b, "toNode": a, "label": "kept"}},
+		"claude-code", "agent")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DeleteLink("demo", stringOf(edges[0]["id"]), "kai", "human"); err != nil {
+		t.Fatal(err)
+	}
+	deleted, kept := stringOf(edges[0]["id"]), stringOf(edges[1]["id"])
+	for _, includeDeleted := range []bool{false, true} {
+		canvas, err := s.Canvas("demo", includeDeleted)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids := map[string]bool{}
+		for _, e := range canvas.Edges {
+			ids[stringOf(e["id"])] = true
+		}
+		if ids[deleted] {
+			t.Errorf("Canvas(include_deleted=%v) returned a deleted link; it must stay gone",
+				includeDeleted)
+		}
+		if !ids[kept] {
+			t.Errorf("Canvas(include_deleted=%v) lost the live link", includeDeleted)
+		}
+	}
+
+	// But soft-deleting an endpoint is not a cascade: the edge outlives the card.
+	if err := s.DeleteCard("demo", a, "kai", "human"); err != nil {
+		t.Fatal(err)
+	}
+	canvas, err := s.Canvas("demo", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(canvas.Edges) != 1 || stringOf(canvas.Edges[0]["id"]) != kept {
+		t.Errorf("Canvas(include_deleted=true) kept %v after deleting an endpoint; want [%s]",
+			canvas.Edges, kept)
+	}
+}
+
 // --- blob fidelity -----------------------------------------------------------------
 
 // TestNumbersSurviveTheBlobColumns is Go-specific: decoding through float64 would

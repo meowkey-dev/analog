@@ -59,17 +59,20 @@ function LinksView({ edges, nodes, bounds, selectedId, onSelect, onDelete, draft
         const from = nodes.get(edge.fromNode);
         const to = nodes.get(edge.toNode);
         if (!from || !to) return null;
+        // A soft-deleted endpoint keeps its last position, so the edge still
+        // renders there — dashed, unattached-looking, and deletable (#15).
+        const dangling = Boolean(from.sp_deleted_at || to.sp_deleted_at);
         const [autoFrom, autoTo] = autoSides(from, to);
         const a = anchor(from, edge.fromSide ?? autoFrom);
         const b = anchor(to, edge.toSide ?? autoTo);
+        const d = curve(a, b, edge.fromSide ?? autoFrom, edge.toSide ?? autoTo);
         const mid: [number, number] = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
         const selected = selectedId === edge.id;
         return (
-          <g key={edge.id} className={`edge${selected ? " selected" : ""}`}>
-            <path className="edge-hit" d={curve(a, b, edge.fromSide ?? autoFrom, edge.toSide ?? autoTo)}
+          <g key={edge.id} className={`edge${dangling ? " dangling" : ""}${selected ? " selected" : ""}`}>
+            <path className="edge-hit" d={d}
                   onPointerDown={(e) => { e.stopPropagation(); onSelect(edge.id); }} />
-            <path className="edge-line" markerEnd="url(#arrow)"
-                  d={curve(a, b, edge.fromSide ?? autoFrom, edge.toSide ?? autoTo)} />
+            <path className="edge-line" markerEnd={dangling ? undefined : "url(#arrow)"} d={d} />
             {edge.label && (
               <g transform={`translate(${mid[0]}, ${mid[1]})`}>
                 <text className="edge-label" textAnchor="middle" dy="0.32em">{edge.label}</text>
