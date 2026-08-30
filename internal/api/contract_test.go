@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"testing/fstest"
 
 	"github.com/meowkey-dev/analog/internal/auth"
 	"github.com/meowkey-dev/analog/internal/config"
@@ -207,5 +208,33 @@ func TestAnOversizedUploadIsRejectedWithTheCap(t *testing.T) {
 	// The message has to say what the limit is, or the caller cannot act on it.
 	if message, _ := parsed["message"].(string); !strings.Contains(message, "exceeds") {
 		t.Errorf("message = %q", message)
+	}
+}
+
+// TestAMissingAssetIs404 covers #17. Asset filenames are content-hashed, so a
+// request for one the bundle does not have means a stale document is naming a
+// purged build; index.html with a 200 makes the browser parse HTML as JavaScript.
+func TestAMissingAssetIs404(t *testing.T) {
+	server := newTestServer(t)
+	server.Web = fstest.MapFS{
+		"index.html":         &fstest.MapFile{Data: []byte("<!doctype html><title>x</title>")},
+		"assets/real-abc.js": &fstest.MapFile{Data: []byte("console.log(1)")},
+	}
+
+	for _, tc := range []struct {
+		path string
+		want int
+		why  string
+	}{
+		{"/assets/gone-xyz.js", http.StatusNotFound, "a purged asset must 404"},
+		{"/assets/real-abc.js", http.StatusOK, "a present asset must be served"},
+		{"/s/redesign", http.StatusOK, "a client-side route still gets index.html"},
+		{"/", http.StatusOK, "the root still gets index.html"},
+	} {
+		recorder := httptest.NewRecorder()
+		server.ServeHTTP(recorder, httptest.NewRequest("GET", tc.path, nil))
+		if recorder.Code != tc.want {
+			t.Errorf("GET %s = %d, want %d — %s", tc.path, recorder.Code, tc.want, tc.why)
+		}
 	}
 }
