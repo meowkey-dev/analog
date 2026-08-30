@@ -17,6 +17,7 @@ WITH_DELETED = fixture("canvas.with-deleted.json")
 ANNOTATIONS = fixture("annotations.json")
 EVENTS = fixture("events.json")
 FEEDBACK = fixture("feedback.claude-code.since-12.json")
+HUMAN_FEEDBACK = fixture("feedback.human.json")
 SPACE = fixture("space.json")
 
 
@@ -50,6 +51,7 @@ def test_events_match_schema():
 
 def test_feedback_matches_schema():
     assert_valid(FEEDBACK, "Feedback")
+    assert_valid(HUMAN_FEEDBACK, "Feedback")
 
 
 # --- the counts contracts/README.md advertises -------------------------------
@@ -88,7 +90,7 @@ def test_own_events_are_filtered_from_the_authors_feedback():
     )
     assert not reported & {e["subject_id"] for e in own}
     assert all(row["actor"] != "claude-code"
-               for bucket in ("cards_edited", "cards_deleted", "cards_moved",
+               for bucket in ("replies", "cards_edited", "cards_deleted", "cards_moved",
                               "links_added", "links_removed")
                for row in FEEDBACK[bucket])
 
@@ -99,6 +101,28 @@ def test_unresolved_annotations_ignore_the_cursor():
                       if e["type"] == "annotation.created"}
     assert created_at_seq["a_1"] == 12
     assert "a_1" in {a["id"] for a in FEEDBACK["annotations"]}
+
+
+def test_a_reply_on_resolve_reaches_the_other_actor_once():
+    """AMENDMENTS #9 / issue #22: event 18 resolved a_3 with an answer.
+
+    For human — the resolver's counterpart — that is one `replies` entry, reply
+    included. For claude-code the resolve is its own event: nobody reads their own
+    reply back. This is the whole reason the bucket exists.
+    """
+    resolve = next(e for e in EVENTS["events"] if e["type"] == "annotation.resolved")
+    assert resolve["subject_id"] == "a_3" and resolve["actor"] == "claude-code"
+    assert resolve["payload"] == {"reply": "added position:sticky"}
+
+    [reply] = HUMAN_FEEDBACK["replies"]
+    assert reply["id"] == "a_3"
+    assert reply["reply"] == "added position:sticky"
+    assert reply["actor"] == "claude-code"
+    assert reply["resolved_at"] == resolve["ts"]
+    assert reply["body"] == next(a for a in ANNOTATIONS if a["id"] == "a_3")["body"]
+    assert FEEDBACK["replies"] == []
+    assert "1 reply on resolve" in HUMAN_FEEDBACK["summary"]
+    assert "reply" not in FEEDBACK["summary"]
 
 
 def test_resolved_annotations_are_excluded():

@@ -76,6 +76,15 @@ def test_feedback_matches_fixture_with_an_explicit_since(seeded):
     assert r.json() == fixture("feedback.claude-code.since-12.json")
 
 
+def test_feedback_matches_the_human_fixture(seeded):
+    """The human has no stored cursor, so the default call starts at zero and the
+    agent's resolve-with-reply (event 18) arrives exactly once, as one reply."""
+    r = seeded.get("/api/spaces/redesign/feedback",
+                   params={"actor": "human", "advance": False})
+    assert r.status_code == 200, r.text
+    assert r.json() == fixture("feedback.human.json")
+
+
 def test_advance_consumes_the_cursor(seeded):
     first = seeded.get("/api/spaces/redesign/feedback", params={"actor": "claude-code"})
     assert first.json() == fixture("feedback.claude-code.since-12.json")
@@ -84,6 +93,7 @@ def test_advance_consumes_the_cursor(seeded):
     assert second["cursor"] == 19
     assert second["cards_edited"] == second["cards_deleted"] == []
     assert second["cards_moved"] == second["links_added"] == second["links_removed"] == []
+    assert second["replies"] == []
     # Annotations are cursor-independent: they come back every single time.
     assert [a["id"] for a in second["annotations"]] == ["a_1", "a_2"]
     assert second["summary"] == "2 open comments (1 stale)."
@@ -102,6 +112,7 @@ def test_an_unknown_actor_starts_at_zero_and_sees_everything(seeded):
     assert {c["id"] for c in fb["cards_edited"]} == {"c_opt_b", "c_chart"}
     assert {c["id"] for c in fb["cards_deleted"]} == {"c_opt_d"}
     assert {l["id"] for l in fb["links_added"]} == {"l_1", "l_2", "l_3", "l_4"}
+    assert [r["id"] for r in fb["replies"]] == ["a_3"]
 
 
 def test_the_media_referenced_by_the_file_node_is_served(seeded):

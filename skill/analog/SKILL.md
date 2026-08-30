@@ -34,6 +34,8 @@ Nothing printed means nothing changed. Otherwise:
   resolve it just because it's stale.
 - deleted cards — the human rejected that idea. Don't re-add it.
 - new links — the human sees a relationship you didn't. Consider why.
+- `replies on resolve` — a comment you resolved came back with the human's answer.
+  That answer is addressed to you. Act on it.
 
 Call `analog resolve <id> --reply "..."` for each one you act on. Unresolved
 annotations are how the human tracks what you've ignored.

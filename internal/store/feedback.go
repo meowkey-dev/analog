@@ -1,6 +1,7 @@
 package store
 
 import (
+	"database/sql"
 	"fmt"
 	"slices"
 	"strings"
@@ -8,10 +9,16 @@ import (
 
 // Feedback is SPEC §4.1: what someone else changed since this actor last looked.
 //
+// The annotations bucket is cursor-independent — every unresolved comment, every
+// call. Everything else is cursor-governed: card/link deltas and `replies` (a
+// comment another actor resolved with a reply, the answer that used to be visible
+// to nobody) come from the event window and exclude the caller's own events.
+//
 // Every slice is non-nil so the JSON is `[]` rather than `null`.
 type Feedback struct {
 	Cursor       int64            `json:"cursor"`
 	Annotations  []Annotation     `json:"annotations"`
+	Replies      []map[string]any `json:"replies"`
 	CardsEdited  []map[string]any `json:"cards_edited"`
 	CardsDeleted []map[string]any `json:"cards_deleted"`
 	CardsMoved   []map[string]any `json:"cards_moved"`
@@ -73,7 +80,8 @@ func (b *bucket) values() []map[string]any {
 // advance moves it to the space's current seq.
 func (s *Store) Feedback(slug, actor string, since *int64, advance bool) (Feedback, error) {
 	out := Feedback{
-		Annotations: []Annotation{}, CardsEdited: []map[string]any{},
+		Annotations: []Annotation{}, Replies: []map[string]any{},
+		CardsEdited:  []map[string]any{},
 		CardsDeleted: []map[string]any{}, CardsMoved: []map[string]any{},
 		LinksAdded: []map[string]any{}, LinksRemoved: []map[string]any{},
 	}
@@ -177,6 +185,34 @@ func (s *Store) Feedback(slug, actor string, since *int64, advance bool) (Feedba
 			added.set(subject, row)
 		case "link.deleted":
 			removed.set(subject, map[string]any{"id": subject, "actor": event.Actor})
+		case "annotation.resolved":
+			// The own-event filter above already guarantees the resolver is the
+			// other side. A resolve without a reply is the acknowledgment itself
+			// (SPEC §4.1) and lands in no bucket; an answer is a message and is
+			// delivered once, like any cursor-governed delta.
+			reply := stringOf(payload["reply"])
+			if reply == "" {
+				continue
+			}
+			row, err := scanAnnotation(s.read.QueryRow(
+				"SELECT "+annotationColumns+" FROM annotation WHERE id = ?", subject).Scan)
+			if err == sql.ErrNoRows {
+				continue
+			}
+			if err != nil {
+				return out, err
+			}
+			// One entry per resolve event, not per annotation: reopening and
+			// resolving again is a second, distinct message.
+			cardTitle := ""
+			if card, ok := index[row.CardID]; ok {
+				cardTitle = card.Title
+			}
+			out.Replies = append(out.Replies, map[string]any{
+				"id": subject, "card_id": row.CardID, "card_title": cardTitle,
+				"body": row.Body, "motivation": row.Motivation,
+				"creator": row.Creator, "creator_kind": row.CreatorKind,
+				"reply": reply, "actor": event.Actor, "resolved_at": event.TS})
 		}
 	}
 
@@ -226,8 +262,7 @@ func plural(n int, one, many string) string {
 	return fmt.Sprintf("%d %s", n, many)
 }
 
-// Summarize is the grammar pinned by
-// contracts/fixtures/feedback.claude-code.since-12.json.
+// Summarize is the grammar pinned by contracts/fixtures/feedback.*.json.
 func Summarize(f Feedback) string {
 	var parts []string
 	if n := len(f.Annotations); n > 0 {
@@ -242,6 +277,9 @@ func Summarize(f Feedback) string {
 			part += fmt.Sprintf(" (%d stale)", stale)
 		}
 		parts = append(parts, part)
+	}
+	if n := len(f.Replies); n > 0 {
+		parts = append(parts, plural(n, "reply on resolve", "replies on resolve"))
 	}
 	if n := len(f.CardsEdited); n > 0 {
 		parts = append(parts, plural(n, "card edited", "cards edited"))

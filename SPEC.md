@@ -292,10 +292,17 @@ Two different mechanisms, deliberately:
   annotations*, every time. `resolved` is already a durable per-item acknowledgment,
   and a better one than a cursor: if an agent reads feedback and then crashes, your
   comments come back next time instead of vanishing.
-- **Card and link deltas are governed by a server-side per-actor cursor**, advanced on
-  read. Missing one of these once is survivable — the agent can `read_space` to
-  resync — and it keeps agents stateless, which matters because a fresh session has
-  nowhere sensible to persist `since=58`.
+- **Card, link and reply deltas are governed by a server-side per-actor cursor**,
+  advanced on read. Missing one of these once is survivable — the agent can
+  `read_space` to resync — and it keeps agents stateless, which matters because a
+  fresh session has nowhere sensible to persist `since=58`.
+
+`replies` exists because a human's reply on resolve used to go nowhere: resolving is
+the acknowledgment, and `resolved_reply` was read only by a human in the UI, so an
+instruction typed beside the resolve button — the obvious gesture — was stored and
+read by nobody. A reply is now delivered once, cursor-governed, to the resolver's
+counterpart. A resolve **without** a reply stays pure acknowledgment and lands in no
+bucket.
 
 Explicit `since=` stays available for replay and debugging.
 
@@ -312,6 +319,12 @@ must never read its own writes back as feedback.
      "selector":{"type":"point","x":0.3,"y":0.6},
      "body":"this axis is misleading","motivation":"editing","creator":"human",
      "stale": false}
+  ],
+  "replies": [                                      // your comments they resolved with an answer
+    {"id":"a_…","card_id":"c_…","card_title":"Option B",
+     "body":"this axis is misleading","motivation":"editing",
+     "creator":"human","creator_kind":"human",
+     "reply":"rebased axis at 0","actor":"human","resolved_at":"…"}
   ],
   "cards_edited":   [{"id":"c_…","title":"Option B","changed":["text","width"]}],
   "cards_deleted":  [{"id":"c_…","title":"Option D"}],

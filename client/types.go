@@ -75,6 +75,7 @@ type EventPage struct {
 type Feedback struct {
 	Cursor       int64            `json:"cursor"`
 	Annotations  []Annotation     `json:"annotations"`
+	Replies      []map[string]any `json:"replies"`
 	CardsEdited  []map[string]any `json:"cards_edited"`
 	CardsDeleted []map[string]any `json:"cards_deleted"`
 	CardsMoved   []map[string]any `json:"cards_moved"`

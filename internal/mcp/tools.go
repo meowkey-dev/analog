@@ -158,7 +158,9 @@ func (s *Server) register() {
 			Description: `What the human changed since you last looked.
 
 All unresolved annotations come back every call — they ignore the cursor —
-while card and link deltas are cursor-governed and exclude your own writes.
+while card, link and reply deltas are cursor-governed and exclude your own writes.
+` + "`replies`" + ` carries your comments the human resolved with an answer since
+your cursor: that answer is addressed to you, and it is delivered exactly once.
 ` + "`motivation: editing`" + ` is an instruction, ` + "`assessing`" + ` is a verdict,
 ` + "`commenting`" + ` is context. Deleted cards mean the human rejected that idea.`,
 			InputSchema: object([]string{"slug"}, map[string]any{
@@ -257,7 +259,7 @@ func (s *Server) awaitFeedback(slug string, since *int64, timeoutS, pollS float6
 // hasDeltas reports whether anything cursor-governed is waiting.
 func hasDeltas(f client.Feedback) bool {
 	return len(f.CardsEdited) > 0 || len(f.CardsDeleted) > 0 || len(f.CardsMoved) > 0 ||
-		len(f.LinksAdded) > 0 || len(f.LinksRemoved) > 0
+		len(f.LinksAdded) > 0 || len(f.LinksRemoved) > 0 || len(f.Replies) > 0
 }
 
 func hasNewAnnotation(f client.Feedback, baseline map[string]bool) bool {

@@ -556,7 +556,7 @@ func TestFeedbackJSONMatchesTheAPIShape(t *testing.T) {
 	h.asHuman("update", "redesign", card["id"].(string), "--text", "v2")
 
 	body := decodeJSON[map[string]any](t, h.run("feedback", "redesign", "--json"))
-	want := []string{"cursor", "annotations", "cards_edited", "cards_deleted",
+	want := []string{"cursor", "annotations", "replies", "cards_edited", "cards_deleted",
 		"cards_moved", "links_added", "links_removed", "summary"}
 	if len(body) != len(want) {
 		t.Errorf("keys = %v, want exactly %v", keysOf(body), want)
