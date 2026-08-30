@@ -219,13 +219,28 @@ Returns the same shape as get_feedback; ` + "`summary`" + ` is empty if it timed
 func (s *Server) awaitFeedback(slug string, since *int64, timeoutS, pollS float64) (any, error) {
 	deadline := s.now().Add(seconds(timeoutS))
 	poll := seconds(pollS)
+
+	// Waking on a non-empty `summary` does not work: unresolved annotations are
+	// returned regardless of the cursor -- deliberately, so an open comment cannot
+	// be missed -- so one open comment makes `summary` non-empty forever and this
+	// returns instantly every time. The card and link deltas are cursor-governed
+	// and clear when consumed, so any of those is news the moment it appears;
+	// annotations need a baseline taken on entry, and only one that shows up while
+	// we wait counts.
+	var baseline map[string]bool
 	for {
-		// Peek first: a poll that finds nothing must never advance the cursor.
 		peek, err := s.api.GetFeedback(slug, since, false)
 		if err != nil {
 			return nil, err
 		}
-		if peek.Summary != "" {
+		if baseline == nil {
+			baseline = make(map[string]bool, len(peek.Annotations))
+			for _, a := range peek.Annotations {
+				baseline[a.ID] = true
+			}
+		}
+		if hasDeltas(peek) || hasNewAnnotation(peek, baseline) {
+			// Consume: the caller is about to act on it.
 			return s.api.GetFeedback(slug, since, true)
 		}
 		left := deadline.Sub(s.now())
@@ -237,6 +252,21 @@ func (s *Server) awaitFeedback(slug string, since *int64, timeoutS, pollS float6
 		}
 		s.sleep(left)
 	}
+}
+
+// hasDeltas reports whether anything cursor-governed is waiting.
+func hasDeltas(f client.Feedback) bool {
+	return len(f.CardsEdited) > 0 || len(f.CardsDeleted) > 0 || len(f.CardsMoved) > 0 ||
+		len(f.LinksAdded) > 0 || len(f.LinksRemoved) > 0
+}
+
+func hasNewAnnotation(f client.Feedback, baseline map[string]bool) bool {
+	for _, a := range f.Annotations {
+		if !baseline[a.ID] {
+			return true
+		}
+	}
+	return false
 }
 
 func seconds(v float64) time.Duration { return time.Duration(v * float64(time.Second)) }

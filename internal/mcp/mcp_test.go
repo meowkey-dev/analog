@@ -539,3 +539,61 @@ func TestAnUnknownToolIsRejected(t *testing.T) {
 		t.Error("an unknown tool must not succeed")
 	}
 }
+
+// TestAwaitFeedbackIgnoresAnAlreadyOpenAnnotation is the regression for #19.
+//
+// Unresolved annotations come back regardless of the cursor, so waking on a
+// non-empty `summary` meant one open comment made this return instantly forever —
+// a busy loop for exactly the resident agents the tool exists for.
+func TestAwaitFeedbackIgnoresAnAlreadyOpenAnnotation(t *testing.T) {
+	server, mock := newTestServer(t)
+	standing := emptyFeedback()
+	standing.Annotations = []client.Annotation{{ID: "a_1", Body: "open since before"}}
+	standing.Summary = "1 open comment." // non-empty, and must not be enough
+	mock.feedbackQueue = []client.Feedback{standing}
+
+	result, err := server.Call("await_feedback", map[string]any{
+		"slug": "redesign", "timeout_s": 0.05, "poll_s": 0.01})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.(client.Feedback).Summary != standing.Summary {
+		t.Fatalf("expected the timeout to return the peek, got %+v", result)
+	}
+	for _, c := range mock.calls {
+		if c.Name == "GetFeedback" && c.Args[2] == true {
+			t.Fatal("it consumed the cursor for an annotation that was already open")
+		}
+	}
+	if len(mock.calls) < 2 {
+		t.Errorf("it returned after %d call(s); it should have polled and waited",
+			len(mock.calls))
+	}
+}
+
+// TestAwaitFeedbackWakesOnANewAnnotation is the other half: one that arrives while
+// waiting is exactly what it should wake on.
+func TestAwaitFeedbackWakesOnANewAnnotation(t *testing.T) {
+	server, mock := newTestServer(t)
+	standing := emptyFeedback()
+	standing.Annotations = []client.Annotation{{ID: "a_1"}}
+	standing.Summary = "1 open comment."
+	arrived := emptyFeedback()
+	arrived.Annotations = []client.Annotation{{ID: "a_1"}, {ID: "a_2"}}
+	arrived.Summary = "2 open comments."
+	mock.feedbackQueue = []client.Feedback{standing, arrived, arrived}
+
+	if _, err := server.Call("await_feedback", map[string]any{
+		"slug": "redesign", "timeout_s": 5, "poll_s": 0.01}); err != nil {
+		t.Fatal(err)
+	}
+	consumed := false
+	for _, c := range mock.calls {
+		if c.Name == "GetFeedback" && c.Args[2] == true {
+			consumed = true
+		}
+	}
+	if !consumed {
+		t.Error("a new annotation must wake it, and consuming is how it says so")
+	}
+}
