@@ -2,8 +2,9 @@ import { memo, useEffect, useMemo, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import DOMPurify from "dompurify";
+import { DiffView } from "./Diff";
 import { api, getConnection, resolveUrl } from "./api";
-import type { Node } from "./api";
+import type { Annotation, Node } from "./api";
 
 /**
  * A file node's URL cannot go straight into <img src>: an image request carries no
@@ -97,11 +98,19 @@ function FileBody({ node }: { node: Node }) {
 
 export interface CardProps {
   node: Node;
+  /** The card that replaced this one, when superseded — the diff target (#6). */
+  successor?: Node;
   selected: boolean;
   editing: boolean;
   openCount: number;
   revisions: number;
   collapsed: boolean;
+  /** Open comments on this card, for the in-card thread (#5). */
+  thread: Annotation[];
+  threadOpen: boolean;
+  selectedAnnotation: string | null;
+  onToggleThread: (id: string) => void;
+  onSelectAnnotation: (id: string) => void;
   onToggleCollapsed: (id: string) => void;
   onPointerDownHeader: (event: React.PointerEvent, node: Node) => void;
   onPointerDownResize: (event: React.PointerEvent, node: Node) => void;
@@ -119,6 +128,8 @@ function CardView(props: CardProps) {
   const { node, selected, editing, collapsed, revisions, openCount } = props;
   const superseded = Boolean(node.sp_superseded_by);
   const kind = node.type === "file" ? "file" : (node.sp_kind ?? "plain");
+  // Superseded cards can show what the revision changed (#6).
+  const [view, setView] = useState<"content" | "diff">("content");
 
   const style: React.CSSProperties = {
     left: node.x,
@@ -162,6 +173,11 @@ function CardView(props: CardProps) {
         <span className="card-title">{node.sp_title || node.id}</span>
         <span className="card-kind">{kind}</span>
         {openCount > 0 && <span className="badge comments" title={`${openCount} open comment(s)`}>{openCount}</span>}
+        {props.thread.length > 0 && (
+          <button className={`icon${props.threadOpen ? " on" : ""}`}
+                  title="Show the comment thread on this card"
+                  onClick={() => props.onToggleThread(node.id)}>💬</button>
+        )}
         {superseded && (
           <button className="icon" title="Collapse" onClick={() => props.onToggleCollapsed(node.id)}>▴</button>
         )}
@@ -171,9 +187,23 @@ function CardView(props: CardProps) {
         <button className="icon danger" title="Delete card" onClick={() => props.onDelete(node.id)}>×</button>
       </div>
 
-      {superseded && <div className="superseded-note">superseded — read only</div>}
+      {superseded && (
+        <div className="superseded-note">
+          <span>superseded — read only</span>
+          {props.successor && props.successor.text !== undefined && node.text !== undefined && (
+            <span className="diff-toggle">
+              <button className={view === "content" ? "on" : ""} onClick={() => setView("content")}
+                      title="Show this revision's content">content</button>
+              <button className={view === "diff" ? "on" : ""} onClick={() => setView("diff")}
+                      title="Show what changed vs the next revision">diff</button>
+            </span>
+          )}
+        </div>
+      )}
 
-      {editing ? (
+      {superseded && view === "diff" && props.successor && props.successor.text !== undefined ? (
+        <DiffView before={node.text ?? ""} after={props.successor.text ?? ""} />
+      ) : editing ? (
         <textarea
           className="card-body editor"
           defaultValue={node.text ?? ""}
@@ -189,6 +219,20 @@ function CardView(props: CardProps) {
         />
       ) : (
         <Body node={node} />
+      )}
+
+      {props.threadOpen && props.thread.length > 0 && (
+        <div className="card-thread" onPointerDown={(e) => e.stopPropagation()}>
+          {props.thread.map((a) => (
+            <div key={a.id}
+                 className={`thread-item${props.selectedAnnotation === a.id ? " selected" : ""}`}
+                 onClick={() => props.onSelectAnnotation(a.id)}>
+              <span className="who">{a.creator}</span>
+              <span className="body">{a.body}</span>
+              {a.stale && <span className="badge stale" title="The card changed after this was written">stale</span>}
+            </div>
+          ))}
+        </div>
       )}
 
       {props.overlay}
