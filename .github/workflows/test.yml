@@ -56,7 +56,9 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - uses: astral-sh/setup-uv@v10
+      # setup-uv stopped publishing floating major tags at v8 (supply-chain
+      # hardening) — pin the immutable release tag; dependabot bumps it.
+      - uses: astral-sh/setup-uv@v10.0.1
         with:
           enable-cache: true
 

@@ -43,7 +43,9 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
 
-      - uses: astral-sh/setup-uv@v10
+      # setup-uv stopped publishing floating major tags at v8 (supply-chain
+      # hardening) — pin the immutable release tag; dependabot bumps it.
+      - uses: astral-sh/setup-uv@v10.0.1
         with:
           enable-cache: true
 
