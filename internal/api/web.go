@@ -12,9 +12,17 @@ import (
 	"github.com/meowkey-dev/analog/internal/apierr"
 )
 
+// assetPrefix is where the bundle keeps its content-hashed files.
+const assetPrefix = "assets/"
+
 // serveWeb is the SPA fallback: the built bundle when it exists, index.html for
 // anything the bundle does not have a file for, so client-side routes survive a
 // reload. Production is then one origin (SPEC §5).
+//
+// Assets are the exception. Their filenames are content-hashed, so a request for
+// one the bundle does not have means a stale document is naming a purged build.
+// Answering that with index.html and a 200 makes the browser parse HTML as
+// JavaScript and fail somewhere unrelated; a 404 says what actually happened.
 func (s *Server) serveWeb(w http.ResponseWriter, r *http.Request) {
 	if s.Web == nil {
 		apierr.NotFound("no such path").Write(w)
@@ -28,6 +36,10 @@ func (s *Server) serveWeb(w http.ResponseWriter, r *http.Request) {
 				serveFile(w, name, f)
 				return
 			}
+		}
+		if strings.HasPrefix(name, assetPrefix) {
+			apierr.NotFound("no such asset").Write(w)
+			return
 		}
 	}
 	s.serveIndex(w)
