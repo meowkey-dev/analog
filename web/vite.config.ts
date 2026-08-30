@@ -18,5 +18,9 @@ export default defineConfig({
       "/api": { target: "http://127.0.0.1:8787", changeOrigin: false },
     },
   },
-  build: { outDir: "dist", sourcemap: true },
+  // "hidden": the map is written for debugging a production build locally, but the
+  // bundle carries no sourceMappingURL comment. The server does not embed the map
+  // (scripts/build.sh), so a comment would make devtools fetch a file that is not
+  // there, hit the SPA fallback, and complain about parsing index.html as a map.
+  build: { outDir: "dist", sourcemap: "hidden" },
 });

@@ -148,7 +148,15 @@ conformance suite that proves it was written before any Go existed.
   reports an opaque network error instead of "unauthorized".
 - **The web bundle is embedded with `//go:embed`.** `scripts/build.sh` copies
   `web/dist` into `internal/web/dist` before building, so `analog-server` alone serves
-  the UI with no repo beside it. ~13 MB with the bundle inside.
+  the UI with no repo beside it. ~11 MB with the bundle inside.
+- **Source maps are not embedded, and not released.** A source map is a debugging
+  artifact, the same category as a `.dSYM` — it belongs beside a build, not inside
+  the executable, and it was 2 MB of every binary. Shipping them with a release would
+  earn its keep if something ingested minified stack traces, but Analog has no
+  telemetry by design and any tagged commit rebuilds the same bundle from source that
+  is already public. Vite still writes the map into `web/dist` for debugging a
+  production build locally; `sourcemap: "hidden"` keeps the `sourceMappingURL` comment
+  out of the bundle, so nothing goes looking for a file the server does not have.
 - **`analog-server` grew `seed` and `token` subcommands.** They are operator commands
   on the data directory rather than API calls, and putting them on the server binary is
   what lets the conformance harness run with no Python of its own in the path.
