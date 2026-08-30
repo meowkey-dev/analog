@@ -1,0 +1,9 @@
+# Keep the pinned action majors in .github/workflows/ from rotting again
+# (issue #33: Node 20 actions had aged into a deprecation warning nobody
+# noticed until the forced-compat shim was two weeks from removal).
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

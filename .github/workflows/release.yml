@@ -28,22 +28,24 @@ jobs:
       # Checked in the tap-bump step's `if`; empty when the secret is absent.
       TAP_TOKEN: ${{ secrets.TAP_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: web/package-lock.json
 
-      - uses: astral-sh/setup-uv@v5
+      # setup-uv stopped publishing floating major tags at v8 (supply-chain
+      # hardening) — pin the immutable release tag; dependabot bumps it.
+      - uses: astral-sh/setup-uv@v10.0.1
         with:
           enable-cache: true
 
@@ -129,7 +131,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/') && env.TAP_TOKEN != ''
         run: scripts/bump-tap.sh "${GITHUB_REF_NAME}"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: dist
           path: dist/*
