@@ -31,6 +31,11 @@ function curve(a: [number, number], b: [number, number], aSide: Side, bSide: Sid
   return `M ${a[0]} ${a[1]} C ${a[0] + ax} ${a[1] + ay}, ${b[0] + bx} ${b[1] + by}, ${b[0]} ${b[1]}`;
 }
 
+/** Arrowheads carry the edge's color (#3), so one marker per distinct color. */
+function markerId(color: string | undefined): string {
+  return `arrow-${(color ?? "default").replace(/[^a-zA-Z0-9]/g, "-")}`;
+}
+
 export interface LinksProps {
   edges: Edge[];
   nodes: Map<string, Node>;
@@ -49,10 +54,14 @@ function LinksView({ edges, nodes, bounds, selectedId, onSelect, onDelete, draft
       viewBox={`${bounds.minX} ${bounds.minY} ${bounds.width} ${bounds.height}`}
     >
       <defs>
-        <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7"
-                markerHeight="7" orient="auto-start-reverse">
-          <path d="M 0 0 L 10 5 L 0 10 z" />
-        </marker>
+        {Array.from(new Set(edges.map((e) => e.color ?? "default"))).map((color) => (
+          <marker key={color} id={markerId(color === "default" ? undefined : color)}
+                  viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7"
+                  markerHeight="7" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z"
+                  style={color === "default" ? undefined : { fill: color }} />
+          </marker>
+        ))}
       </defs>
 
       {edges.map((edge) => {
@@ -69,10 +78,11 @@ function LinksView({ edges, nodes, bounds, selectedId, onSelect, onDelete, draft
         const mid: [number, number] = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
         const selected = selectedId === edge.id;
         return (
-          <g key={edge.id} className={`edge${dangling ? " dangling" : ""}${selected ? " selected" : ""}`}>
+          <g key={edge.id} className={`edge${dangling ? " dangling" : ""}${selected ? " selected" : ""}`}
+             style={edge.color ? { "--edge-color": edge.color } as React.CSSProperties : undefined}>
             <path className="edge-hit" d={d}
                   onPointerDown={(e) => { e.stopPropagation(); onSelect(edge.id); }} />
-            <path className="edge-line" markerEnd={dangling ? undefined : "url(#arrow)"} d={d} />
+            <path className="edge-line" markerEnd={dangling ? undefined : `url(#${markerId(edge.color)})`} d={d} />
             {edge.label && (
               <g transform={`translate(${mid[0]}, ${mid[1]})`}>
                 <text className="edge-label" textAnchor="middle" dy="0.32em">{edge.label}</text>

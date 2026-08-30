@@ -17,6 +17,12 @@ const MAX_SCALE = 3;
 const MIN_W = 140;
 const MIN_H = 90;
 
+/** Palette offered when creating a link (#3). A color marks what the link means. */
+const LINK_COLORS = [
+  "#e06c75", "#e0a35a", "#e5c07b", "#63c187",
+  "#56b6c2", "#6ea8fe", "#c678dd", "#ff8fab",
+];
+
 interface DragState {
   kind: "card" | "resize" | "pan" | "link";
   id?: string;
@@ -45,7 +51,7 @@ export interface CanvasProps {
   onResizeCard: (id: string, width: number, height: number) => void;
   onEditCard: (id: string, text: string) => void;
   onDeleteCard: (id: string) => void;
-  onCreateLink: (from: string, to: string, label: string) => void;
+  onCreateLink: (from: string, to: string, label: string, color: string | null) => void;
   onDeleteLink: (id: string) => void;
   onPopOut: (node: Node) => void;
   onCreateCardAt: (x: number, y: number) => void;
@@ -60,7 +66,9 @@ export function Canvas(props: CanvasProps) {
   const [editing, setEditing] = useState<string | null>(null);
   const [pendingLink, setPendingLink] = useState<{ from: string; to: string } | null>(null);
   const [linkLabel, setLinkLabel] = useState("");
+  const [linkColor, setLinkColor] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const [threadOpen, setThreadOpen] = useState<Record<string, boolean>>({});
 
   const nodes = useMemo(
     () => props.nodes.map((node) => ({ ...node, ...(ghost[node.id] ?? {}) })),
@@ -249,6 +257,7 @@ export function Canvas(props: CanvasProps) {
           // SPEC §4.3: always label. An unlabelled edge is noise, so the edge is
           // not created until a label exists.
           setLinkLabel("");
+          setLinkColor(null);
           setPendingLink({ from: drag.id!, to: target });
         }
         setLinkTo(null);
@@ -308,6 +317,16 @@ export function Canvas(props: CanvasProps) {
       return { scale, x: px - (px - v.x) * ratio, y: py - (py - v.y) * ratio };
     });
 
+  /** Back to 100% about the viewport center (#7). */
+  const resetZoom = () =>
+    setViewport((v) => {
+      const box = container.current!.getBoundingClientRect();
+      const px = box.width / 2;
+      const py = box.height / 2;
+      const ratio = 1 / v.scale;
+      return { scale: 1, x: px - (px - v.x) * ratio, y: py - (py - v.y) * ratio };
+    });
+
   const fit = () => {
     if (!container.current || nodes.length === 0) return;
     const box = container.current.getBoundingClientRect();
@@ -351,11 +370,17 @@ export function Canvas(props: CanvasProps) {
           <Card
             key={node.id}
             node={node}
+            successor={node.sp_superseded_by ? linkNodes.get(node.sp_superseded_by) : undefined}
             selected={props.selectedCard === node.id}
             editing={editing === node.id}
             openCount={openByCard.get(node.id) ?? 0}
             revisions={revisionCount.get(node.id) ?? 1}
             collapsed={collapsed[node.id] ?? false}
+            thread={props.annotations.filter((a) => a.card_id === node.id && !a.resolved)}
+            threadOpen={threadOpen[node.id] ?? false}
+            selectedAnnotation={props.selectedAnnotation}
+            onToggleThread={(id) => setThreadOpen((t) => ({ ...t, [id]: !t[id] }))}
+            onSelectAnnotation={props.onSelectAnnotation}
             onToggleCollapsed={(id) => setCollapsed((c) => ({ ...c, [id]: !c[id] }))}
             onPointerDownHeader={startCardDrag}
             onPointerDownResize={startResize}
@@ -390,7 +415,7 @@ export function Canvas(props: CanvasProps) {
           onSubmit={(event) => {
             event.preventDefault();
             if (!linkLabel.trim()) return;
-            props.onCreateLink(pendingLink.from, pendingLink.to, linkLabel.trim());
+            props.onCreateLink(pendingLink.from, pendingLink.to, linkLabel.trim(), linkColor);
             setPendingLink(null);
           }}
           onPointerDown={(event) => event.stopPropagation()}
@@ -409,11 +434,22 @@ export function Canvas(props: CanvasProps) {
               if (event.key === "Escape") setPendingLink(null);
               if (event.key === "Enter" && linkLabel.trim()) {
                 event.preventDefault();
-                props.onCreateLink(pendingLink.from, pendingLink.to, linkLabel.trim());
+                props.onCreateLink(pendingLink.from, pendingLink.to, linkLabel.trim(), linkColor);
                 setPendingLink(null);
               }
             }}
           />
+          <div className="swatches" role="radiogroup" aria-label="Link color">
+            <button type="button" className={`swatch none${linkColor === null ? " on" : ""}`}
+                    title="Default" onClick={() => setLinkColor(null)} />
+            {LINK_COLORS.map((color) => (
+              <button key={color} type="button"
+                      className={`swatch${linkColor === color ? " on" : ""}`}
+                      style={{ background: color }}
+                      title={color}
+                      onClick={() => setLinkColor(color)} />
+            ))}
+          </div>
           <div className="composer-foot">
             <span className="hint">Unlabelled edges are noise, so a label is required.</span>
             <button type="button" className="ghost" onClick={() => setPendingLink(null)}>Cancel</button>
@@ -426,7 +462,8 @@ export function Canvas(props: CanvasProps) {
         <button onClick={() => zoomBy(1.2)} title="Zoom in">+</button>
         <button onClick={() => zoomBy(1 / 1.2)} title="Zoom out">−</button>
         <button onClick={fit} title="Fit to content">⤢</button>
-        <span>{Math.round(viewport.scale * 100)}%</span>
+        <button className="pct" onClick={resetZoom}
+                title="Reset zoom to 100%">{Math.round(viewport.scale * 100)}%</button>
       </div>
     </div>
   );

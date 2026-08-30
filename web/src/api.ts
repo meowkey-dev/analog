@@ -249,9 +249,16 @@ export const api = {
   deleteCard: (slug: string, id: string) =>
     request<void>("DELETE", `/spaces/${slug}/cards/${id}`, ACTOR_PARAMS()),
 
-  createLink: (slug: string, fromNode: string, toNode: string, label?: string, sides?: { fromSide?: Side; toSide?: Side }) =>
+  createLink: (
+    slug: string,
+    fromNode: string,
+    toNode: string,
+    label?: string,
+    sides?: { fromSide?: Side; toSide?: Side },
+    color?: string,
+  ) =>
     request<Edge[]>("POST", `/spaces/${slug}/links`, ACTOR_PARAMS(), {
-      edges: [{ fromNode, toNode, label, ...sides }],
+      edges: [{ fromNode, toNode, label, ...sides, ...(color ? { color } : {}) }],
     }).then((edges) => edges[0]!),
 
   deleteLink: (slug: string, id: string) =>

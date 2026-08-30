@@ -66,6 +66,14 @@ input, textarea, select {
 .conn { font-size: 11px; color: var(--dim); padding: 2px 7px; border: 1px solid var(--line); border-radius: 99px; }
 .conn.live { color: var(--ok); border-color: #2c4a39; }
 
+.text-scale {
+  display: flex; align-items: center; gap: 2px;
+  border: 1px solid var(--line); border-radius: 6px; padding: 1px 3px;
+}
+.text-scale button { border: none; background: transparent; padding: 2px 5px; font-size: 11px; }
+.text-scale button:hover { background: #2b3142; }
+.text-scale span { color: var(--dim); font-size: 10px; min-width: 34px; text-align: center; font-variant-numeric: tabular-nums; }
+
 /* --- layout --------------------------------------------------------------- */
 
 .body { flex: 1; display: flex; min-height: 0; }
@@ -101,6 +109,11 @@ input, textarea, select {
   border-radius: 8px; padding: 4px 8px; z-index: 20;
 }
 .zoom span { color: var(--dim); font-variant-numeric: tabular-nums; min-width: 38px; text-align: right; }
+.zoom .pct {
+  color: var(--dim); font-variant-numeric: tabular-nums; min-width: 44px; text-align: center;
+  background: transparent; border-color: transparent; padding: 4px 6px;
+}
+.zoom .pct:hover { background: #2b3142; }
 
 /* --- cards ---------------------------------------------------------------- */
 
@@ -144,9 +157,30 @@ input, textarea, select {
 .icon.danger:hover { color: var(--danger); }
 
 .superseded-note {
-  font-size: 10px; color: var(--warn); padding: 3px 10px;
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 10px; color: var(--warn); padding: 3px 6px 3px 10px;
   border-bottom: 1px solid var(--line); background: #221d15;
 }
+.diff-toggle { display: flex; gap: 2px; }
+.diff-toggle button {
+  font-size: 10px; padding: 1px 6px; background: transparent; border-color: transparent;
+  color: var(--dim); border-radius: 4px;
+}
+.diff-toggle button.on { background: #3a3320; color: var(--warn); border-color: transparent; }
+.diff-toggle button:hover { color: var(--ink); background: #2b3142; }
+.diff-toggle button.on:hover { color: var(--warn); background: #3a3320; }
+
+.diff {
+  flex: 1; overflow: auto; min-height: 0;
+  font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  padding: 6px 0;
+}
+.diff.empty { color: var(--dim); padding: 10px 12px; }
+.diff-row { display: flex; padding: 0 8px; white-space: pre-wrap; word-break: break-word; }
+.diff-row .sign { width: 14px; flex: none; opacity: .7; }
+.diff-row.add { background: rgba(99, 193, 135, .14); color: #a9e0bf; }
+.diff-row.del { background: rgba(224, 108, 117, .13); color: #eba7ac; text-decoration: line-through; }
+.diff-row.skip { color: var(--dim); justify-content: center; }
 
 .card-body { flex: 1; overflow: auto; padding: 10px 12px; min-height: 0; }
 .card-body.plain { margin: 0; white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
@@ -158,8 +192,10 @@ input, textarea, select {
 .card-body.html { border: none; width: 100%; background: #fff; padding: 0; }
 .card-body.editor { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; border: none; border-radius: 0; resize: none; }
 
-.md h1, .md h2, .md h3 { margin: .2em 0 .4em; font-size: 1.15em; }
-.md p { margin: .4em 0; }
+/* Markdown text scale (#14): one knob in the topbar, relative sizes inside .md follow. */
+.card-body.md { font-size: calc(13px * var(--md-scale, 1)); }
+
+.md h1, .md h2, .md h3 { margin: .2em 0 .4em; font-size: 1.15em; }.md p { margin: .4em 0; }
 .md ul, .md ol { margin: .4em 0; padding-left: 1.2em; }
 .md code { background: #12151c; padding: 1px 4px; border-radius: 4px; }
 .md pre { background: #12151c; padding: 8px; border-radius: 6px; overflow: auto; }
@@ -188,18 +224,19 @@ input, textarea, select {
 
 .links { position: absolute; overflow: visible; pointer-events: none; }
 .links .edge-hit { fill: none; stroke: transparent; stroke-width: 14; pointer-events: stroke; cursor: pointer; }
-.links .edge-line { fill: none; stroke: #4c566a; stroke-width: 1.75; }
-.links marker path { fill: #4c566a; }
-.links .edge.selected .edge-line { stroke: var(--accent); stroke-width: 2.5; }
+/* An edge's own color wins (#3); --edge-color is set inline when it has one. */
+.links .edge-line { fill: none; stroke: var(--edge-color, #4c566a); stroke-width: 1.75; }
+.links marker path { fill: #4c566a; } /* default arrowhead; colored ones set fill inline */
+.links .edge.selected .edge-line { stroke: var(--edge-color, var(--accent)); stroke-width: 2.5; }
 /* An edge into a soft-deleted card is still deletable, but reads as unattached (#15). */
-.links .edge.dangling .edge-line { stroke: #3a4152; stroke-dasharray: 4 4; }
+.links .edge.dangling .edge-line { stroke: var(--edge-color, #3a4152); stroke-dasharray: 4 4; opacity: .6; }
 .links .edge.dangling .edge-label { opacity: .6; }
-.links .edge.dangling.selected .edge-line { stroke: var(--accent); }
+.links .edge.dangling.selected .edge-line { stroke: var(--edge-color, var(--accent)); }
 .links .edge-label {
-  fill: var(--dim); font-size: 11px; paint-order: stroke;
+  fill: var(--edge-color, var(--dim)); font-size: 11px; paint-order: stroke;
   stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round;
 }
-.links .edge.selected .edge-label { fill: var(--accent); }
+.links .edge.selected .edge-label { fill: var(--edge-color, var(--accent)); }
 .links .edge-draft { fill: none; stroke: var(--accent); stroke-width: 2; stroke-dasharray: 5 4; }
 .links .edge-delete { fill: var(--danger); cursor: pointer; pointer-events: all; }
 .links .edge-delete-x { fill: #fff; font-size: 12px; pointer-events: none; }
@@ -236,6 +273,14 @@ input, textarea, select {
 .link-composer { z-index: 61; }
 .composer-foot select { flex: 1; }
 
+.swatches { display: flex; gap: 6px; align-items: center; }
+.swatch {
+  width: 18px; height: 18px; padding: 0; border-radius: 50%;
+  border: 2px solid transparent; cursor: pointer;
+}
+.swatch.on { border-color: var(--ink); box-shadow: 0 0 0 2px var(--panel); }
+.swatch.none { background: linear-gradient(135deg, #4c566a 50%, #171a21 50%); }
+
 /* --- panels --------------------------------------------------------------- */
 
 .panel {
@@ -269,7 +314,29 @@ input, textarea, select {
 .comment-meta { font-size: 10px; color: var(--dim); }
 .comment-actions { display: flex; gap: 6px; margin-top: 7px; }
 .comment-actions input { flex: 1; min-width: 0; }
-.comment-reply { margin-top: 6px; font-size: 11px; color: var(--dim); display: flex; gap: 8px; align-items: center; }
+.comment-reply { margin-top: 6px; font-size: 11px; color: var(--dim); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.reply-bubble {
+  flex: 1 1 100%; white-space: pre-wrap;
+  background: #1b1f28; border-left: 2px solid var(--warn); border-radius: 0 6px 6px 0;
+  padding: 5px 8px; margin-bottom: 2px;
+}
+.reply-bubble .who { color: var(--warn); font-size: 10px; text-transform: uppercase; letter-spacing: .05em; margin-right: 6px; }
+
+/* In-card comment thread (#5) */
+.card-thread {
+  flex: none; max-height: 45%; overflow: auto;
+  border-top: 1px solid var(--line); background: #1a1d26; z-index: 6;
+}
+.thread-item {
+  display: flex; gap: 6px; align-items: baseline;
+  padding: 5px 10px; border-bottom: 1px solid var(--line);
+  font-size: 11px; cursor: pointer;
+}
+.thread-item:last-child { border-bottom: none; }
+.thread-item:hover { background: #1e222d; }
+.thread-item.selected { background: #1e2432; box-shadow: inset 2px 0 0 var(--accent); }
+.thread-item .who { color: var(--ok); font-weight: 600; flex: none; }
+.thread-item .body { flex: 1; white-space: pre-wrap; word-break: break-word; }
 
 .activity-row {
   display: flex; gap: 8px; align-items: baseline;
@@ -284,8 +351,10 @@ input, textarea, select {
 /* --- misc ----------------------------------------------------------------- */
 
 .popout { position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 70; display: grid; place-items: center; }
+/* Fullscreen is the point (#1): a sliver of backdrop stays visible so the modal
+   reads as dismissible and the backdrop click still has a target. */
 .popout-inner {
-  width: min(1100px, 94vw); height: min(800px, 90vh);
+  width: calc(100vw - 16px); height: calc(100dvh - 16px);
   background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
   display: flex; flex-direction: column; overflow: hidden;
 }
@@ -296,6 +365,44 @@ input, textarea, select {
   position: fixed; left: 50%; top: 56px; transform: translateX(-50%);
   background: #3a2222; color: #f0c0c0; border: 1px solid #5a3030;
   padding: 7px 14px; border-radius: 8px; z-index: 80;
+}
+
+/* --- commander (#12) -------------------------------------------------------- */
+
+.commander {
+  position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 75;
+  display: flex; justify-content: center; align-items: flex-start;
+  padding-top: 12vh;
+}
+.commander-box {
+  width: min(560px, 92vw);
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  box-shadow: 0 18px 50px rgba(0,0,0,.55);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.commander-box input {
+  border: none; border-bottom: 1px solid var(--line); border-radius: 0;
+  padding: 11px 14px; font-size: 14px; background: transparent;
+}
+.commander-box input:focus { outline: none; }
+.commander-box ul {
+  list-style: none; margin: 0; padding: 4px; max-height: 46vh; overflow: auto;
+}
+.commander-box li {
+  display: flex; align-items: baseline; gap: 8px;
+  padding: 7px 9px; border-radius: 6px; cursor: pointer;
+}
+.commander-box li.muted { color: var(--dim); cursor: default; }
+.commander-box li.active { background: #1e2432; }
+.commander-box li .title { font-weight: 600; flex: none; }
+.commander-box li .kind { color: var(--dim); font-size: 10px; text-transform: uppercase; }
+.commander-box li .snippet {
+  color: var(--dim); font-size: 11px; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; flex: 1; text-align: right;
+}
+.commander-box footer {
+  padding: 6px 12px; border-top: 1px solid var(--line);
+  color: var(--dim); font-size: 10px;
 }
 
 .hints {

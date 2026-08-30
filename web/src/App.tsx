@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas } from "./Canvas";
 import { Activity } from "./Activity";
 import { AnnotationComposer, AnnotationPanel, type DraftAnnotation } from "./Annotations";
+import { Commander } from "./Commander";
 import { SpaceIndex, SpaceSwitcher } from "./Spaces";
 import { api, subscribe, ApiError, getIdentity } from "./api";
 import type { AnalogEvent, Annotation, Canvas as CanvasData, Motivation, Node, Space } from "./api";
@@ -66,6 +67,17 @@ export default function App() {
   const [showResolved, setShowResolved] = useState(false);
   const [rightPanel, setRightPanel] = useState<"comments" | "activity" | null>("comments");
   const [popOut, setPopOut] = useState<Node | null>(null);
+  const [commander, setCommander] = useState(false);
+  // Markdown text scale, remembered per browser (#14).
+  const [mdScale, setMdScale] = useState(() => {
+    const stored = Number(localStorage.getItem("analog.mdscale"));
+    return Number.isFinite(stored) && stored > 0 ? stored : 1;
+  });
+
+  useEffect(() => {
+    document.documentElement.style.setProperty("--md-scale", String(mdScale));
+    localStorage.setItem("analog.mdscale", String(mdScale));
+  }, [mdScale]);
 
   const notify = useCallback((message: string) => {
     setToast(message);
@@ -194,25 +206,84 @@ export default function App() {
     [canvas.nodes],
   );
 
+  // --- undo (#2) ---------------------------------------------------------------
+  // Inverse actions only: moves, resizes, edits, creations, links, resolves.
+  // A delete has no inverse — the frozen API cannot restore a soft-deleted card.
+
+  type UndoStep = { label: string; run: () => void };
+  const undoStack = useRef<UndoStep[]>([]);
+  const [undoDepth, setUndoDepth] = useState(0);
+  const canvasRef = useRef(canvas);
+  canvasRef.current = canvas;
+
+  const pushUndo = useCallback((step: UndoStep) => {
+    undoStack.current = [...undoStack.current.slice(-49), step];
+    setUndoDepth(undoStack.current.length);
+  }, []);
+
+  // Undo never crosses spaces: inverse actions close over this space's canvas.
+  useEffect(() => {
+    undoStack.current = [];
+    setUndoDepth(0);
+  }, [slug]);
+
+  const undo = useCallback(() => {
+    const step = undoStack.current[undoStack.current.length - 1];
+    if (!step) return;
+    undoStack.current = undoStack.current.slice(0, -1);
+    setUndoDepth(undoStack.current.length);
+    step.run();
+    notify(`Undid: ${step.label}`);
+  }, [notify]);
+
+  const patchNode = (id: string, patch: Partial<Node>) =>
+    setCanvas((c) => ({ ...c, nodes: c.nodes.map((n) => (n.id === id ? { ...n, ...patch } : n)) }));
+
   const moveCard = (id: string, x: number, y: number) => {
-    setCanvas((c) => ({ ...c, nodes: c.nodes.map((n) => (n.id === id ? { ...n, x, y } : n)) }));
+    const prev = canvasRef.current.nodes.find((n) => n.id === id);
+    if (prev && (prev.x !== x || prev.y !== y)) {
+      const back = { x: prev.x, y: prev.y };
+      pushUndo({
+        label: "move",
+        run: () => {
+          patchNode(id, back);
+          guard(() => api.updateCard(slug, id, back));
+        },
+      });
+    }
+    patchNode(id, { x, y });
     guard(() => api.updateCard(slug, id, { x, y }));
   };
 
   const resizeCard = (id: string, width: number, height: number) => {
-    setCanvas((c) => ({
-      ...c,
-      nodes: c.nodes.map((n) => (n.id === id ? { ...n, width, height } : n)),
-    }));
+    const prev = canvasRef.current.nodes.find((n) => n.id === id);
+    if (prev && (prev.width !== width || prev.height !== height)) {
+      const back = { width: prev.width, height: prev.height };
+      pushUndo({
+        label: "resize",
+        run: () => {
+          patchNode(id, back);
+          guard(() => api.updateCard(slug, id, back));
+        },
+      });
+    }
+    patchNode(id, { width, height });
     guard(() => api.updateCard(slug, id, { width, height }));
   };
 
   const editCard = (id: string, text: string) => {
-    const current = canvas.nodes.find((n) => n.id === id);
-    guard(async () => {
-      const node = await api.updateCard(slug, id, { text }, current?.sp_rev);
+    const current = canvasRef.current.nodes.find((n) => n.id === id);
+    const commit = async (next: string) => {
+      // Re-read the rev at call time: an undo may run long after the edit.
+      const now = canvasRef.current.nodes.find((n) => n.id === id);
+      const node = await api.updateCard(slug, id, { text: next }, now?.sp_rev);
       setCanvas((c) => ({ ...c, nodes: c.nodes.map((n) => (n.id === id ? node : n)) }));
-    });
+    };
+    if (current && (current.text ?? "") !== text) {
+      const previous = current.text ?? "";
+      pushUndo({ label: "edit", run: () => guard(() => commit(previous)) });
+    }
+    guard(() => commit(text));
   };
 
   const deleteCard = (id: string) => {
@@ -230,22 +301,54 @@ export default function App() {
       ]);
       await refresh();
       setSelectedCard(node!.id);
+      pushUndo({
+        label: "new card",
+        run: () => {
+          setSelectedCard(null);
+          guard(async () => {
+            await api.deleteCard(slug, node!.id);
+            await refresh();
+          });
+        },
+      });
     });
   };
 
-  const createLink = (from: string, to: string, label: string) => {
+  const createLink = (from: string, to: string, label: string, color: string | null) => {
     guard(async () => {
-      await api.createLink(slug, from, to, label);
+      const edge = await api.createLink(slug, from, to, label, undefined, color ?? undefined);
       await refresh();
+      pushUndo({
+        label: "link",
+        run: () => {
+          setSelectedEdge(null);
+          guard(async () => {
+            await api.deleteLink(slug, edge.id);
+            await refresh();
+          });
+        },
+      });
     });
   };
 
   const deleteLink = (id: string) => {
+    const edge = canvasRef.current.edges.find((e) => e.id === id);
     guard(async () => {
       await api.deleteLink(slug, id);
       await refresh();
     });
     setSelectedEdge(null);
+    // The id is gone, so the inverse recreates the edge — same ends, label, sides, color.
+    if (edge) {
+      pushUndo({
+        label: "delete link",
+        run: () => guard(async () => {
+          await api.createLink(slug, edge.fromNode, edge.toNode, edge.label,
+            { fromSide: edge.fromSide, toSide: edge.toSide }, edge.color);
+          await refresh();
+        }),
+      });
+    }
   };
 
   const submitAnnotation = (body: string, motivation: Motivation) => {
@@ -258,6 +361,15 @@ export default function App() {
   };
 
   const resolveAnnotation = (id: string, reply: string) => {
+    pushUndo({
+      label: "resolve",
+      run: () => {
+        guard(async () => {
+          await api.resolveAnnotation(slug, id, undefined, false);
+          await refresh();
+        });
+      },
+    });
     guard(async () => {
       await api.resolveAnnotation(slug, id, reply || undefined);
       await refresh();
@@ -275,12 +387,25 @@ export default function App() {
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      // The commander opens from anywhere, including mid-edit (#12).
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setCommander((open) => !open);
+        return;
+      }
       const tag = (event.target as HTMLElement)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if ((event.metaKey || event.ctrlKey) && !event.shiftKey && event.key.toLowerCase() === "z") {
+        // Not intercepted inside inputs, so text editing keeps its native undo.
+        event.preventDefault();
+        undo();
+        return;
+      }
       if (event.key === "Escape") {
         setDraft(null);
         setAnnotateMode(false);
         setPopOut(null);
+        setCommander(false);
         setSelectedCard(null);
         setSelectedEdge(null);
       }
@@ -347,6 +472,17 @@ export default function App() {
               <span className="badge">fixture</span></div>
           : <SpaceSwitcher current={slug} title={space?.title ?? slug} onOpen={go} />}
         <div className="spacer" />
+        <button onClick={() => setCommander(true)} title="Locate a card (⌘K)">⌘K find</button>
+        <button onClick={undo} disabled={undoDepth === 0} title="Undo the last action (⌘Z)">
+          ⎌ undo{undoDepth > 0 ? ` (${undoDepth})` : ""}
+        </button>
+        <div className="text-scale" title="Text size for markdown cards">
+          <button onClick={() => setMdScale((s) => Math.max(0.75, Math.round((s - 0.125) * 1000) / 1000))}
+                  disabled={mdScale <= 0.75}>A−</button>
+          <span>{Math.round(mdScale * 100)}%</span>
+          <button onClick={() => setMdScale((s) => Math.min(2, Math.round((s + 0.125) * 1000) / 1000))}
+                  disabled={mdScale >= 2}>A+</button>
+        </div>
         <button className={annotateMode ? "on" : ""} onClick={() => setAnnotateMode((on) => !on)}
                 title="Click a card to pin a comment; shift-drag for a region (c)">
           {annotateMode ? "commenting…" : "comment"}
@@ -446,6 +582,17 @@ export default function App() {
         </div>
       )}
 
+      {commander && (
+        <Commander
+          nodes={liveNodes}
+          onClose={() => setCommander(false)}
+          onFocusCard={(id) => {
+            setFocus({ id, nonce: Date.now() });
+            setSelectedCard(id);
+          }}
+        />
+      )}
+
       {toast && <div className="toast">{toast}</div>}
       <footer className="hints">
         {annotateMode ? (
@@ -454,7 +601,7 @@ export default function App() {
         ) : (
           <>drag to pan · ⌘/ctrl-scroll to zoom · scroll over a card to scroll the card ·
           double-click empty space for a card · drag the ◇ handle to link ·
-          double-click a card to edit · c to comment</>
+          double-click a card to edit · ⌘K to find a card · ⌘Z to undo · c to comment</>
         )}
       </footer>
     </div>

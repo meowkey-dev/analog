@@ -224,7 +224,12 @@ export function AnnotationPanel(props: {
             <div className="comment-meta">{a.creator} · {new Date(a.created_at).toLocaleString()}</div>
             {a.resolved ? (
               <div className="comment-reply">
-                <strong>resolved</strong>{a.resolved_reply ? `: ${a.resolved_reply}` : ""}
+                {a.resolved_reply && (
+                  <div className="reply-bubble">
+                    <span className="who">reply</span>
+                    {a.resolved_reply}
+                  </div>
+                )}
                 <button className="ghost" onClick={(e) => { e.stopPropagation(); props.onReopen(a.id); }}>reopen</button>
               </div>
             ) : (
