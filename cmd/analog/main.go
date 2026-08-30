@@ -113,7 +113,7 @@ func root() *cobra.Command {
 	}
 	cmd.CompletionOptions.DisableDefaultCmd = true
 	cmd.AddCommand(
-		whoamiCmd(), loginCmd(), tokenCmd(),
+		whoamiCmd(), loginCmd(), tokenCmd(), onboardCmd(),
 		spacesCmd(), newSpaceCmd(), openCmd(), rmSpaceCmd(),
 		feedbackCmd(),
 		addCmd(), cardsCmd(), updateCmd(), rmCmd(), linkCmd(), unlinkCmd(),
