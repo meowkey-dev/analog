@@ -21,7 +21,11 @@ if [ -f "$BUNDLE/index.html" ]; then
     # embedded forever otherwise.
     find "$EMBED" -mindepth 1 ! -name .gitkeep -delete
     cp -R "$BUNDLE"/. "$EMBED"/
-    echo "embedding $BUNDLE"
+    # Source maps are a debugging artifact, not part of the application -- the same
+    # category as a .dSYM, and not something you staple inside an executable. They
+    # stay in web/dist for local use; 2MB of every binary is not where they belong.
+    find "$EMBED" -name '*.map' -delete
+    echo "embedding $BUNDLE (without source maps)"
 else
     echo "no $BUNDLE/index.html — building an API-only server" >&2
     echo "  (cd web && npm install && npm run build)" >&2
