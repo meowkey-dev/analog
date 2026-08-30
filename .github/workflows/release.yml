@@ -6,7 +6,7 @@ name: release
 # carries the built SPA inside it. There is nothing to install and no runtime to
 # match: unpack it and run it.
 #
-#   curl -L https://github.com/meowkey-dev/analog/releases/download/v0.3.0/analog-v0.3.0-darwin-arm64.tar.gz | tar xz
+#   curl -L https://github.com/meowkey-dev/analog/releases/latest/download/analog-darwin-arm64.tar.gz | tar xz
 #   ./analog-server
 #
 # CGO is off, so every target cross-compiles from one Linux runner —
@@ -94,8 +94,10 @@ jobs:
           for dir in bin/*/; do
             platform=$(basename "$dir")
             case "$platform" in
-              windows-*) (cd "$dir" && zip -q -r "../../dist/analog-${GITHUB_REF_NAME}-${platform}.zip" .) ;;
-              *)         tar -czf "dist/analog-${GITHUB_REF_NAME}-${platform}.tar.gz" -C "$dir" . ;;
+              # Unversioned on purpose: /releases/latest/download/<name> resolves
+              # only an exact asset name, and that is the install line in README.md.
+              windows-*) (cd "$dir" && zip -q -r "../../dist/analog-${platform}.zip" .) ;;
+              *)         tar -czf "dist/analog-${platform}.tar.gz" -C "$dir" . ;;
             esac
           done
           (cd dist && sha256sum * > SHA256SUMS)

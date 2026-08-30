@@ -1,0 +1,4 @@
+[console_scripts]
+analog = analog.cli.main:main
+analog-mcp = analog.mcp_server.server:main
+analog-server = analog.server.__main__:main
