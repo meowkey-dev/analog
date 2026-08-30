@@ -39,10 +39,9 @@ func root() *cobra.Command {
 	var port int
 
 	cmd := &cobra.Command{
-		Use:           "analog-server",
-		Short:         "Run the Analog API",
-		SilenceUsage:  true,
-		SilenceErrors: true,
+		Use:          "analog-server",
+		Short:        "Run the Analog API",
+		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return serve(host, port)
 		},

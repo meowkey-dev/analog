@@ -106,6 +106,49 @@ func TestTokenAddRejectsABadKind(t *testing.T) {
 	}
 }
 
+// Issue #30: `--port` belongs to serving, but cobra's subcommand search accepts
+// it anywhere, so operators pass it to `token` out of muscle memory. Flag parsing
+// then rejects it — and that error used to be swallowed, exiting 1 with no output
+// at all, which is the one thing an auth tool must never do.
+func TestTokenCommandsRejectAPortLoudly(t *testing.T) {
+	h := newHarness(t)
+	for _, args := range [][]string{
+		{"token", "add", "kai", "--kind", "human", "--port", "8787"},
+		{"token", "list", "--port", "8787"},
+		{"--port", "8787", "token", "list"},
+	} {
+		r := h.invokeServer(args...)
+		if r.code != 1 {
+			t.Errorf("`analog-server %s` exited %d, want 1", strings.Join(args, " "), r.code)
+		}
+		if !strings.Contains(r.stderr, "--port") {
+			t.Errorf("`analog-server %s` stderr = %q, want a message naming --port",
+				strings.Join(args, " "), r.stderr)
+		}
+	}
+	// The rejected invocations must have minted nothing, and the flagless form
+	// — the real interface — still works.
+	if out := h.invokeServer("token", "list").stdout; !strings.Contains(out, "no tokens") {
+		t.Errorf("the --port invocations minted something: %s", out)
+	}
+	if r := h.invokeServer("token", "add", "kai", "--kind", "human"); r.code != 0 {
+		t.Errorf("flagless `token add` exited %d: %s", r.code, r.stderr)
+	}
+}
+
+// The same swallow used to eat serve() failures: a taken port exited 1 silently.
+func TestServerReportsABindFailure(t *testing.T) {
+	h := newHarness(t)
+	port := strings.TrimPrefix(h.url, "http://127.0.0.1:")
+	r := h.invokeServer("--port", port)
+	if r.code != 1 {
+		t.Errorf("exit = %d, want 1", r.code)
+	}
+	if !strings.Contains(r.stderr, "bind") {
+		t.Errorf("stderr = %q, want the bind error", r.stderr)
+	}
+}
+
 // --- whoami --------------------------------------------------------------------------
 
 func TestWhoamiReportsTheOpenServer(t *testing.T) {

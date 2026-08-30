@@ -171,6 +171,24 @@ func (h *harness) run(args ...string) string {
 	return r.stdout
 }
 
+// invokeServer runs the server binary with the harness env, for the operator
+// side (`seed`, `token`) that lives on that binary.
+func (h *harness) invokeServer(args ...string) result {
+	h.t.Helper()
+	cmd := exec.Command(binaries.server, args...)
+	cmd.Env = h.env
+	var stdout, stderr strings.Builder
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	err := cmd.Run()
+	code := 0
+	if exit, ok := err.(*exec.ExitError); ok {
+		code = exit.ExitCode()
+	} else if err != nil {
+		h.t.Fatal(err)
+	}
+	return result{stdout: stdout.String(), stderr: stderr.String(), code: code}
+}
+
 // asHuman invokes as the human actor, which is how these tests play the other side.
 func (h *harness) asHuman(args ...string) string {
 	h.t.Helper()
