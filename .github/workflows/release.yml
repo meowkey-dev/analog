@@ -114,7 +114,13 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${GITHUB_REF_NAME}" dist/* --clobber
+        run: |
+          # gh release upload does not create a missing release — v0.4.1's
+          # first run failed on exactly that. Create the shell of it (the
+          # notes are still written by hand), then upload.
+          gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1 \
+            || gh release create "${GITHUB_REF_NAME}" --verify-tag --title "${GITHUB_REF_NAME#v}"
+          gh release upload "${GITHUB_REF_NAME}" dist/* --clobber
 
       # Keep `brew install meowkey-dev/tap/analog` on this release. Needs a PAT
       # with contents:write on meowkey-dev/homebrew-tap; without the secret the
