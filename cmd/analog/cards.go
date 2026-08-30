@@ -97,7 +97,7 @@ func cardsCmd() *cobra.Command {
 }
 
 func updateCmd() *cobra.Command {
-	var file, text, title, mode string
+	var file, text, title, mode, kind string
 	var ifMatch int64
 	var asJSON bool
 	cmd := &cobra.Command{
@@ -120,8 +120,11 @@ func updateCmd() *cobra.Command {
 			if cmd.Flags().Changed("title") {
 				patch["sp_title"] = title
 			}
+			if cmd.Flags().Changed("kind") {
+				patch["sp_kind"] = kind
+			}
 			if len(patch) == 0 {
-				return usage("nothing to update: pass a file, --text or --title")
+				return usage("nothing to update: pass a file, --text, --title or --kind")
 			}
 			var match *int64
 			if cmd.Flags().Changed("if-match") {
@@ -141,6 +144,7 @@ func updateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&file, "file", "", "read content from this file")
 	cmd.Flags().StringVar(&text, "text", "", "inline content")
 	cmd.Flags().StringVar(&title, "title", "", "new title")
+	cmd.Flags().StringVar(&kind, "kind", "", "md | html | svg | plain")
 	cmd.Flags().StringVar(&mode, "mode", "", "replace | branch")
 	cmd.Flags().Int64Var(&ifMatch, "if-match", 0, "the sp_rev you read")
 	cmd.Flags().BoolVar(&asJSON, "json", false, "machine-readable output")
