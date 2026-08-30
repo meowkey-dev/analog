@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"slices"
+	"strings"
 
 	"github.com/meowkey-dev/analog/internal/apierr"
 	"github.com/meowkey-dev/analog/internal/ids"
@@ -373,6 +374,16 @@ func (s *Store) UpdateCard(slug, cardID string, patch Node, actor, actorKind, mo
 			ignored = []string{}
 		}
 		return nil, apierr.ValidationFailed("patch is empty", apierr.Detail{"ignored": ignored})
+	}
+	// The contract gives sp_kind an enum, and creation has always enforced it.
+	// A patch did not, so `PATCH {"sp_kind": "bogus"}` could put a value on the
+	// canvas that the server's own Node schema rejects.
+	if kind, present := applied["sp_kind"]; present {
+		if name := stringOf(kind); !contains(kinds, name) {
+			return nil, apierr.UnsupportedKind(
+				"sp_kind must be one of "+strings.Join(kinds, ", "),
+				apierr.Detail{"kind": kind})
+		}
 	}
 	if ifMatch != nil && *ifMatch != row.Rev {
 		return nil, apierr.Conflict("If-Match did not match the current sp_rev",

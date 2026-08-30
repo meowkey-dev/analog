@@ -651,3 +651,37 @@ func TestEveryDocumentedCommandExists(t *testing.T) {
 		}
 	}
 }
+
+// TestUpdateKind covers #10: a card's kind was set at creation and then fixed
+// forever, so a markdown card typed in as svg could not be corrected.
+func TestUpdateKind(t *testing.T) {
+	h := newHarness(t)
+	h.run("new", "redesign")
+	card := h.addCard("redesign", "T", "<svg/>")
+	if card["sp_kind"] != "md" {
+		t.Fatalf("precondition: sp_kind = %v, want md", card["sp_kind"])
+	}
+	h.run("update", "redesign", card["id"].(string), "--kind", "svg")
+	node := decodeJSON[[]map[string]any](t, h.run("cards", "redesign", "--json"))[0]
+	if node["sp_kind"] != "svg" {
+		t.Errorf("sp_kind = %v, want svg", node["sp_kind"])
+	}
+	// --kind alone is enough; it does not need content alongside it.
+	if node["text"] != "<svg/>" {
+		t.Errorf("text = %v; --kind must not disturb the content", node["text"])
+	}
+}
+
+func TestUpdateRejectsAnUnknownKind(t *testing.T) {
+	h := newHarness(t)
+	h.run("new", "redesign")
+	card := h.addCard("redesign", "T", "x")
+	r := h.invoke(options{}, "update", "redesign", card["id"].(string), "--kind", "pdf")
+	if r.code == 0 {
+		t.Fatal("an sp_kind outside the contract's enum was accepted")
+	}
+	node := decodeJSON[[]map[string]any](t, h.run("cards", "redesign", "--json"))[0]
+	if node["sp_kind"] != "md" {
+		t.Errorf("sp_kind = %v; a rejected patch must change nothing", node["sp_kind"])
+	}
+}
