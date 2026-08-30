@@ -116,11 +116,13 @@ Three things have to line up: a **token** (the server decides who the agent is),
 the workflow the API cannot. One command sets up all three:
 
 ```bash
-python3 scripts/onboard_agent.py claude-code --issue --url http://127.0.0.1:8787 --skill-into ~/.claude/skills --print-mcp
+analog onboard claude-code --issue --url http://127.0.0.1:8787 --skill-into ~/.claude/skills --print-mcp
 ```
 
 `--issue` mints the token, so it has to run on the server host; everything else runs
 wherever the agent does. Drop `--issue` and pass `--token` if you already have one.
+The skill rides inside the binary, so a release or brew install can onboard with no
+checkout: `brew install analog && analog onboard claude-code --claude-env ~/proj`.
 
 ### MCP
 
@@ -162,7 +164,7 @@ MCP config and skills are both read when a session starts, so neither reaches an
 agent mid-session. A command on disk does:
 
 ```bash
-python3 scripts/onboard_agent.py claude-code --issue --url https://analog.example.com --wrapper
+analog onboard claude-code --issue --url https://analog.example.com --wrapper ~/.local/bin
 ```
 
 That writes `~/.local/bin/analog-claude-code`, a one-line shell wrapper with the URL,
@@ -189,7 +191,7 @@ credentials. Three pieces:
 
 ```bash
 ln -sf "$PWD/bin/analog" ~/.local/bin/analog     # `analog` on PATH, as the skill writes it
-python3 scripts/onboard_agent.py claude-code --url https://analog.example.com --token analog_... --skill-into ~/.claude/skills --claude-env ~/code/that-project
+analog onboard claude-code --url https://analog.example.com --token analog_... --skill-into ~/.claude/skills --claude-env ~/code/that-project
 ```
 
 `--claude-env` merges `ANALOG_URL` / `ANALOG_ACTOR` / `ANALOG_ACTOR_KIND` /
@@ -261,12 +263,13 @@ the annotation Agent B resolved is gone.
       sse/             the event broker
       ids/             ULID with the s_/c_/l_/a_/m_ prefixes
       mcp/             the ten tools
+      skill/           where the agent skill is embedded from
       web/             where the built bundle is embedded from
     client/            exported HTTP client — third parties import this
-    skill/             the agent skill
+    skill/             the agent skill (also embedded in the `analog` binary)
     web/               React + Vite
     deploy/            systemd unit and Caddyfile for running it on a host
-    scripts/           build.sh, demo.py, onboard_agent.py
+    scripts/           build.sh, demo.py, onboard_agent.py (deprecated shim)
     tests/             the conformance harness
 
 ## CI

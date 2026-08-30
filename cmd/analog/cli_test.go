@@ -23,6 +23,7 @@ import (
 var binaries struct {
 	cli    string
 	server string
+	mcp    string
 }
 
 func TestMain(m *testing.M) {
@@ -35,9 +36,11 @@ func TestMain(m *testing.M) {
 
 	binaries.cli = filepath.Join(dir, "analog")
 	binaries.server = filepath.Join(dir, "analog-server")
+	binaries.mcp = filepath.Join(dir, "analog-mcp")
 	for target, pkg := range map[string]string{
 		binaries.cli:    "github.com/meowkey-dev/analog/cmd/analog",
 		binaries.server: "github.com/meowkey-dev/analog/cmd/analog-server",
+		binaries.mcp:    "github.com/meowkey-dev/analog/cmd/analog-mcp",
 	} {
 		build := exec.Command("go", "build", "-o", target, pkg)
 		build.Stderr = os.Stderr
@@ -663,7 +666,7 @@ func TestEveryDocumentedCommandExists(t *testing.T) {
 	help := h.run("--help")
 	for _, command := range []string{"spaces", "feedback", "add", "cards", "update", "rm",
 		"link", "resolve", "export", "import", "open", "whoami", "login", "token",
-		"unlink", "upload", "events", "comments", "new", "rm-space"} {
+		"onboard", "unlink", "upload", "events", "comments", "new", "rm-space"} {
 		if !strings.Contains(help, command) {
 			t.Errorf("`analog --help` does not mention %q", command)
 		}

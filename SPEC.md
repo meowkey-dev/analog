@@ -369,6 +369,8 @@ analog resolve a_7f --reply "rebased axis at 0"
 
 analog export redesign > redesign.canvas       # JSON Canvas, opens in Obsidian
 analog import redesign < redesign.canvas
+
+analog onboard claude-code --issue --skill-into ~/.claude/skills --print-mcp
 ```
 
 Design notes:
@@ -382,12 +384,19 @@ Design notes:
 - Exit non-zero on error with a message on stderr, so agents notice failures.
 - `analog feedback` with no new events prints nothing and exits 0. Silence means
   nothing changed.
+- `analog onboard <actor>` is the one-command setup the README promises: a token
+  (`--issue`, which composes `token add` and so runs on the server host), the skill
+  (`--skill-into`), and the wiring (`--claude-env`, `--wrapper`, `--print-mcp`,
+  `--print-env`). The skill is embedded in the binary (§4.3), so a release can
+  onboard with no checkout.
 
 ### 4.3 Skill
 
 Ship `skill/analog/SKILL.md` — an agent skill in the standard folder format,
 copied into `.claude/skills/` or an equivalent path. It teaches the *workflow*, not the
-API; the CLI's `--help` covers syntax.
+API; the CLI's `--help` covers syntax. The `analog` binary embeds a copy of it, so
+`analog onboard --skill-into` works from a bare release and the taught workflow
+cannot drift from the binary that serves it.
 
 Why a skill rather than just an `AGENTS.md` paragraph: skills load on demand, so the
 instructions aren't burning context in every unrelated session, and one skill folder

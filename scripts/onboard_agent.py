@@ -1,240 +1,57 @@
 #!/usr/bin/env python3
-"""Give an agent everything it needs to use an Analog server.
+"""Deprecated: use `analog onboard <actor>` — same flags, no checkout needed.
 
-Three things have to line up before an agent is useful here: a token (the server
-decides who it is), the MCP server or the CLI wired to that token, and the skill,
-which teaches the workflow the API cannot — read feedback first, one idea per card,
-never resolve what you did not act on.
-
-    # on the machine running the server: mint the token
-    python3 scripts/onboard_agent.py claude-code --issue
-
-    # anywhere the agent runs: install the skill, print the wiring
-    python3 scripts/onboard_agent.py claude-code \\
-        --url https://analog.example.com --token analog_... \\
-        --skill-into ~/.claude/skills --print-mcp
-
-`--issue` needs the server's auth file, so it only works on the server host. The
-rest works anywhere.
-
-The binaries come from --bin-dir, $ANALOG_BIN_DIR, ./bin, or PATH.
+The script is now a subcommand of the CLI (issue #31). This shim forwards to it and
+will be removed in the next minor release. `--bin-dir` still works: it is consumed
+here to find the `analog` binary and not passed on.
 """
 
-from __future__ import annotations
-
-import argparse
 import os
-import re
 import shutil
-import subprocess
 import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-SKILL_SRC = REPO_ROOT / "skill" / "analog"
-TOKEN_RE = re.compile(r"analog_[A-Za-z0-9_-]+")
-
-# Set from --bin-dir before anything looks a binary up.
-BIN_DIR: Path | None = None
 
 
-def binary(name: str) -> Path:
-    """Locate one of the three Analog binaries."""
-    for candidate in (BIN_DIR, Path(os.environ["ANALOG_BIN_DIR"])
+def binary(name: str, bin_dir: Path | None) -> str:
+    for candidate in (bin_dir,
+                      Path(os.environ["ANALOG_BIN_DIR"])
                       if os.environ.get("ANALOG_BIN_DIR") else None,
                       REPO_ROOT / "bin"):
         if candidate and (candidate.expanduser() / name).is_file():
-            return (candidate.expanduser() / name).resolve()
+            return str((candidate.expanduser() / name).resolve())
     found = shutil.which(name)
     if found:
-        return Path(found)
-    raise SystemExit(
-        f"cannot find `{name}`. Build it with scripts/build.sh, or pass --bin-dir.")
+        return found
+    raise SystemExit(f"cannot find `{name}`. Build it with scripts/build.sh, "
+                     f"or pass --bin-dir.")
 
 
-def issue(actor: str, kind: str) -> str:
-    """Mint a token through analog-server, which owns the auth file.
-
-    Shelling out rather than reading the file: the format is the server's business,
-    and this script has no reason to know it.
-    """
-    server = binary("analog-server")
-    proc = subprocess.run([str(server), "token", "add", actor, "--kind", kind],
-                          capture_output=True, text=True)
-    if proc.returncode != 0:
-        raise SystemExit(f"{server} token add failed:\n{proc.stdout}{proc.stderr}")
-    match = TOKEN_RE.search(proc.stdout)
-    if not match:
-        raise SystemExit(f"no token in the output of `analog-server token add`:\n{proc.stdout}")
-    print(f"issued a token for {actor} ({kind})")
-    print("  it is shown once and stored only as a digest.\n")
-    return match.group(0)
-
-
-def write_wrapper(into: Path, actor: str, kind: str, url: str,
-                  token: str | None) -> Path:
-    """A command that is already configured as one actor.
-
-    MCP config and skills are read when a session starts, so neither reaches an
-    agent that is mid-session. A wrapper on disk does, and it also sidesteps the
-    trap in `analog login`: that writes ~/.analog.toml for the *user*, so an agent
-    running as you would inherit your identity and write under your name.
-    """
-    into.mkdir(parents=True, exist_ok=True)
-    path = into / f"analog-{actor}"
-    analog = binary("analog")
-    lines = [
-        "#!/bin/sh",
-        f"# Analog, pre-configured as {actor} ({kind}).",
-        "# Written by scripts/onboard_agent.py. Contains a token: keep it mode 700",
-        "# and out of any repository.",
-        f"export ANALOG_URL={url}",
-        f"export ANALOG_ACTOR={actor}",
-        f"export ANALOG_ACTOR_KIND={kind}",
-        *([f"export ANALOG_TOKEN={token}"] if token else []),
-        "# Ignore any ~/.analog.toml, which may belong to a different actor.",
-        "export ANALOG_CONFIG=/nonexistent",
-        f'exec "{analog}" "$@"',
-    ]
-    path.write_text("\n".join(lines) + "\n")
-    path.chmod(0o700)
-    return path
-
-
-def write_claude_env(project: Path, actor: str, kind: str, url: str,
-                     token: str | None) -> Path:
-    """Merge the ANALOG_* env into a project's .claude/settings.local.json.
-
-    `settings.local.json` rather than `settings.json` because it holds a token and
-    is the gitignored one. Claude Code applies `env` to its Bash tool calls, so the
-    skill's plain `analog ...` commands work with no wrapper and no exports —
-    but it is read at session start, so an already-running agent needs a restart.
-    """
-    import json
-
-    target = project.expanduser() / ".claude" / "settings.local.json"
-    target.parent.mkdir(parents=True, exist_ok=True)
-
-    settings = {}
-    if target.is_file() and target.read_text().strip():
-        settings = json.loads(target.read_text())      # merge, never clobber
-
-    env = dict(settings.get("env") or {})
-    env.update({
-        "ANALOG_URL": url,
-        "ANALOG_ACTOR": actor,
-        "ANALOG_ACTOR_KIND": kind,
-        # Otherwise a ~/.analog.toml belonging to a different actor wins.
-        "ANALOG_CONFIG": "/nonexistent",
-    })
-    if token:
-        env["ANALOG_TOKEN"] = token
-    settings["env"] = env
-
-    target.write_text(json.dumps(settings, indent=2) + "\n")
-    return target
-
-
-def install_skill(into: Path) -> Path:
-    """Skills are a folder with a SKILL.md; copying is the whole install."""
-    target = into.expanduser() / "analog"
-    target.parent.mkdir(parents=True, exist_ok=True)
-    if target.exists():
-        shutil.rmtree(target)
-    shutil.copytree(SKILL_SRC, target)
-    return target
-
-
-def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("actor", help="the agent's name, e.g. claude-code")
-    ap.add_argument("--kind", default="agent", choices=["agent", "human"])
-    ap.add_argument("--issue", action="store_true",
-                    help="mint a token (server host only)")
-    ap.add_argument("--url", default="http://127.0.0.1:8787")
-    ap.add_argument("--bin-dir", type=Path, default=None, metavar="DIR",
-                    help="where the analog binaries are; defaults to $ANALOG_BIN_DIR, "
-                         "./bin, then PATH")
-    ap.add_argument("--token", default=None,
-                    help="an existing token; implied by --issue")
-    ap.add_argument("--skill-into", type=Path, default=None, metavar="DIR",
-                    help="copy the skill here, e.g. ~/.claude/skills or "
-                         "<project>/.claude/skills")
-    ap.add_argument("--print-mcp", action="store_true",
-                    help="print the `claude mcp add` command")
-    ap.add_argument("--print-env", action="store_true",
-                    help="print the exports an agent with only a shell needs")
-    ap.add_argument("--claude-env", nargs="?", const=".", default=None, metavar="PROJECT",
-                    help="merge ANALOG_* into PROJECT/.claude/settings.local.json, so "
-                         "the skill's plain `analog` commands work in that project")
-    ap.add_argument("--wrapper", nargs="?", const="~/.local/bin", default=None,
-                    metavar="DIR",
-                    help="write a wrapper command carrying this actor's config, for "
-                         "an agent that is already running and cannot pick up new "
-                         "MCP config or skills without a restart")
-    args = ap.parse_args(argv)
-
-    global BIN_DIR
-    BIN_DIR = args.bin_dir
-
-    token = args.token
-    if args.issue:
-        token = issue(args.actor, args.kind)
-
-    if args.skill_into:
-        target = install_skill(args.skill_into)
-        print(f"skill installed: {target}")
-        print("  it loads on demand, so it costs nothing in unrelated sessions.\n")
-
-    if args.claude_env is not None:
-        target = write_claude_env(Path(args.claude_env), args.actor, args.kind,
-                                  args.url, token)
-        print(f"claude env: {target}")
-        if not token:
-            print("  no token written — add ANALOG_TOKEN there once the server issues one.")
-        print("  Read at session start, so restart the agent for it to take effect.\n")
-
-    if args.wrapper is not None:
-        path = write_wrapper(Path(args.wrapper).expanduser(), args.actor, args.kind,
-                             args.url, token)
-        print(f"wrapper: {path}")
-        print(f"  A running agent can use it immediately — no restart, no exports:\n"
-              f"    {path.name} whoami\n"
-              f"    {path.name} feedback <slug>\n")
-        print("  It carries the token, so it is mode 700 and lives outside the repo.")
-        if str(path.parent) not in os.environ.get("PATH", "").split(os.pathsep):
-            print(f"  {path.parent} is not on PATH; use the full path or add it.\n")
+def main(argv: list[str]) -> int:
+    bin_dir = None
+    forwarded = []
+    rest = list(argv)
+    # The subcommand's --wrapper / --claude-env take a value; the script allowed
+    # them bare, so translate the bare forms to the defaults it used.
+    defaults = {"--wrapper": "~/.local/bin", "--claude-env": "."}
+    while rest:
+        arg = rest.pop(0)
+        if arg == "--bin-dir":
+            bin_dir = Path(rest.pop(0))
+        elif arg.startswith("--bin-dir="):
+            bin_dir = Path(arg.split("=", 1)[1])
+        elif arg in defaults and (not rest or rest[0].startswith("-")):
+            forwarded.extend([arg, defaults[arg]])
         else:
-            print()
+            forwarded.append(arg)
 
-    if args.print_mcp:
-        command = str(binary("analog-mcp"))
-        secret = token or "$ANALOG_TOKEN"
-        print("wire up MCP (stdio) — run this where the agent runs:\n")
-        print(f"  claude mcp add analog \\")
-        print(f"    -e ANALOG_URL={args.url} \\")
-        print(f"    -e ANALOG_ACTOR={args.actor} \\")
-        print(f"    -e ANALOG_ACTOR_KIND={args.kind} \\")
-        print(f"    -e ANALOG_TOKEN={secret} \\")
-        print(f"    -- {command}")
-        print()
-        print("  --scope user puts it in every project; the default is this one only.")
-        print("  Check it with:  claude mcp get analog\n")
-
-    if args.print_env or not (args.print_mcp or args.skill_into):
-        print("or, for an agent that only has a shell:\n")
-        print(f"  export ANALOG_URL={args.url}")
-        print(f"  export ANALOG_ACTOR={args.actor}")
-        print(f"  export ANALOG_ACTOR_KIND={args.kind}")
-        print(f"  export ANALOG_TOKEN={token or '<token>'}")
-        print(f"  export PATH={binary('analog').parent}:$PATH")
-        print("\n  then:  analog whoami   # confirms who the server thinks you are")
-
-    if token and not args.print_mcp and not args.print_env:
-        print(f"token: {token}")
-    return 0
+    print("scripts/onboard_agent.py is deprecated; use `analog onboard` "
+          "(same flags). The script will be removed in the next release.\n",
+          file=sys.stderr)
+    analog = binary("analog", bin_dir)
+    os.execv(analog, [analog, "onboard", *forwarded])
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(main(sys.argv[1:]))
