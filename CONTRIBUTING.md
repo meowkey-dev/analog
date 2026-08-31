@@ -27,6 +27,7 @@ uv venv && uv pip install -r tests/requirements.txt
 .venv/bin/python -m pytest              # the conformance suite, over HTTP
 
 (cd web && npm ci && npm run build)     # tsc --noEmit + vite build
+(cd web && npm test)                    # web unit tests
 ```
 
 `tests/contract/` asserts against `contracts/fixtures/` and SPEC.md, and reaches the

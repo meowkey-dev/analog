@@ -23,7 +23,7 @@ import type { Annotation, Motivation, Node, Selector } from "./api";
  */
 
 /** Layout of a card's scrollable content, as far as the pin math is concerned. */
-interface ScrollMetrics {
+export interface ScrollMetrics {
   cw: number; ch: number; // content extent, px
   vw: number; vh: number; // visible extent (the overlay box), px
   sx: number; sy: number; // scroll offset, px
@@ -58,6 +58,23 @@ function toContent(frac: { x: number; y: number }, m: ScrollMetrics | null): { x
     x: clamp01((frac.x * vw + (m?.sx ?? 0)) / cw),
     y: clamp01((frac.y * vh + (m?.sy ?? 0)) / ch),
   };
+}
+
+/**
+ * Map a content-relative selector to inline position styles. Point selectors
+ * deliberately leave their dimensions unset so `.pin.point` can keep its
+ * circular CSS size; region selectors provide both dimensions here.
+ */
+export function pinStyle(
+  s: { x: number; y: number; w?: number; h?: number },
+  m: ScrollMetrics | null,
+): React.CSSProperties {
+  const style: React.CSSProperties = m
+    ? { left: s.x * m.cw - m.sx, top: s.y * m.ch - m.sy }
+    : { left: `${s.x * 100}%`, top: `${s.y * 100}%` };
+  if (s.w !== undefined) style.width = m ? s.w * m.cw : `${s.w * 100}%`;
+  if (s.h !== undefined) style.height = m ? s.h * m.ch : `${s.h * 100}%`;
+  return style;
 }
 
 const QUOTE_MAX = 240;
@@ -235,25 +252,6 @@ export function AnnotationOverlay(props: OverlayProps) {
     window.addEventListener("pointerup", up);
   };
 
-  // Content fractions become pixels of the visible box by subtracting the scroll
-  // offset; without metrics the content is presumed to fit, and fractions of the
-  // box are exact.
-  const pinStyle = (s: { x: number; y: number; w?: number; h: number }): React.CSSProperties => {
-    const m = metrics;
-    if (!m) {
-      return {
-        left: `${s.x * 100}%`, top: `${s.y * 100}%`,
-        width: s.w !== undefined ? `${s.w * 100}%` : undefined,
-        height: `${s.h * 100}%`,
-      };
-    }
-    return {
-      left: s.x * m.cw - m.sx, top: s.y * m.ch - m.sy,
-      width: s.w !== undefined ? s.w * m.cw : undefined,
-      height: s.h * m.ch,
-    };
-  };
-
   const pins = [
     ...annotations.map((a) => ({ annotation: a, selector: a.selector })),
     ...(draft && draft.cardId === node.id
@@ -285,11 +283,11 @@ export function AnnotationOverlay(props: OverlayProps) {
         };
         return selector.type === "point" ? (
           <div key={key} className={`pin point ${classes}`}
-               style={pinStyle({ x: selector.x, y: selector.y, h: 0 })}
+               style={pinStyle({ x: selector.x, y: selector.y }, metrics)}
                title={annotation?.body ?? "new comment"} onPointerDown={onDown} />
         ) : (
           <div key={key} className={`pin rect ${classes}`}
-               style={pinStyle(selector)}
+               style={pinStyle(selector, metrics)}
                title={annotation?.body ?? "new comment"} onPointerDown={onDown} />
         );
       })}
