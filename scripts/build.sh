@@ -8,6 +8,10 @@
 # point of the port: one file to ship, and `analog-server` alone serves the UI.
 # CGO is off everywhere -- modernc.org/sqlite is pure Go, so a cross-build needs no
 # C toolchain.
+#
+# The binaries also carry their release version (--version, root --help, the MCP
+# handshake). ANALOG_VERSION wins; otherwise `git describe` names the local
+# checkout. The release workflow passes the tag explicitly.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -15,6 +19,10 @@ cd "$(dirname "$0")/.."
 OUT=${OUT:-bin}
 BUNDLE=web/dist
 EMBED=internal/web/dist
+
+VERSION=${ANALOG_VERSION:-$(git describe --tags --always --dirty 2>/dev/null || echo dev)}
+VERSION=${VERSION#v}
+LDFLAGS="-s -w -X github.com/meowkey-dev/analog/internal/version.Version=$VERSION"
 
 if [ -f "$BUNDLE/index.html" ]; then
     # Replace rather than merge: a stale asset from a previous build would be
@@ -39,7 +47,7 @@ build() {
         # -trimpath so the binary does not carry this checkout's paths;
         # -s -w drops the symbol table, which is a third of the size.
         CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" \
-            go build -trimpath -ldflags="-s -w" \
+            go build -trimpath -ldflags="$LDFLAGS" \
             -o "$dir/$cmd$suffix" "./cmd/$cmd"
     done
     echo "built $dir  ($(du -sh "$dir" | cut -f1))"
