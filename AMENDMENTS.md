@@ -136,7 +136,7 @@ unchanged.
 
 ---
 
-### 8. Annotations cannot target a text selection — new, unanswered
+### 8. Annotations cannot target a text selection — ANSWERED in 0.6.0
 
 Raised on the `decisions` space: *"it seems that we are missing selected-then-comment
 type of annotation, which targets the selected parts only."*
@@ -160,6 +160,18 @@ isolation is exactly what makes agent-authored HTML safe to render at all.
 **Ask:** confirm you want text-quote selectors, and whether v1 may restrict them to
 text-node kinds (`md`, `plain`), leaving `html` cards with point and rect. That
 restriction is what keeps the sandbox intact.
+
+**Resolved (0.6.0, issue #23): text-quote selectors declined; the underlying defect
+was anchoring, and that is fixed.** The discussion surfaced what was actually broken:
+a pin was a fraction of the *visible* box, so scrolling a card left the pin glued to
+the box, pointing at whatever content passed beneath — the feeling that a selection
+"didn't stick". Selectors are now fractions of the card's **content region** and the
+UI tracks scroll, so pins stay under what was pointed at; on `html` cards a tiny
+script injected at render time reports scroll metrics out of the sandbox (it grants
+the frame nothing). Since fractions still tell an agent nothing without a renderer,
+the UI also captures the text under a dropped pin and quotes it into the comment
+body — agents read bodies already, and the human reviews the quote before sending.
+Wire shapes are unchanged; see `contracts/README.md` 0.6.0.
 
 ---
 

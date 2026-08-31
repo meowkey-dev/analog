@@ -18,7 +18,7 @@ import (
 )
 
 // Version is what /health reports. It matches contracts/openapi.json info.version.
-const Version = "0.5.0"
+const Version = "0.6.0"
 
 // API is the prefix every documented operation sits behind.
 const API = config.APIPrefix

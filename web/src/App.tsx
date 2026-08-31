@@ -571,6 +571,7 @@ export default function App() {
           draft={draft}
           cardTitle={draftCard.sp_title || draftCard.id}
           onCancel={() => setDraft(null)}
+          onDismissQuote={() => setDraft((d) => (d ? { ...d, quote: undefined } : d))}
           onSubmit={submitAnnotation}
         />
       )}

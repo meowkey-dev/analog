@@ -175,13 +175,21 @@ so real selectors can drop in later, but v1 only implements two:
 
 ```jsonc
 null                                        // whole card
-{"type": "point", "x": 0.34, "y": 0.71}     // fraction of card box
+{"type": "point", "x": 0.34, "y": 0.71}     // fraction of the content region
 {"type": "rect",  "x": 0.1, "y": 0.2, "w": 0.3, "h": 0.25}
 ```
 
-Normalized fractions, not pixels, so annotations survive resize. Deliberately *not*
-doing CSS/text selectors in v1 — add `{"type":"css", ...}` later without touching
-anything else.
+Normalized fractions of the card's **content region** — the scrollable body,
+excluding header and footer — not of the visible box, so a pin stays on the content
+it was placed on when the card scrolls (issue #23). A card whose content does not
+scroll measures identically either way. Fractions, not pixels, so annotations
+survive resize. Deliberately *not* doing CSS/text selectors in v1 — add
+`{"type":"css", ...}` later without touching anything else.
+
+Fractions need a renderer to mean anything, so agents cannot resolve them alone.
+The UI therefore resolves the text under a dropped pin at creation time and quotes
+it into the comment body (as a blockquote) — the body is the channel agents already
+read, and the human reviews the quote before sending.
 
 **Staleness.** Fractions survive a resize but not a content rewrite: once the agent
 replaces a card's content, a pin may point at nothing. So annotations record the
@@ -602,7 +610,8 @@ Flagged so nobody treats them as load-bearing:
 
 - SQLite over Postgres — swap when concurrent writers hurt.
 - Whole-node JSON blobs over normalized columns — chosen for schema stability.
-- Normalized-fraction selectors over W3C CSS/text selectors — chosen for speed.
+- Normalized-fraction selectors over W3C CSS/text selectors — chosen for speed; the
+  UI folds a quote of the targeted text into the comment body to bridge the gap.
 - SSE over WebSocket — one-directional is all we need; writes go over HTTP.
 - FastAPI/Python for the server because the MCP ecosystem is Python-heavy; Hono/TS
   would be equally fine and would let the whole thing share types with the frontend.

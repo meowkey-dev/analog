@@ -134,6 +134,23 @@ Deliberately *not* changed: a resolve **without** a reply still lands in no buck
 Resolving remains the acknowledgment; only an answer is a message. Whether
 replies-on-resolve become a conversational channel is issue #22's open question.
 
+### 0.6.0 — 2026-08-31 · selectors anchor to content, not the visible box
+
+Requested in `../AMENDMENTS.md` #8, filed as issue #23. A pin was stored as a
+fraction of the *visible* card box, so the moment the body scrolled the pin stayed
+glued to the box and pointed at whatever content happened to pass under it. The
+reference is now the card's **content region**: the scrollable body, excluding
+header and footer.
+
+| Change |
+|---|
+| `Selector.description` reworded. No shape changed: still `null \| point \| rect` with 0..1 fractions, and a card whose content does not scroll measures identically either way. |
+
+No fixture changed: the wire JSON is untouched; only what a fraction *means*.
+Text-quote selectors (W3C `TextQuoteSelector`) were considered and declined — the
+content-relative rect covers "this part", and quote anchoring adds a staleness
+problem (reflow) that `card_rev` cannot express. Issue #23 tracks the anchoring fix.
+
 ## One correction to the spec
 
 `GET /spaces/{slug}/feedback` is in `openapi.json` but was not in §3 of the build
