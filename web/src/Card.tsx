@@ -42,7 +42,33 @@ function useMediaSrc(path: string | undefined): string | undefined {
 }
 
 /**
- * Renders one card by sp_kind (SPEC §5).
+ * Markdown card themes (#41). The frozen contract has nowhere to store per-card
+ * UI state, so the choice is a per-browser preference in localStorage, keyed by
+ * card id; `default` is the absence of a choice and inherits the card chrome.
+ */
+export const MD_THEMES = [
+  { id: "default", label: "Default", swatch: "#1d212a" },
+  { id: "nord", label: "Nord", swatch: "#2e3440" },
+  { id: "paper", label: "Paper", swatch: "#f7f5f0" },
+  { id: "solar", label: "Solarized", swatch: "#fdf6e3" },
+] as const;
+
+export type MdTheme = (typeof MD_THEMES)[number]["id"];
+
+const mdThemeKey = (id: string) => `analog.mdtheme.${id}`;
+
+function loadMdTheme(id: string): MdTheme {
+  const stored = localStorage.getItem(mdThemeKey(id));
+  return MD_THEMES.some((t) => t.id === stored) ? (stored as MdTheme) : "default";
+}
+
+/** Where a card can be grabbed to resize (#37). Edges and corners, not just se. */
+export type ResizeDir = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
+
+const RESIZE_DIRS: ResizeDir[] = ["n", "s", "e", "w", "ne", "nw", "se", "sw"];
+
+/**
+ * Renders one card body by sp_kind (SPEC §5).
  *
  *   plain -> <pre>            md -> react-markdown
  *   svg   -> inlined, sanitized
@@ -50,7 +76,7 @@ function useMediaSrc(path: string | undefined): string | undefined {
  *            HTML can neither read the parent document nor forge an annotation.
  *   file  -> <img>, because binary content is a JSON Canvas file node (§2.1).
  */
-function Body({ node }: { node: Node }) {
+function Body({ node, mdTheme }: { node: Node; mdTheme: MdTheme }) {
   const kind = node.type === "file" ? "file" : (node.sp_kind ?? "plain");
 
   const svg = useMemo(
@@ -61,7 +87,7 @@ function Body({ node }: { node: Node }) {
   switch (kind) {
     case "md":
       return (
-        <div className="card-body md">
+        <div className={`card-body md md-theme-${mdTheme}`}>
           <Markdown remarkPlugins={[remarkGfm]}>{node.text ?? ""}</Markdown>
         </div>
       );
@@ -113,7 +139,7 @@ export interface CardProps {
   onSelectAnnotation: (id: string) => void;
   onToggleCollapsed: (id: string) => void;
   onPointerDownHeader: (event: React.PointerEvent, node: Node) => void;
-  onPointerDownResize: (event: React.PointerEvent, node: Node) => void;
+  onPointerDownResize: (event: React.PointerEvent, node: Node, dir: ResizeDir) => void;
   onPointerDownLink: (event: React.PointerEvent, node: Node) => void;
   onSelect: (id: string) => void;
   onStartEdit: (id: string) => void;
@@ -130,6 +156,14 @@ function CardView(props: CardProps) {
   const kind = node.type === "file" ? "file" : (node.sp_kind ?? "plain");
   // Superseded cards can show what the revision changed (#6).
   const [view, setView] = useState<"content" | "diff">("content");
+  const [mdTheme, setMdTheme] = useState<MdTheme>(() => loadMdTheme(node.id));
+  const [themeOpen, setThemeOpen] = useState(false);
+
+  const chooseMdTheme = (theme: MdTheme) => {
+    setMdTheme(theme);
+    localStorage.setItem(mdThemeKey(node.id), theme);
+    setThemeOpen(false);
+  };
 
   const style: React.CSSProperties = {
     left: node.x,
@@ -161,7 +195,10 @@ function CardView(props: CardProps) {
       className={`card${selected ? " selected" : ""}${superseded ? " superseded" : ""}`}
       style={style}
       data-card-id={node.id}
-      onPointerDown={() => props.onSelect(node.id)}
+      onPointerDown={() => {
+        setThemeOpen(false);
+        props.onSelect(node.id);
+      }}
       onDoubleClick={(e) => {
         if (node.type === "text" && !superseded) {
           e.stopPropagation();
@@ -183,6 +220,25 @@ function CardView(props: CardProps) {
         )}
         {kind === "html" && (
           <button className="icon" title="Open full window" onClick={() => props.onPopOut(node)}>⤢</button>
+        )}
+        {kind === "md" && !superseded && (
+          <div className="theme-wrap"
+               onPointerDown={(e) => e.stopPropagation()}
+               onKeyDown={(e) => { if (e.key === "Escape") setThemeOpen(false); }}>
+            <button className={`icon${themeOpen ? " on" : ""}`} title="Markdown theme"
+                    onClick={() => setThemeOpen((o) => !o)}>🎨</button>
+            {themeOpen && (
+              <div className="theme-menu" role="menu" aria-label="Markdown theme">
+                {MD_THEMES.map((t) => (
+                  <button key={t.id} role="menuitem" className={t.id === mdTheme ? "on" : ""}
+                          onClick={() => chooseMdTheme(t.id)}>
+                    <span className="swatch" style={{ background: t.swatch }} />
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         )}
         <button className="icon danger" title="Delete card" onClick={() => props.onDelete(node.id)}>×</button>
       </div>
@@ -218,7 +274,7 @@ function CardView(props: CardProps) {
           }}
         />
       ) : (
-        <Body node={node} />
+        <Body node={node} mdTheme={mdTheme} />
       )}
 
       {props.threadOpen && props.thread.length > 0 && (
@@ -239,8 +295,10 @@ function CardView(props: CardProps) {
 
       {!superseded && (
         <>
-          <div className="handle resize" title="Resize"
-               onPointerDown={(e) => props.onPointerDownResize(e, node)} />
+          {RESIZE_DIRS.map((dir) => (
+            <div key={dir} className={`handle resize ${dir}`} title="Resize"
+                 onPointerDown={(e) => props.onPointerDownResize(e, node, dir)} />
+          ))}
           <div className="handle link" title="Drag to another card to link"
                onPointerDown={(e) => props.onPointerDownLink(e, node)} />
         </>
