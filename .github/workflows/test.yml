@@ -94,3 +94,7 @@ jobs:
       - name: tsc --noEmit && vite build
         working-directory: web
         run: npm run build
+
+      - name: Web unit tests
+        working-directory: web
+        run: npm test
