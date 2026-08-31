@@ -33,100 +33,49 @@ curl -L https://github.com/meowkey-dev/analog/releases/latest/download/analog-da
 
 Then open <http://127.0.0.1:8787>.
 
-### From source
-
-```bash
-(cd web && npm install && npm run build)     # the bundle the server embeds
-scripts/build.sh                             # -> bin/
-```
-
-If `npm --version` reports something implausible (a Bun or Volta shim, say), point at
-a real Node install — Vite 8 will not run under a shim. Without a built bundle the
-server still runs; it just serves the API and no UI.
-
-`scripts/build.sh darwin/arm64 linux/amd64 windows/amd64` cross-compiles. `CGO_ENABLED=0`
-throughout, so no target needs a C toolchain.
-
 ## Run
 
-```bash
-bin/analog-server seed --reset      # load contracts/fixtures/ into a fresh database
-bin/analog-server
-```
-
-Then open <http://127.0.0.1:8787/s/redesign>. The server serves its embedded bundle,
-so that is one origin with no proxy. For frontend work, `cd web && npm run dev` gives
-HMR on :5173 and proxies `/api` to :8787.
-
-`/s/redesign?fixture` renders `contracts/fixtures/` with no database behind it.
-
-The database, media and tokens live in `./data`, or wherever `ANALOG_DATA_DIR` points.
-
-## Running it somewhere else
-
-On loopback with no tokens Analog is open, and that stays the default. The moment you
-bind anything else it refuses to start until a token exists, because an
-unauthenticated Analog on a network is world-writable.
+Start the server:
 
 ```bash
-analog-server token add kai --kind human          # on the server; shown once
-analog-server token add claude-code --kind agent
-analog-server --host 0.0.0.0
+analog-server
 ```
 
-A token identifies **exactly one actor**, and the server takes `actor` from it. A
-client claiming a name its token does not hold gets a `403`, so what the event log
-says about who did what is true rather than asserted. `token list` and
-`token revoke <actor>` manage them; reissuing revokes the previous one. The same
-command group is on the client as `analog token ...`, for when that is what is
-installed — either way it reads the server's auth file, so it runs on the server host.
+Then open <http://127.0.0.1:8787>. The server serves its embedded bundle, so the UI and
+API use one origin with no proxy. The database, media and tokens live in `./data`, or
+wherever `ANALOG_DATA_DIR` points.
 
-From a client:
+## Onboard an agent
+
+Once the server is running, give an agent an identity, a surface — MCP or the CLI —
+and the skill that teaches the workflow the API cannot. For Claude Code working in a
+project at `~/src/my-project`, one command sets up all three:
 
 ```bash
-analog login https://analog.example.com --token analog_...
+analog onboard claude-code \
+  --issue \
+  --url http://127.0.0.1:8787 \
+  --skill-into ~/.claude/skills \
+  --claude-env ~/src/my-project \
+  --print-mcp
 ```
 
-That writes `~/.analog.toml` (mode 600) and learns your actor from the server.
-`analog whoami` says which server you are talking to and who it thinks you are — the
-first thing to run when something returns 401 or 403. Agents can set `ANALOG_URL` /
-`ANALOG_ACTOR` / `ANALOG_TOKEN` instead. Exit code **3** always means an auth
-problem.
+In the help output, `--claude-env string` uses `string` as a placeholder for the
+project directory; it is not the literal word `string`. Use `--claude-env .` for the
+current project. It merges `ANALOG_URL`, `ANALOG_ACTOR`, `ANALOG_ACTOR_KIND`,
+`ANALOG_TOKEN` when supplied, and `ANALOG_CONFIG=/nonexistent` into the project's
+`.claude/settings.local.json`; Claude Code reads that file when a session starts, so
+restart the agent afterward. The local settings file is gitignored, which keeps the
+token out of git.
 
-The web UI asks for a token on first load and keeps it in `localStorage`.
-Deliberately **not** a cookie: a card's sandboxed iframe cannot set an
-`Authorization` header, so agent-authored HTML has no ambient credential to ride —
-which is the concern SPEC §8 raised about this app touching a network.
-
-See [deploy/](deploy/README.md) for systemd and TLS.
-
-## Desktop app
-
-There is one, and it is a separate commercial product: a local sidecar that runs its
-own server, so you never see a port. It talks to this code over the HTTP API in
-`contracts/` like any other client — it has no private fork of the server.
-
-You do not need it. `analog-server` plus a browser is the whole thing, which is what
-the rest of this README documents.
-
-## Giving an agent access
-
-Three things have to line up: a **token** (the server decides who the agent is), a
-**surface** — MCP or the CLI — carrying that token, and the **skill**, which teaches
-the workflow the API cannot. One command sets up all three:
-
-```bash
-analog onboard claude-code --issue --url http://127.0.0.1:8787 --skill-into ~/.claude/skills --print-mcp
-```
-
-`--issue` mints the token, so it has to run on the server host; everything else runs
-wherever the agent does. Drop `--issue` and pass `--token` if you already have one.
-The skill rides inside the binary, so a release or brew install can onboard with no
-checkout: `brew install analog && analog onboard claude-code --claude-env ~/proj`.
+`--issue` mints the token and therefore runs on the server host. If the agent is on a
+different machine, mint it there first, then run the onboarding command on the agent's
+machine with `--token` instead. Drop `--issue` if you already have a token. The skill
+is embedded in the binary, so a release or brew install can onboard without a checkout.
 
 ### MCP
 
-Ten tools over stdio (SPEC §4.1). The command above prints this filled in:
+Ten tools over stdio (SPEC §4.1). The command above prints the filled-in command:
 
 ```bash
 claude mcp add analog -e ANALOG_URL=http://127.0.0.1:8787 -e ANALOG_ACTOR=claude-code -e ANALOG_ACTOR_KIND=agent -e ANALOG_TOKEN=analog_... -- /path/to/analog-mcp
@@ -189,23 +138,16 @@ so it is mode 700 and lives outside the repo.
 ### The skill, without MCP
 
 The skill teaches the CLI, so it needs the CLI configured — it is documentation, not
-credentials. Three pieces:
+credentials:
 
 ```bash
-ln -sf "$PWD/bin/analog" ~/.local/bin/analog     # `analog` on PATH, as the skill writes it
 analog onboard claude-code --url https://analog.example.com --token analog_... --skill-into ~/.claude/skills --claude-env ~/code/that-project
 ```
 
-`--claude-env` merges `ANALOG_URL` / `ANALOG_ACTOR` / `ANALOG_ACTOR_KIND` /
-`ANALOG_TOKEN` into that project's `.claude/settings.local.json`, which Claude Code
-applies to its Bash tool calls. It merges rather than overwrites, and
-`settings.local.json` is the gitignored one — the token stays out of git. It also
-sets `ANALOG_CONFIG=/nonexistent` so a `~/.analog.toml` belonging to *you* cannot
-make the agent post under your name. To share the wiring through the committed
-`settings.json` instead, add `--claude-env-shared` — and keep the token out of it.
-
-Then **restart the agent**: both the skill listing and `settings.local.json` are read
-at session start.
+`--claude-env-shared` targets the committed `.claude/settings.json` instead of the
+gitignored `settings.local.json`; use it only for non-secret wiring. Keep the token
+out of the shared file. If you are running from a source checkout, use `bin/analog`
+instead of `analog` when the binary is not on `PATH`.
 
 Mint the token on whichever machine runs the server — `analog-server token add
 claude-code --kind agent` — since that is where the token store lives.
@@ -216,7 +158,84 @@ feedback *first*, one idea per card, always label links, don't resolve what you
 haven't acted on, don't rearrange the human's canvas. An agent with the tools and no
 skill will use Analog as a dumping ground.
 
-## Test
+## Running it somewhere else
+
+On loopback with no tokens Analog is open, and that stays the default. The moment you
+bind anything else it refuses to start until a token exists, because an
+unauthenticated Analog on a network is world-writable.
+
+```bash
+analog-server token add kai --kind human          # on the server; shown once
+analog-server token add claude-code --kind agent
+analog-server --host 0.0.0.0
+```
+
+A token identifies **exactly one actor**, and the server takes `actor` from it. A
+client claiming a name its token does not hold gets a `403`, so what the event log
+says about who did what is true rather than asserted. `token list` and
+`token revoke <actor>` manage them; reissuing revokes the previous one. The same
+command group is on the client as `analog token ...`, for when that is what is
+installed — either way it reads the server's auth file, so it runs on the server host.
+
+From a client:
+
+```bash
+analog login https://analog.example.com --token analog_...
+```
+
+That writes `~/.analog.toml` (mode 600) and learns your actor from the server.
+`analog whoami` says which server you are talking to and who it thinks you are — the
+first thing to run when something returns 401 or 403. Agents can set `ANALOG_URL` /
+`ANALOG_ACTOR` / `ANALOG_TOKEN` instead. Exit code **3** always means an auth
+problem.
+
+The web UI asks for a token on first load and keeps it in `localStorage`.
+Deliberately **not** a cookie: a card's sandboxed iframe cannot set an
+`Authorization` header, so agent-authored HTML has no ambient credential to ride —
+which is the concern SPEC §8 raised about this app touching a network.
+
+See [deploy/](deploy/README.md) for systemd and TLS.
+
+## Desktop app
+
+There is one, and it is a separate commercial product: a local sidecar that runs its
+own server, so you never see a port. It talks to this code over the HTTP API in
+`contracts/` like any other client — it has no private fork of the server.
+
+You do not need it. `analog-server` plus a browser is the whole thing, which is what
+the rest of this README documents.
+
+## Development
+
+The remaining sections are for contributors: building from a checkout, running the
+fixture space, testing, and understanding the repository layout.
+
+### Build from source
+
+```bash
+(cd web && npm install && npm run build)     # the bundle the server embeds
+scripts/build.sh                             # -> bin/
+```
+
+If `npm --version` reports something implausible (a Bun or Volta shim, say), point at
+a real Node install — Vite 8 will not run under a shim. Without a built bundle the
+server still runs; it just serves the API and no UI.
+
+`scripts/build.sh darwin/arm64 linux/amd64 windows/amd64` cross-compiles. `CGO_ENABLED=0`
+throughout, so no target needs a C toolchain.
+
+To run the seeded fixture from a checkout:
+
+```bash
+bin/analog-server seed --reset      # load contracts/fixtures/ into a fresh database
+bin/analog-server
+```
+
+Then open <http://127.0.0.1:8787/s/redesign>. For frontend work, `cd web && npm run dev`
+gives HMR on :5173 and proxies `/api` to :8787. `/s/redesign?fixture` renders
+`contracts/fixtures/` with no database behind it.
+
+### Test
 
 ```bash
 go test ./...                           # 113 tests
@@ -237,7 +256,7 @@ server binary must honour.
 
 Everything that needs the implementation's own objects is a Go test beside the code.
 
-## The §7 acceptance demo
+### The §7 acceptance demo
 
 With the server running:
 
@@ -253,7 +272,7 @@ Step 7 asserts the three things the design exists for: every delta Agent A recei
 came from the human, Agent B's writes are not replayed to Agent A as feedback, and
 the annotation Agent B resolved is gone.
 
-## Layout
+### Layout
 
     cmd/
       analog/          the `analog` CLI
@@ -275,7 +294,7 @@ the annotation Agent B resolved is gone.
     scripts/           build.sh, demo.py, onboard_agent.py (deprecated shim)
     tests/             the conformance harness
 
-## CI
+### CI
 
 `.github/workflows/test.yml` runs `go test`, the conformance suite against a built
 binary on Linux and macOS, and the web typecheck. `release.yml` cross-compiles the
