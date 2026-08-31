@@ -187,6 +187,9 @@ input, textarea, select {
 .diff-row.skip { color: var(--dim); justify-content: center; }
 
 .card-body { flex: 1; overflow: auto; padding: 10px 12px; min-height: 0; }
+/* The scrollable content and the annotation overlay share this box (#23): pins
+   are positioned — and clipped — against the content region, not the whole card. */
+.body-zone { position: relative; flex: 1; min-height: 0; display: flex; overflow: hidden; }
 .card-body.plain { margin: 0; white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .card-body.svg { display: grid; place-items: center; }
 .card-body.svg svg { max-width: 100%; max-height: 100%; }
@@ -328,6 +331,13 @@ input, textarea, select {
   display: flex; flex-direction: column; gap: 8px;
 }
 .composer-head { color: var(--dim); }
+.composer-quote {
+  display: flex; gap: 6px; align-items: baseline;
+  border-left: 3px solid var(--warn); padding: 4px 8px;
+  color: var(--dim); font-size: 12px; max-height: 72px; overflow: auto;
+}
+.composer-quote span { flex: 1; }
+.composer-quote button { padding: 0 6px; }
 .composer textarea { min-height: 72px; resize: vertical; }
 .composer-foot { display: flex; gap: 8px; align-items: center; }
 .composer-foot .hint { flex: 1; color: var(--dim); font-size: 11px; }

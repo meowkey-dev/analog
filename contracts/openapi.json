@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Analog API",
-    "version": "0.5.0",
+    "version": "0.6.0",
     "description": "Shared canvas for a human and their agents. FROZEN CONTRACT — amendments go through WP0 only. Every mutating operation requires actor and actor_kind and emits an event for each object it creates or changes."
   },
   "servers": [{ "url": "http://127.0.0.1:8787/api" }],
@@ -131,7 +131,7 @@
         }
       },
       "Selector": {
-        "description": "Normalized fractions of the card box. null means the whole card.",
+        "description": "Normalized fractions of the card's content region — the scrollable body, not the visible box — so a pin stays on the content it was placed on when the card scrolls. Identical to fractions of the box when the content does not scroll. null means the whole card.",
         "oneOf": [
           { "type": "null" },
           {

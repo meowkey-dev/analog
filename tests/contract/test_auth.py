@@ -40,7 +40,7 @@ def auth(client, actor):
 
 def test_health_on_an_open_server(client):
     assert client.get("/api/health").json() == {
-        "ok": True, "service": "analog", "version": "0.5.0", "auth_required": False}
+        "ok": True, "service": "analog", "version": "0.6.0", "auth_required": False}
 
 
 def test_health_needs_no_token_and_says_one_is_needed(secured):

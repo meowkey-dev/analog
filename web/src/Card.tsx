@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import DOMPurify from "dompurify";
@@ -75,47 +75,109 @@ const RESIZE_DIRS: ResizeDir[] = ["n", "s", "e", "w", "ne", "nw", "se", "sw"];
  *   svg   -> inlined, sanitized
  *   html  -> <iframe sandbox="allow-scripts"> with NO allow-same-origin, so agent
  *            HTML can neither read the parent document nor forge an annotation.
+ *            The renderer prepends one script of its own (SCROLL_REPORTER) that
+ *            posts scroll/size metrics — and on request a text quote — out to the
+ *            parent, so pins can follow the content (#23). It grants the frame no
+ *            capability and exfiltrates nothing; a card that spoofs those messages
+ *            only displaces its own pins.
  *   file  -> <img>, because binary content is a JSON Canvas file node (§2.1).
  */
-function Body({ node, mdTheme }: { node: Node; mdTheme: MdTheme }) {
+function Body({ node, mdTheme, bodyRef }: {
+  node: Node; mdTheme: MdTheme; bodyRef: (el: HTMLElement | null) => void;
+}) {
   const kind = node.type === "file" ? "file" : (node.sp_kind ?? "plain");
 
   const svg = useMemo(
     () => (kind === "svg" ? DOMPurify.sanitize(node.text ?? "", { USE_PROFILES: { svg: true, svgFilters: true } }) : ""),
     [kind, node.text],
   );
+  // Injecting at render time, never into the stored text: the card stays verbatim
+  // on the wire and in the editor.
+  const html = useMemo(
+    () => (kind === "html" ? withScrollReporter(node.text ?? "") : ""),
+    [kind, node.text],
+  );
 
   switch (kind) {
     case "md":
       return (
-        <div className={`card-body md md-theme-${mdTheme}`}>
+        <div ref={bodyRef} className={`card-body md md-theme-${mdTheme}`}>
           <Markdown remarkPlugins={[remarkGfm]}>{node.text ?? ""}</Markdown>
         </div>
       );
     case "svg":
-      return <div className="card-body svg" dangerouslySetInnerHTML={{ __html: svg }} />;
+      return <div ref={bodyRef} className="card-body svg" dangerouslySetInnerHTML={{ __html: svg }} />;
     case "html":
       return (
         <iframe
+          ref={bodyRef}
           className="card-body html"
           sandbox="allow-scripts"
-          srcDoc={node.text ?? ""}
+          srcDoc={html}
           title={node.sp_title ?? node.id}
         />
       );
     case "file":
-      return <FileBody node={node} />;
+      return <FileBody node={node} bodyRef={bodyRef} />;
     default:
-      return <pre className="card-body plain">{node.text ?? ""}</pre>;
+      return <pre ref={bodyRef} className="card-body plain">{node.text ?? ""}</pre>;
   }
 }
 
-function FileBody({ node }: { node: Node }) {
+/**
+ * Prepended into html card content at render time (issue #23). Reports the
+ * document's scroll/size metrics so the parent can anchor pins to the content
+ * rather than the visible box, and quotes the text under a pin on request.
+ * Kept dependency-free and read-only: it observes the frame's own document and
+ * talks to the parent that put it there.
+ */
+const SCROLL_REPORTER = [
+  "<script>(function(){",
+  "var raf=0;",
+  "function metrics(){",
+  "var de=document.documentElement,b=document.body;",
+  "return{cw:Math.max(de.scrollWidth,b?b.scrollWidth:0),ch:Math.max(de.scrollHeight,b?b.scrollHeight:0),",
+  "vw:de.clientWidth,vh:de.clientHeight,sx:de.scrollLeft||(b?b.scrollLeft:0),sy:de.scrollTop||(b?b.scrollTop:0)};}",
+  "function send(){var m=metrics();m.type='analog-scroll';parent.postMessage(m,'*');}",
+  "function soon(){cancelAnimationFrame(raf);raf=requestAnimationFrame(send);}",
+  "function quoteFor(vx,vy,vw,vh){",
+  "var t={left:vx,top:vy,right:vx+vw,bottom:vy+vh},parts=[],w=document.createTreeWalker(document,NodeFilter.SHOW_TEXT),n,range=null,rects,i,out='';",
+  "while((n=w.nextNode())){",
+  "if(!n.nodeValue||!n.nodeValue.trim())continue;",
+  "range=range||document.createRange();range.selectNodeContents(n);",
+  "rects=range.getClientRects();",
+  "for(i=0;i<rects.length;i++){",
+  "if(rects[i].left<=t.right&&rects[i].right>=t.left&&rects[i].top<=t.bottom&&rects[i].bottom>=t.top){parts.push(n.nodeValue);break;}}}",
+  "out=parts.join(' ').replace(/\\s+/g,' ').trim();",
+  "return out.length>240?out.slice(0,240)+'…':out;}",
+  "addEventListener('scroll',soon,true);",
+  "addEventListener('resize',soon);",
+  "addEventListener('load',send);",
+  "if(self.ResizeObserver)new ResizeObserver(soon).observe(document.documentElement);",
+  "addEventListener('message',function(e){",
+  "if(e.source!==parent)return;",
+  "var d=e.data;",
+  "if(!d||d.type!=='analog-quote')return;",
+  "var t=quoteFor(d.vx||0,d.vy||0,d.vw||0,d.vh||0);",
+  "if(t)parent.postMessage({type:'analog-quote',text:t},'*');});",
+  "send();",
+  "})();</script>",
+].join("");
+
+/** Insert after the doctype if there is one; ahead of it would flip quirks mode. */
+function withScrollReporter(html: string): string {
+  const doctype = /^\s*<!DOCTYPE[^>]*>/i.exec(html);
+  return doctype
+    ? html.replace(doctype[0], doctype[0] + SCROLL_REPORTER)
+    : SCROLL_REPORTER + html;
+}
+
+function FileBody({ node, bodyRef }: { node: Node; bodyRef: (el: HTMLElement | null) => void }) {
   const src = useMediaSrc(node.file);
   const isImage = !/\.pdf$/i.test(node.file ?? "");
-  if (!src) return <div className="card-body file muted">loading…</div>;
+  if (!src) return <div ref={bodyRef} className="card-body file muted">loading…</div>;
   return (
-    <div className="card-body file">
+    <div ref={bodyRef} className="card-body file">
       {isImage
         ? <img src={src} alt={node.sp_title ?? ""} draggable={false} />
         : <a href={src} target="_blank" rel="noreferrer">{node.sp_title || node.file}</a>}
@@ -162,6 +224,10 @@ function CardView(props: CardProps) {
   const [view, setView] = useState<"content" | "diff">("content");
   const [mdTheme, setMdTheme] = useState<MdTheme>(() => loadMdTheme(node.id));
   const [themeOpen, setThemeOpen] = useState(false);
+  // The scrollable body element (the iframe itself for html): the annotation
+  // overlay measures it to anchor pins to the content (#23).
+  const bodyRef = useRef<HTMLElement | null>(null);
+  const setBody = useCallback((el: HTMLElement | null) => { bodyRef.current = el; }, []);
 
   const chooseMdTheme = (theme: MdTheme) => {
     setMdTheme(theme);
@@ -261,25 +327,40 @@ function CardView(props: CardProps) {
         </div>
       )}
 
-      {superseded && view === "diff" && props.successor && props.successor.text !== undefined ? (
-        <DiffView before={node.text ?? ""} after={props.successor.text ?? ""} />
-      ) : editing ? (
-        <textarea
-          className="card-body editor"
-          defaultValue={node.text ?? ""}
-          autoFocus
-          onPointerDown={(e) => e.stopPropagation()}
-          onBlur={(e) => props.onCommitEdit(node.id, e.currentTarget.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Escape") props.onCancelEdit();
-            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-              props.onCommitEdit(node.id, e.currentTarget.value);
-            }
-          }}
+      {/* The zone the overlay shares with the content: pins are positioned and
+          clipped against the scrollable body, not the whole card (#23). */}
+      <div className="body-zone">
+        {superseded && view === "diff" && props.successor && props.successor.text !== undefined ? (
+          <DiffView before={node.text ?? ""} after={props.successor.text ?? ""} />
+        ) : editing ? (
+          <textarea
+            className="card-body editor"
+            defaultValue={node.text ?? ""}
+            autoFocus
+            onPointerDown={(e) => e.stopPropagation()}
+            onBlur={(e) => props.onCommitEdit(node.id, e.currentTarget.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") props.onCancelEdit();
+              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                props.onCommitEdit(node.id, e.currentTarget.value);
+              }
+            }}
+          />
+        ) : (
+          <Body node={node} mdTheme={mdTheme} bodyRef={setBody} />
+        )}
+
+        <AnnotationOverlay
+          node={node}
+          bodyRef={bodyRef}
+          annotations={props.thread}
+          active={props.annotateMode}
+          draft={props.draft}
+          selectedId={props.selectedAnnotation}
+          onSelect={props.onSelectAnnotation}
+          onDraft={props.onDraft}
         />
-      ) : (
-        <Body node={node} mdTheme={mdTheme} />
-      )}
+      </div>
 
       {props.threadOpen && props.thread.length > 0 && (
         <div className="card-thread" onPointerDown={(e) => e.stopPropagation()}>
@@ -294,16 +375,6 @@ function CardView(props: CardProps) {
           ))}
         </div>
       )}
-
-      <AnnotationOverlay
-        node={node}
-        annotations={props.thread}
-        active={props.annotateMode}
-        draft={props.draft}
-        selectedId={props.selectedAnnotation}
-        onSelect={props.onSelectAnnotation}
-        onDraft={props.onDraft}
-      />
 
       {!superseded && (
         <>
