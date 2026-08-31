@@ -27,7 +27,7 @@ import (
 // the release archives and in brew), then on PATH.
 func onboardCmd() *cobra.Command {
 	var kind, url, token, skillInto, claudeEnv, wrapper string
-	var issue, printMCP, printEnv bool
+	var issue, printMCP, printEnv, claudeEnvShared bool
 
 	cmd := &cobra.Command{
 		Use:   "onboard <actor>",
@@ -40,6 +40,9 @@ func onboardCmd() *cobra.Command {
 			actor := args[0]
 			if kind != "agent" && kind != "human" {
 				return usage("--kind must be agent or human, not %q", kind)
+			}
+			if claudeEnvShared && claudeEnv == "" {
+				return usage("--claude-env-shared needs --claude-env PROJECT")
 			}
 
 			if issue {
@@ -61,11 +64,15 @@ func onboardCmd() *cobra.Command {
 			}
 
 			if claudeEnv != "" {
-				target, err := writeClaudeEnv(expandTilde(claudeEnv), actor, kind, url, token)
+				target, err := writeClaudeEnv(expandTilde(claudeEnv), actor, kind, url, token, claudeEnvShared)
 				if err != nil {
 					return err
 				}
 				fmt.Printf("claude env: %s\n", target)
+				if claudeEnvShared && token != "" {
+					errln("  warning: settings.json is usually committed, and this file now carries a token.")
+					errln("  Keep it in settings.local.json (the default) if this project ends up in git.")
+				}
 				if token == "" {
 					fmt.Println("  no token written — add ANALOG_TOKEN there once the server issues one.")
 				}
@@ -148,6 +155,8 @@ func onboardCmd() *cobra.Command {
 		"print the exports an agent with only a shell needs")
 	cmd.Flags().StringVar(&claudeEnv, "claude-env", "",
 		"merge ANALOG_* into PROJECT/.claude/settings.local.json; use . for this project")
+	cmd.Flags().BoolVar(&claudeEnvShared, "claude-env-shared", false,
+		"with --claude-env: target the committed settings.json instead of settings.local.json")
 	cmd.Flags().StringVar(&wrapper, "wrapper", "",
 		"write a wrapper command carrying this actor's config; DIR defaults to ~/.local/bin")
 	return cmd
@@ -276,16 +285,22 @@ func writeWrapper(into, actor, kind, url, token string) (string, error) {
 
 // writeClaudeEnv merges the ANALOG_* env into a project's
 // .claude/settings.local.json — a merge, never a clobber. `settings.local.json`
-// rather than `settings.json` because it holds a token and is the gitignored one.
-// Claude Code applies `env` to its Bash tool calls, so the skill's plain
-// `analog ...` commands work with no wrapper and no exports — but it is read at
-// session start, so an already-running agent needs a restart.
-func writeClaudeEnv(project, actor, kind, url, token string) (string, error) {
+// rather than `settings.json` because it holds a token and is the gitignored one;
+// --claude-env-shared switches the target to the committed settings.json, which
+// the caller warns about when a token is involved. Claude Code applies `env` to
+// its Bash tool calls, so the skill's plain `analog ...` commands work with no
+// wrapper and no exports — but it is read at session start, so an already-running
+// agent needs a restart.
+func writeClaudeEnv(project, actor, kind, url, token string, shared bool) (string, error) {
 	dir := filepath.Join(project, ".claude")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}
-	target := filepath.Join(dir, "settings.local.json")
+	name := "settings.local.json"
+	if shared {
+		name = "settings.json"
+	}
+	target := filepath.Join(dir, name)
 
 	settings := map[string]any{}
 	if raw, err := os.ReadFile(target); err == nil && len(strings.TrimSpace(string(raw))) > 0 {
