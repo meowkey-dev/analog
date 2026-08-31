@@ -100,7 +100,11 @@ input, textarea, select {
 /* A drag must never leave a text selection behind it (#18). */
 .canvas.dragging { user-select: none; -webkit-user-select: none; }
 
-.viewport { position: absolute; inset: 0; transform-origin: 0 0; }
+/* will-change promotes the pan/zoom layer: a JS-set 2D transform is otherwise
+   applied at paint time, re-rasterizing the visible board every frame — 4x the
+   pixels on a high-res display (#45). Promoted, a pan is compositor-only and
+   zoom re-rasters only the visible tiles. */
+.viewport { position: absolute; inset: 0; transform-origin: 0 0; will-change: transform; }
 
 .zoom {
   position: absolute; right: 12px; bottom: 12px;

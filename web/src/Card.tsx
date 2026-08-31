@@ -3,6 +3,7 @@ import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import DOMPurify from "dompurify";
 import { DiffView } from "./Diff";
+import { AnnotationOverlay, type DraftAnnotation } from "./Annotations";
 import { api, getConnection, resolveUrl } from "./api";
 import type { Annotation, Node } from "./api";
 
@@ -131,12 +132,16 @@ export interface CardProps {
   openCount: number;
   revisions: number;
   collapsed: boolean;
-  /** Open comments on this card, for the in-card thread (#5). */
+  /** Unresolved comments on this card: the in-card thread (#5) and the overlay pins. */
   thread: Annotation[];
   threadOpen: boolean;
+  annotateMode: boolean;
+  /** The in-flight pin, while annotate mode is drafting on this card. */
+  draft: DraftAnnotation | null;
   selectedAnnotation: string | null;
   onToggleThread: (id: string) => void;
   onSelectAnnotation: (id: string) => void;
+  onDraft: (draft: DraftAnnotation) => void;
   onToggleCollapsed: (id: string) => void;
   onPointerDownHeader: (event: React.PointerEvent, node: Node) => void;
   onPointerDownResize: (event: React.PointerEvent, node: Node, dir: ResizeDir) => void;
@@ -147,7 +152,6 @@ export interface CardProps {
   onCancelEdit: () => void;
   onDelete: (id: string) => void;
   onPopOut: (node: Node) => void;
-  overlay?: React.ReactNode;
 }
 
 function CardView(props: CardProps) {
@@ -291,7 +295,15 @@ function CardView(props: CardProps) {
         </div>
       )}
 
-      {props.overlay}
+      <AnnotationOverlay
+        node={node}
+        annotations={props.thread}
+        active={props.annotateMode}
+        draft={props.draft}
+        selectedId={props.selectedAnnotation}
+        onSelect={props.onSelectAnnotation}
+        onDraft={props.onDraft}
+      />
 
       {!superseded && (
         <>

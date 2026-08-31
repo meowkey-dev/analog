@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Card, type ResizeDir } from "./Card";
 import { Links } from "./Links";
-import { AnnotationOverlay, type DraftAnnotation } from "./Annotations";
+import type { DraftAnnotation } from "./Annotations";
 import type { Annotation, Edge, Node } from "./api";
 
 /** Pan/zoom via a CSS transform; cards absolutely positioned; raw pointer events. */
@@ -22,6 +22,9 @@ const LINK_COLORS = [
   "#e06c75", "#e0a35a", "#e5c07b", "#63c187",
   "#56b6c2", "#6ea8fe", "#c678dd", "#ff8fab",
 ];
+
+/** Stable empty for cards with no comments; a fresh [] would defeat Card's memo. */
+const NO_THREAD: Annotation[] = [];
 
 interface DragState {
   kind: "card" | "resize" | "pan" | "link";
@@ -74,8 +77,11 @@ export function Canvas(props: CanvasProps) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [threadOpen, setThreadOpen] = useState<Record<string, boolean>>({});
 
+  // Only the dragged card gets a fresh object identity here. Cloning untouched
+  // nodes too would re-render every card — re-parsing every markdown body — on
+  // each pointermove of a drag (#45).
   const nodes = useMemo(
-    () => props.nodes.map((node) => ({ ...node, ...(ghost[node.id] ?? {}) })),
+    () => props.nodes.map((node) => (ghost[node.id] ? { ...node, ...ghost[node.id] } : node)),
     [props.nodes, ghost],
   );
   const nodeMap = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes]);
@@ -90,12 +96,18 @@ export function Canvas(props: CanvasProps) {
     return map;
   }, [props.allNodes, ghost]);
 
-  const openByCard = useMemo(() => {
-    const counts = new Map<string, number>();
+  // Unresolved comments per card, grouped once per annotation change. The arrays
+  // feed both the in-card thread and the overlay pins; handing Card a fresh
+  // filtered array per render would re-render every card on every pan frame (#45).
+  const threads = useMemo(() => {
+    const map = new Map<string, Annotation[]>();
     for (const a of props.annotations) {
-      if (!a.resolved) counts.set(a.card_id, (counts.get(a.card_id) ?? 0) + 1);
+      if (a.resolved) continue;
+      const list = map.get(a.card_id);
+      if (list) list.push(a);
+      else map.set(a.card_id, [a]);
     }
-    return counts;
+    return map;
   }, [props.annotations]);
 
   const revisionCount = useMemo(() => {
@@ -401,14 +413,17 @@ export function Canvas(props: CanvasProps) {
             successor={node.sp_superseded_by ? linkNodes.get(node.sp_superseded_by) : undefined}
             selected={props.selectedCard === node.id}
             editing={editing === node.id}
-            openCount={openByCard.get(node.id) ?? 0}
+            openCount={threads.get(node.id)?.length ?? 0}
             revisions={revisionCount.get(node.id) ?? 1}
             collapsed={collapsed[node.id] ?? false}
-            thread={props.annotations.filter((a) => a.card_id === node.id && !a.resolved)}
+            thread={threads.get(node.id) ?? NO_THREAD}
             threadOpen={threadOpen[node.id] ?? false}
+            annotateMode={props.annotateMode}
+            draft={props.draft}
             selectedAnnotation={props.selectedAnnotation}
             onToggleThread={(id) => setThreadOpen((t) => ({ ...t, [id]: !t[id] }))}
             onSelectAnnotation={props.onSelectAnnotation}
+            onDraft={props.onDraft}
             onToggleCollapsed={(id) => setCollapsed((c) => ({ ...c, [id]: !c[id] }))}
             onPointerDownHeader={startCardDrag}
             onPointerDownResize={startResize}
@@ -422,17 +437,6 @@ export function Canvas(props: CanvasProps) {
             onCancelEdit={() => setEditing(null)}
             onDelete={props.onDeleteCard}
             onPopOut={props.onPopOut}
-            overlay={
-              <AnnotationOverlay
-                node={node}
-                annotations={props.annotations.filter((a) => a.card_id === node.id && !a.resolved)}
-                active={props.annotateMode}
-                draft={props.draft}
-                selectedId={props.selectedAnnotation}
-                onSelect={props.onSelectAnnotation}
-                onDraft={props.onDraft}
-              />
-            }
           />
         ))}
       </div>

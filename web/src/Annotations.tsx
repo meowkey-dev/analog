@@ -22,7 +22,7 @@ interface OverlayProps {
   active: boolean;
   draft: DraftAnnotation | null;
   selectedId: string | null;
-  onSelect: (id: string | null) => void;
+  onSelect: (id: string) => void;
   onDraft: (draft: DraftAnnotation) => void;
 }
 
