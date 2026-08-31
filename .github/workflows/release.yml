@@ -53,7 +53,7 @@ jobs:
 
       - name: Build the matrix
         run: |
-          scripts/build.sh \
+          ANALOG_VERSION="${GITHUB_REF_NAME#v}" scripts/build.sh \
             darwin/arm64 darwin/amd64 linux/amd64 linux/arm64 windows/amd64
 
       # A binary that needs a repo beside it is not a binary you can ship, and the
@@ -67,6 +67,12 @@ jobs:
             echo "$dir  ${size}MB"
             [ "$size" -lt 20 ] || { echo "analog-server is ${size}MB, over the 20MB budget"; exit 1; }
           done
+
+          # The version rode in with the tag; if the injection ever breaks, the
+          # release ships binaries that answer --version with "dev".
+          want="analog version ${GITHUB_REF_NAME#v}"
+          got=$(bin/linux-amd64/analog --version)
+          [ "$got" = "$want" ] || { echo "analog --version said '$got', want '$want'"; exit 1; }
 
           # Run it from an empty directory with no checkout in sight.
           workdir=$(mktemp -d)

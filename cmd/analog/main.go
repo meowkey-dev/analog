@@ -15,6 +15,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/meowkey-dev/analog/client"
+	"github.com/meowkey-dev/analog/internal/version"
 )
 
 // stdinMarker is `-`: SPEC §4.2, so agents can pipe generated content in.
@@ -112,6 +113,7 @@ func root() *cobra.Command {
 		SilenceErrors: false,
 	}
 	cmd.CompletionOptions.DisableDefaultCmd = true
+	version.Attach(cmd)
 	cmd.AddCommand(
 		whoamiCmd(), loginCmd(), tokenCmd(), onboardCmd(),
 		spacesCmd(), newSpaceCmd(), openCmd(), rmSpaceCmd(),

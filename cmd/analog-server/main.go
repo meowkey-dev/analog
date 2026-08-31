@@ -24,6 +24,7 @@ import (
 	"github.com/meowkey-dev/analog/internal/config"
 	"github.com/meowkey-dev/analog/internal/store"
 	"github.com/meowkey-dev/analog/internal/tokencli"
+	"github.com/meowkey-dev/analog/internal/version"
 	"github.com/meowkey-dev/analog/internal/web"
 )
 
@@ -50,6 +51,8 @@ func root() *cobra.Command {
 		"0.0.0.0 to accept connections from other machines")
 	cmd.Flags().IntVar(&port, "port", config.Port(), "TCP port to listen on")
 	cmd.AddCommand(seedCmd(), tokencli.Command())
+	// The binary's version, not the contract's — /api/health reports that one.
+	version.Attach(cmd)
 	return cmd
 }
 

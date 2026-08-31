@@ -14,12 +14,15 @@ import (
 
 	"github.com/meowkey-dev/analog/client"
 	"github.com/meowkey-dev/analog/internal/mcp"
+	"github.com/meowkey-dev/analog/internal/version"
 )
 
 // protocolVersion is the MCP revision this server speaks.
 const protocolVersion = "2024-11-05"
 
-const serverVersion = "0.3.0"
+// serverVersion rides the initialize handshake. Injected at build time; the
+// hard-coded const it replaces had drifted three releases behind.
+var serverVersion = version.Version
 
 type message struct {
 	JSONRPC string          `json:"jsonrpc"`
