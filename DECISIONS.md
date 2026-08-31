@@ -182,6 +182,21 @@ Everything that genuinely needed the implementation's objects — the token stor
 client, the CLI, the MCP tools — is a Go test next to the code. `tests/README.md` has
 the split.
 
+## Loopback CORS (2026-08-30)
+
+- **Loopback origins are echoed by default** (#42): `http://localhost:<any port>`
+  and `http://127.0.0.1:<any port>`, alongside the tauri origins. The desktop app
+  moved its UI to a local sidecar, so the page's origin is a loopback port the
+  server cannot know in advance — the tauri whitelist anticipated the shell being
+  the origin, but the sidecar-served page is what makes the cross-origin calls.
+  Browsers set `Origin` truthfully, so a loopback origin can only come from a page
+  actually served on the user's machine: the same trust class the tauri schemes
+  were for, generalized over the port instead of special-casing one. A suffix like
+  `localhost.evil.example` and other schemes stay denied.
+- **An explicit `ANALOG_CORS_ORIGINS` replaces the defaults wholesale**, loopback
+  matching included — the way it already replaces the tauri origins. A custom list
+  is a deliberate policy, not a delta on top of the defaults.
+
 ## Toolchain
 
 - Go **1.23+**. `CGO_ENABLED=0` everywhere.

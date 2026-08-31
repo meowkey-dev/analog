@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/meowkey-dev/analog/internal/config"
@@ -69,5 +70,25 @@ func (s *Server) originAllowed(origin string) (bool, string) {
 			return true, origin
 		}
 	}
+	if config.LoopbackOriginsAllowed() && isLoopbackOrigin(origin) {
+		return true, origin
+	}
 	return false, origin
+}
+
+// isLoopbackOrigin matches http://localhost:<any port> and http://127.0.0.1:<any
+// port> — the origins a page served on this machine carries. Host compares
+// case-insensitively, as browsers serialize it; a suffix like
+// localhost.evil.example, another scheme, userinfo or a bare "null" is not
+// loopback and stays denied.
+func isLoopbackOrigin(origin string) bool {
+	parsed, err := url.Parse(origin)
+	if err != nil || parsed.User != nil {
+		return false
+	}
+	if !strings.EqualFold(parsed.Scheme, "http") {
+		return false
+	}
+	host := parsed.Hostname()
+	return strings.EqualFold(host, "localhost") || host == "127.0.0.1"
 }

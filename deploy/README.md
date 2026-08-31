@@ -63,7 +63,10 @@ Tokens live in `$ANALOG_DATA_DIR/auth.json` as SHA-256 digests, mode 600. Back u
   `ANALOG_URL` / `ANALOG_ACTOR` / `ANALOG_TOKEN`.
 
 `ANALOG_CORS_ORIGINS` is only needed if the UI is served from a different origin
-than the API. The `tauri://` origins a desktop shell uses are already allowed.
+than the API. The `tauri://` origins a desktop shell uses are already allowed, and
+so are loopback origins (`http://localhost:*`, `http://127.0.0.1:*`) for a
+shell that serves its UI from a local sidecar. Setting the variable replaces all
+of that with exactly the origins you list.
 
 ## Upgrading
 

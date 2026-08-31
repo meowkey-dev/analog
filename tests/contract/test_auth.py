@@ -196,6 +196,29 @@ def test_the_tauri_origin_is_allowed_by_default(secured):
     assert r.headers.get("access-control-allow-origin") == "tauri://localhost"
 
 
+def test_loopback_origins_are_allowed_by_default(secured):
+    """The desktop app serves its UI from a local sidecar, so a remote server sees
+    cross-origin requests from http://127.0.0.1:<port> / localhost:<port> — ports it
+    cannot know in advance (#42). Browsers set Origin truthfully, so a loopback
+    origin can only come from a page served on the user's machine."""
+    for origin in ("http://127.0.0.1:51468", "http://localhost:51468"):
+        r = secured.get("/api/health", headers={"Origin": origin})
+        assert r.headers.get("access-control-allow-origin") == origin
+
+    # a suffix or another scheme is not loopback, and preflight for a disallowed
+    # origin is refused outright
+    for denied in ("http://localhost.evil.example", "https://localhost:51468"):
+        r = secured.get("/api/health", headers={"Origin": denied})
+        assert "access-control-allow-origin" not in r.headers
+
+    r = secured.options("/api/health", headers={
+        "Origin": "http://127.0.0.1:51468",
+        "Access-Control-Request-Method": "GET",
+    })
+    assert r.status_code == 200
+    assert r.headers["access-control-allow-origin"] == "http://127.0.0.1:51468"
+
+
 # an open server keeps behaving exactly as it did
 
 def test_an_open_server_is_unchanged(client):
