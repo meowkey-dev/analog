@@ -222,6 +222,45 @@ func TestOnboardPrintsTheWiring(t *testing.T) {
 	}
 }
 
+// --claude-env-shared targets the committed settings.json instead. The wiring is
+// identical; what differs is where the file lands and the warning a token earns
+// there, since settings.json usually ends up in git.
+func TestOnboardClaudeEnvSharedTargetsSettingsJSON(t *testing.T) {
+	h := newHarness(t)
+	project := filepath.Join(h.dataDir, "proj")
+	r := h.invoke(options{}, "onboard", "codex", "--url", h.url, "--token", "analog_secret",
+		"--claude-env", project, "--claude-env-shared")
+	if r.code != 0 {
+		t.Fatalf("exit %d: %s%s", r.code, r.stdout, r.stderr)
+	}
+	if !strings.Contains(r.stderr, "usually committed") {
+		t.Errorf("no warning about a token in the committed file:\n%s", r.stderr)
+	}
+
+	raw, err := os.ReadFile(filepath.Join(project, ".claude", "settings.json"))
+	if err != nil {
+		t.Fatalf("settings.json not written: %v", err)
+	}
+	var settings map[string]any
+	if err := json.Unmarshal(raw, &settings); err != nil {
+		t.Fatal(err)
+	}
+	env := settings["env"].(map[string]any)
+	if env["ANALOG_TOKEN"] != "analog_secret" || env["ANALOG_ACTOR"] != "codex" {
+		t.Errorf("env = %v", env)
+	}
+	if _, err := os.Stat(filepath.Join(project, ".claude", "settings.local.json")); !os.IsNotExist(err) {
+		t.Error("shared mode must leave settings.local.json alone")
+	}
+}
+
+func TestOnboardClaudeEnvSharedNeedsClaudeEnv(t *testing.T) {
+	h := newHarness(t)
+	if r := h.invoke(options{}, "onboard", "codex", "--claude-env-shared"); r.code == 0 {
+		t.Error("--claude-env-shared without --claude-env must be a usage error")
+	}
+}
+
 func TestOnboardWithoutAnIssueSaysHowToGetAToken(t *testing.T) {
 	// --claude-env without a token is the "agent elsewhere, token later" path.
 	h := newHarness(t)

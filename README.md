@@ -201,7 +201,8 @@ analog onboard claude-code --url https://analog.example.com --token analog_... -
 applies to its Bash tool calls. It merges rather than overwrites, and
 `settings.local.json` is the gitignored one — the token stays out of git. It also
 sets `ANALOG_CONFIG=/nonexistent` so a `~/.analog.toml` belonging to *you* cannot
-make the agent post under your name.
+make the agent post under your name. To share the wiring through the committed
+`settings.json` instead, add `--claude-env-shared` — and keep the token out of it.
 
 Then **restart the agent**: both the skill listing and `settings.local.json` are read
 at session start.
