@@ -67,6 +67,20 @@ func CORSOrigins() []string {
 	return out
 }
 
+// LoopbackOriginsAllowed reports whether http://localhost:<any port> and
+// http://127.0.0.1:<any port> may be echoed. The desktop app moved its UI to a
+// local sidecar, so the page's origin is a loopback port the server cannot know in
+// advance — the tauri origins whitelisted the shell, but it is the sidecar-served
+// page that makes the cross-origin calls. Browsers set Origin truthfully, so a
+// loopback origin can only come from a page actually served on this machine: the
+// same trust class the tauri schemes were, generalized over the port. An explicit
+// ANALOG_CORS_ORIGINS replaces the defaults, loopback matching included, the way it
+// already replaces the tauri origins.
+func LoopbackOriginsAllowed() bool {
+	_, ok := os.LookupEnv("ANALOG_CORS_ORIGINS")
+	return !ok
+}
+
 // --- storage -----------------------------------------------------------------
 
 // DataDir is `./data`, or ANALOG_DATA_DIR.
