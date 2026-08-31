@@ -192,8 +192,55 @@ input, textarea, select {
 .card-body.html { border: none; width: 100%; background: #fff; padding: 0; }
 .card-body.editor { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; border: none; border-radius: 0; resize: none; }
 
-/* Markdown text scale (#14): one knob in the topbar, relative sizes inside .md follow. */
-.card-body.md { font-size: calc(13px * var(--md-scale, 1)); }
+/* Markdown text scale (#14): one knob in the topbar, relative sizes inside .md follow.
+   Themes (#41) are --md-* vars scoped per body class; `default` sets none and
+   inherits the card chrome. */
+.card-body.md {
+  font-size: calc(13px * var(--md-scale, 1));
+  background: var(--md-bg, transparent);
+  color: var(--md-ink, inherit);
+}
+.card-body.md h1, .card-body.md h2, .card-body.md h3 { color: var(--md-head, inherit); }
+.card-body.md a { color: var(--md-link, var(--accent)); }
+.card-body.md code { background: var(--md-code-bg, #12151c); }
+.card-body.md pre { background: var(--md-code-bg, #12151c); }
+.card-body.md blockquote {
+  margin: .4em 0; padding: 0 .9em;
+  border-left: 3px solid var(--md-quote, var(--line));
+  color: var(--md-quote-ink, var(--dim));
+}
+.card-body.md hr { border: none; border-top: 1px solid var(--md-rule, var(--line)); }
+.card-body.md img { max-width: 100%; }
+
+.md-theme-nord {
+  --md-bg: #2e3440; --md-ink: #d8dee9; --md-head: #88c0d0; --md-link: #81a1c1;
+  --md-code-bg: #3b4252; --md-quote: #4c566a; --md-quote-ink: #a7adba; --md-rule: #434c5e;
+}
+.md-theme-paper {
+  --md-bg: #f7f5f0; --md-ink: #2b2a27; --md-head: #1f1e1b; --md-link: #2563a8;
+  --md-code-bg: #e9e5db; --md-quote: #b8b2a4; --md-quote-ink: #6b675e; --md-rule: #d9d4c7;
+}
+.md-theme-solar {
+  --md-bg: #fdf6e3; --md-ink: #657b83; --md-head: #586e75; --md-link: #268bd2;
+  --md-code-bg: #eee8d5; --md-quote: #93a1a1; --md-quote-ink: #7c8b8c; --md-rule: #ddd6c1;
+}
+
+/* Theme picker (#41), anchored to the 🎨 button in the card head. */
+.theme-wrap { position: relative; }
+.theme-menu {
+  position: absolute; top: 24px; right: 0; z-index: 9;
+  display: flex; flex-direction: column; gap: 2px; min-width: 124px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+  padding: 4px; box-shadow: 0 10px 30px rgba(0, 0, 0, .5);
+}
+.theme-menu button {
+  display: flex; align-items: center; gap: 7px;
+  background: transparent; border: none; border-radius: 5px;
+  padding: 4px 8px; text-align: left; font-size: 12px;
+}
+.theme-menu button:hover { background: #2b3142; }
+.theme-menu button.on { background: #1e2432; }
+.theme-menu .swatch { width: 12px; height: 12px; border-radius: 3px; border: 1px solid var(--line); flex: none; }
 
 .md h1, .md h2, .md h3 { margin: .2em 0 .4em; font-size: 1.15em; }.md p { margin: .4em 0; }
 .md ul, .md ol { margin: .4em 0; padding-left: 1.2em; }
@@ -209,7 +256,17 @@ input, textarea, select {
 }
 
 .handle { position: absolute; z-index: 6; }
-.handle.resize {
+/* Resize from any edge or corner (#37): edge strips are invisible hit areas,
+   corners carry the grip (se keeps its classic diagonal). Corners must come
+   after the strips so they win the corner region. */
+.handle.resize.n { top: 0; left: 12px; right: 12px; height: 5px; cursor: ns-resize; }
+.handle.resize.s { bottom: 0; left: 12px; right: 12px; height: 5px; cursor: ns-resize; }
+.handle.resize.e { right: 0; top: 12px; bottom: 12px; width: 5px; cursor: ew-resize; }
+.handle.resize.w { left: 0; top: 12px; bottom: 12px; width: 5px; cursor: ew-resize; }
+.handle.resize.ne { top: 0; right: 0; width: 14px; height: 14px; cursor: nesw-resize; }
+.handle.resize.sw { bottom: 0; left: 0; width: 14px; height: 14px; cursor: nesw-resize; }
+.handle.resize.nw { top: 0; left: 0; width: 14px; height: 14px; cursor: nwse-resize; }
+.handle.resize.se {
   right: 0; bottom: 0; width: 14px; height: 14px; cursor: nwse-resize;
   background: linear-gradient(135deg, transparent 50%, var(--line) 50%);
 }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Card } from "./Card";
+import { Card, type ResizeDir } from "./Card";
 import { Links } from "./Links";
 import { AnnotationOverlay, type DraftAnnotation } from "./Annotations";
 import type { Annotation, Edge, Node } from "./api";
@@ -28,6 +28,10 @@ interface DragState {
   id?: string;
   startPointer: [number, number];
   startValue: [number, number];
+  /** Which edges the resize handle moves (#37); resize drags only. */
+  dir?: ResizeDir;
+  /** The untouched card rect a resize grows or shrinks from. */
+  startRect?: { x: number; y: number; width: number; height: number };
   node?: Node;
 }
 
@@ -48,7 +52,7 @@ export interface CanvasProps {
   onSelectAnnotation: (id: string | null) => void;
   onDraft: (draft: DraftAnnotation | null) => void;
   onMoveCard: (id: string, x: number, y: number) => void;
-  onResizeCard: (id: string, width: number, height: number) => void;
+  onResizeCard: (id: string, rect: { x?: number; y?: number; width?: number; height?: number }) => void;
   onEditCard: (id: string, text: string) => void;
   onDeleteCard: (id: string) => void;
   onCreateLink: (from: string, to: string, label: string, color: string | null) => void;
@@ -75,10 +79,16 @@ export function Canvas(props: CanvasProps) {
     [props.nodes, ghost],
   );
   const nodeMap = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes]);
-  const linkNodes = useMemo(
-    () => new Map(props.allNodes.map((n) => [n.id, n])),
-    [props.allNodes],
-  );
+  const linkNodes = useMemo(() => {
+    // Ghost positions ride along (#40): an edge must track its card while the
+    // drag is in flight, not only once the drop commits.
+    const map = new Map<string, Node>();
+    for (const n of props.allNodes) {
+      const g = ghost[n.id];
+      map.set(n.id, g ? { ...n, ...g } : n);
+    }
+    return map;
+  }, [props.allNodes, ghost]);
 
   const openByCard = useMemo(() => {
     const counts = new Map<string, number>();
@@ -183,12 +193,13 @@ export function Canvas(props: CanvasProps) {
     });
   };
 
-  const startResize = (event: React.PointerEvent, node: Node) => {
+  const startResize = (event: React.PointerEvent, node: Node, dir: ResizeDir) => {
     event.stopPropagation();
     setDrag({
-      kind: "resize", id: node.id, node,
+      kind: "resize", id: node.id, dir, node,
       startPointer: [event.clientX, event.clientY],
       startValue: [node.width, node.height],
+      startRect: { x: node.x, y: node.y, width: node.width, height: node.height },
     });
   };
 
@@ -221,11 +232,28 @@ export function Canvas(props: CanvasProps) {
           },
         }));
       } else if (drag.kind === "resize") {
+        // Grow or shrink from whichever edges the handle touches; the other two
+        // stay anchored. Clamping against the anchored edge keeps MIN_W/H even
+        // when the pointer crosses the far side (#37).
+        const dx = (event.clientX - drag.startPointer[0]) / viewport.scale;
+        const dy = (event.clientY - drag.startPointer[1]) / viewport.scale;
+        const r = drag.startRect!;
+        const dir = drag.dir!;
+        let left = r.x;
+        let top = r.y;
+        let right = r.x + r.width;
+        let bottom = r.y + r.height;
+        if (dir.includes("w")) left = Math.min(r.x + dx, right - MIN_W);
+        if (dir.includes("e")) right = Math.max(right + dx, left + MIN_W);
+        if (dir.includes("n")) top = Math.min(r.y + dy, bottom - MIN_H);
+        if (dir.includes("s")) bottom = Math.max(bottom + dy, top + MIN_H);
         setGhost((g) => ({
           ...g,
           [drag.id!]: {
-            width: Math.max(MIN_W, Math.round(drag.startValue[0] + dx / viewport.scale)),
-            height: Math.max(MIN_H, Math.round(drag.startValue[1] + dy / viewport.scale)),
+            x: Math.round(left),
+            y: Math.round(top),
+            width: Math.round(right - left),
+            height: Math.round(bottom - top),
           },
         }));
       } else if (drag.kind === "link") {
@@ -245,7 +273,7 @@ export function Canvas(props: CanvasProps) {
         });
       } else if (drag.kind === "resize") {
         const sized = ghost[drag.id!];
-        if (sized) props.onResizeCard(drag.id!, sized.width!, sized.height!);
+        if (sized) props.onResizeCard(drag.id!, sized);
         setGhost((g) => {
           const { [drag.id!]: _, ...rest } = g;
           return rest;

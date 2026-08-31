@@ -255,10 +255,15 @@ export default function App() {
     guard(() => api.updateCard(slug, id, { x, y }));
   };
 
-  const resizeCard = (id: string, width: number, height: number) => {
+  // A west/north resize moves the card as well (#37), so the patch — and the
+  // undo that mirrors it — carries whatever keys actually changed.
+  const resizeCard = (id: string, rect: { x?: number; y?: number; width?: number; height?: number }) => {
     const prev = canvasRef.current.nodes.find((n) => n.id === id);
-    if (prev && (prev.width !== width || prev.height !== height)) {
-      const back = { width: prev.width, height: prev.height };
+    const back: typeof rect = {};
+    for (const key of ["x", "y", "width", "height"] as const) {
+      if (rect[key] !== undefined && prev && prev[key] !== rect[key]) back[key] = prev[key];
+    }
+    if (Object.keys(back).length > 0) {
       pushUndo({
         label: "resize",
         run: () => {
@@ -267,8 +272,8 @@ export default function App() {
         },
       });
     }
-    patchNode(id, { width, height });
-    guard(() => api.updateCard(slug, id, { width, height }));
+    patchNode(id, rect);
+    guard(() => api.updateCard(slug, id, rect));
   };
 
   const editCard = (id: string, text: string) => {
