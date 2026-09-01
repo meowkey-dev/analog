@@ -8,9 +8,9 @@ import (
 	"testing"
 )
 
-// These are the Go rewrite of tests/unit/test_auth_store.py: they hold the objects
-// rather than a socket. Everything they describe that is observable over HTTP is
-// also asserted black-box in tests/contract/test_auth.py.
+// These hold the token store's objects rather than a socket. Everything they
+// describe that is observable over HTTP is also asserted black-box in
+// tests/auth_test.go.
 
 func newTestStore(t *testing.T) *Store {
 	t.Helper()

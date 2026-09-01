@@ -22,7 +22,7 @@ import (
 // ?include_deleted=true returns canvas.with-deleted.json, and
 // GET /spaces/redesign/feedback?actor=claude-code — with no `since` — returns
 // feedback.claude-code.since-12.json, because claude-code's stored cursor is seeded
-// at 12. tests/contract/test_fixtures_roundtrip.py asserts exactly that.
+// at 12. tests/roundtrip_test.go asserts exactly that.
 
 func seedCmd() *cobra.Command {
 	var dbPath, mediaDir, fixtures string

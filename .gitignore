@@ -1,11 +1,3 @@
-# Python — the conformance harness only; Analog itself has no Python in it.
-__pycache__/
-*.py[cod]
-.venv/
-.pytest_cache/
-.ruff_cache/
-*.egg-info/
-
 # Node
 node_modules/
 web/dist/

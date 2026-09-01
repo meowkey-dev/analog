@@ -43,12 +43,6 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
 
-      # setup-uv stopped publishing floating major tags at v8 (supply-chain
-      # hardening) — pin the immutable release tag; dependabot bumps it.
-      - uses: astral-sh/setup-uv@v10.0.1
-        with:
-          enable-cache: true
-
       - name: Build the web bundle
         working-directory: web
         run: npm ci && npm run build
@@ -94,11 +88,10 @@ jobs:
           test -f "$workdir/data/analog.db" || { echo "no data/ was created"; exit 1; }
 
       - name: Run the conformance suite against what is being released
+        working-directory: tests
         run: |
-          uv venv --python 3.13
-          uv pip install -r tests/requirements.txt
-          ANALOG_SERVER_BIN="$PWD/bin/linux-amd64/analog-server" \
-            .venv/bin/python -m pytest -q
+          ANALOG_SERVER_BIN="$GITHUB_WORKSPACE/bin/linux-amd64/analog-server" \
+            go test -count=1 ./...
 
       - name: Package
         run: |

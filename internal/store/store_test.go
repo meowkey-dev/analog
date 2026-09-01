@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-// tests/contract/ is the real judge of this package. What is here is what a black-box
+// The conformance suite in tests/ is the real judge of this package. What is here is what a black-box
 // suite cannot see: that a rollback drops its events, that concurrent writers do not
 // collide, and that numbers survive a round trip through the blob columns.
 
