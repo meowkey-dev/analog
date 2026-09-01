@@ -254,6 +254,10 @@ server over a socket, so it judges any binary that answers. Point it at one with
 [DECISIONS.md](DECISIONS.md) says why, and `tests/README.md` has the contract a
 server binary must honour.
 
+A go port of the harness lives beside it in `tests/conformance-go/` — a separate
+module, so the implementation is structurally unimportable — and CI runs both
+against the same binary until the python one retires (issue #58).
+
 Everything that needs the implementation's own objects is a Go test beside the code.
 
 ### The §7 acceptance demo

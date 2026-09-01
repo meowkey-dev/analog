@@ -73,6 +73,15 @@ jobs:
       - name: Run the contract suite against the binary
         run: .venv/bin/python -m pytest -q
 
+      # Issue #58: the go port of the harness runs beside it until the python one
+      # retires. Same binaries, so a divergence between the two judges is a red
+      # build rather than a silent disagreement.
+      - name: Run the go conformance suite against the same binary
+        working-directory: tests/conformance-go
+        run: |
+          go vet ./...
+          go test -count=1 ./...
+
   web:
     name: typecheck + build
     runs-on: ubuntu-latest
