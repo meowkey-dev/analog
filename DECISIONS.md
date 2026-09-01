@@ -55,7 +55,7 @@ touches the filesystem. Accepted types: PNG, JPEG, GIF, WebP, SVG, PDF. 25 MB ca
   the same card; an edit supersedes a move. A link created and removed inside the
   same window appears in neither bucket.
 - **`summary` grammar** is pinned by the fixture and asserted in
-  `tests/contract/test_feedback.py`.
+  `tests/feedback_test.go`.
 - **`PATCH /annotations/:id` with no `resolved` key resolves.** Every caller surface
   (`analog resolve`, MCP `resolve_annotation`) only ever resolves. Setting
   `resolved: false` reopens and emits no event — there is no `annotation.reopened`
@@ -164,23 +164,42 @@ conformance suite that proves it was written before any Go existed.
   own types rather than exposing `internal/store`'s — which Go would not let an
   outside package name anyway.
 
-### The test suite stays in Python
+### The conformance suite moved to Go (2026-09-01, #58/#59)
 
-`tests/contract/` could have been rewritten in Go with the rest. It was not, and that
-is deliberate:
+The harness began in Python and stayed there through the Go port. The reasons were
+real and are kept here because they shaped everything since: it was written against
+`contracts/` and `SPEC.md` before any Go existed, so it could not have been shaped by
+the implementation it judged; a judge in another language could not quietly reach for
+the server's own objects; and red-to-green against it is what made the port tractable
+at all.
 
-- It was written against `contracts/` and `SPEC.md` before the Go existed, so it
-  cannot have been shaped by the implementation it now judges. A Go rewrite would
-  quietly lose that property.
-- A server tested by an outside observer over a real socket is a stronger claim than a
-  server testing itself in-process, and it is the same claim for any future
-  implementation.
-- It is the artifact that made the port tractable: red-to-green against 344 tests,
-  rather than a reading exercise.
+It was ported anyway — on evidence rather than trust. The Go suite first ran *beside*
+the Python one under a coverage-parity regime: a correspondence table mapping every
+Python test to its Go counterpart, a test failing if either suite stopped referencing
+an openapi operation or a fixture, and CI running both suites against one binary.
+Only after that run went green on both platforms did the Python original retire.
+
+What the port preserved, by construction rather than by promise:
+
+- **Outside observer over a real socket.** The suite spawns a server process and
+  speaks HTTP; it judges any binary that answers, including a future rewrite.
+- **The module boundary instead of the language boundary.** `tests/` is a separate
+  Go module, so `internal/` is structurally unimportable from it — and
+  `black_box_test.go` asserts the whole test-binary dependency graph stays free of
+  the implementation. The Python suite's import scan was a weaker form of the same
+  check.
+- **Types hand-written against `contracts/openapi.json`**, never against
+  `client/types.go`; byte-level fixture comparison; stdlib only, plus the pure-Go
+  sqlite driver for the frozen-schema tests.
+
+What was traded away, and accepted: the judge now shares language and idioms with
+the implementation, so its discipline is convention plus the module boundary rather
+than physics. One language for contributors, no Python in the toolchain, and a
+suite that doubles as a stdlib-only demonstration of the protocol is the return.
 
 Everything that genuinely needed the implementation's objects — the token store, the
-client, the CLI, the MCP tools — is a Go test next to the code. `tests/README.md` has
-the split.
+client, the CLI, the MCP tools — remains a Go test next to the code. `tests/README.md`
+has the split.
 
 ## Loopback CORS (2026-08-30)
 
@@ -200,8 +219,6 @@ the split.
 ## Toolchain
 
 - Go **1.23+**. `CGO_ENABLED=0` everywhere.
-- Python **3.11+** for the conformance harness only, pinned in
-  `tests/requirements.txt`. It is not needed to build or run Analog.
 - Node **22+** with a real `npm`. Vite 8 will not run under a Bun or Volta shim, so
   if `npm --version` looks wrong, resolve it to an actual Node install first.
 - The MCP command is **`cmd/analog-mcp`**. The Python note about `mcp_server/` vs

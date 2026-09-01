@@ -20,23 +20,20 @@ because people still trust it.
 ## Tests are written against the contract, not the implementation
 
 ```bash
-go test ./...                           # the Go tests
 scripts/build.sh                        # the binaries the suite judges
 
-uv venv && uv pip install -r tests/requirements.txt
-.venv/bin/python -m pytest              # the conformance suite, over HTTP
-
-(cd tests/conformance-go && go test ./...)   # the go port of the same suite
+go test ./...                           # the Go tests
+(cd tests && go test ./...)             # the conformance suite, over HTTP
 
 (cd web && npm ci && npm run build)     # tsc --noEmit + vite build
 (cd web && npm test)                    # web unit tests
 ```
 
-`tests/contract/` asserts against `contracts/fixtures/` and SPEC.md, and reaches the
-server over a socket rather than importing it — so it judges any binary that answers,
-and `test_black_box.py` fails the build if that stops being true. If a change makes
-one fail, the interesting question is which of the two is wrong — sometimes it is the
-fixture, and that is an amendment.
+`tests/` asserts against `contracts/fixtures/` and SPEC.md, and reaches the
+server over a socket rather than importing it — so it judges any binary that
+answers, and `black_box_test.go` fails the build if that stops being true. If a
+change makes one fail, the interesting question is which of the two is wrong —
+sometimes it is the fixture, and that is an amendment.
 
 Anything that needs the implementation's own objects is a Go test next to the code.
 `tests/README.md` has the split, and the contract a server binary has to honour.

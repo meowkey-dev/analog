@@ -1,13 +1,16 @@
-// Package conformance is the executable definition of Analog, ported from the
-// python harness in tests/contract (issue #58).
+// Package conformance is the executable definition of Analog.
 //
-// It is a separate go module on purpose: nothing here may import
-// github.com/meowkey-dev/analog, so the suite cannot quietly start testing the
-// implementation's own objects. It speaks HTTP to a spawned server process, the
-// way any other client would. The rule is asserted by TestBlackBox_NoAnalogModule.
+// It began in python — written against contracts/ and SPEC.md before any Go
+// implementation existed — and was ported to Go beside the original in issue #58,
+// with the python suite as the standing judge until parity was proven; the python
+// original retired in the patch after that. It is a separate go module on purpose:
+// nothing here may import github.com/meowkey-dev/analog, so the suite cannot
+// quietly start testing the implementation's own objects. It speaks HTTP to a
+// spawned server process, the way any other client would. The rule is asserted by
+// TestBlackBox_NoAnalogModule.
 //
 // Dependencies: the standard library, plus modernc.org/sqlite for the frozen
-// schema tests (test_schema_sql's contract is "this DDL behaves as sqlite says",
+// schema tests (the schema tests' contract is "this DDL behaves as sqlite says",
 // which no amount of HTTP can reach). It is the same pure-go driver the server
 // uses, so there is no toolchain implication.
 //
@@ -44,7 +47,7 @@ var repoRoot = func() string {
 	if !ok {
 		panic("cannot locate the repo root")
 	}
-	return filepath.Dir(filepath.Dir(filepath.Dir(file)))
+	return filepath.Dir(filepath.Dir(file))
 }()
 
 var fixturesDir = filepath.Join(repoRoot, "contracts", "fixtures")

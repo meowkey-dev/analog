@@ -1,9 +1,9 @@
 // The contract document itself is valid and covers SPEC §3.
 //
-// The python harness also ran the full OpenAPI 3.1 metaschema check
-// (openapi_spec_validator); that retires with the python suite. What the suite
-// actually relies on is asserted here structurally: the document parses, its
-// paths and components are navigable, and it pins what SPEC §3 requires.
+// The python harness (retired) also ran the full OpenAPI 3.1 metaschema check via
+// openapi_spec_validator, which has no go counterpart. What the suite relies on is
+// asserted here structurally: the document parses, its paths and components are
+// navigable, and it pins what SPEC §3 requires.
 package conformance
 
 import (

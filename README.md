@@ -238,25 +238,22 @@ gives HMR on :5173 and proxies `/api` to :8787. `/s/redesign?fixture` renders
 ### Test
 
 ```bash
-go test ./...                           # 113 tests
 scripts/build.sh                        # the binaries the suite judges
 
-uv venv && uv pip install -r tests/requirements.txt
-.venv/bin/python -m pytest              # 344 conformance tests, over HTTP
+go test ./...                           # the Go tests beside the code
+(cd tests && go test ./...)             # the conformance suite, over HTTP
 
 (cd web && npm run build)               # tsc --noEmit + vite build
 ```
 
-`tests/contract/` is the executable definition of Analog: written against
-`contracts/` and SPEC.md rather than against the implementation, and reaching the
-server over a socket, so it judges any binary that answers. Point it at one with
-`ANALOG_SERVER_BIN`. It stayed in Python through the Go port deliberately —
-[DECISIONS.md](DECISIONS.md) says why, and `tests/README.md` has the contract a
-server binary must honour.
-
-A go port of the harness lives beside it in `tests/conformance-go/` — a separate
-module, so the implementation is structurally unimportable — and CI runs both
-against the same binary until the python one retires (issue #58).
+`tests/` is the executable definition of Analog: written against `contracts/` and
+SPEC.md rather than against the implementation, and reaching the server over a
+socket, so it judges any binary that answers. Point it at one with
+`ANALOG_SERVER_BIN` — the release workflow does exactly that. It is a separate Go
+module, so the implementation is structurally unimportable from it, and
+`tests/README.md` has the contract a server binary must honour. It began in
+Python (which kept the port honest) and was ported to Go under a coverage-parity
+regime once the port was done ([DECISIONS.md](DECISIONS.md) has the story).
 
 Everything that needs the implementation's own objects is a Go test beside the code.
 
