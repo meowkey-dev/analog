@@ -26,6 +26,8 @@ scripts/build.sh                        # the binaries the suite judges
 uv venv && uv pip install -r tests/requirements.txt
 .venv/bin/python -m pytest              # the conformance suite, over HTTP
 
+(cd tests/conformance-go && go test ./...)   # the go port of the same suite
+
 (cd web && npm ci && npm run build)     # tsc --noEmit + vite build
 (cd web && npm test)                    # web unit tests
 ```
