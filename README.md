@@ -261,19 +261,19 @@ Everything that needs the implementation's own objects is a Go test beside the c
 With the server running:
 
 ```bash
-python3 scripts/demo.py reset         # wipe the demo space, start over
-python3 scripts/demo.py agent-a       # 1-3: MCP over stdio, as claude-code
+go run ./scripts/demo reset         # wipe the demo space, start over
+go run ./scripts/demo agent-a       # 1-3: MCP over stdio, as claude-code
 #   4: in the browser — drag cards, delete Option D, pin "y-axis starts at 40, fix",
 #      link Option A -> Option C "depends on"
-python3 scripts/demo.py agent-b       # 5-6: the CLI, as codex
-python3 scripts/demo.py agent-a-again # 7:  independent cursors
+go run ./scripts/demo agent-b       # 5-6: the CLI, as codex
+go run ./scripts/demo agent-a-again # 7:  independent cursors
 ```
 
 Step 7 asserts the three things the design exists for: every delta Agent A receives
 came from the human, Agent B's writes are not replayed to Agent A as feedback, and
 the annotation Agent B resolved is gone.
 
-Beyond the narrative, `python3 scripts/demo.py extras` is a smoke pass over
+Beyond the narrative, `go run ./scripts/demo extras` is a smoke pass over
 everything else — every remaining MCP tool, media upload, If-Match conflicts,
 branch mode, staleness, export/import, SSE — on scratch spaces it deletes again.
 No human interaction needed, so it doubles as a quick regression check after a
@@ -298,7 +298,7 @@ rebuild.
     skill/             the agent skill (also embedded in the `analog` binary)
     web/               React + Vite
     deploy/            systemd unit and Caddyfile for running it on a host
-    scripts/           build.sh, demo.py, onboard_agent.py (deprecated shim)
+    scripts/           build.sh; the §7 demo and the deprecated onboard shim (go run ./scripts/…)
     tests/             the conformance harness
 
 ### CI

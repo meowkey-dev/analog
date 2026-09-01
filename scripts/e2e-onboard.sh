@@ -126,8 +126,11 @@ grep -qi "resolved" "$TMP/resolve.out" || fail "resolve through the wrapper fail
 pass "agent resolved the annotation with a reply"
 
 # --- the deprecated shim still forwards -------------------------------------------------------
+# The shim is a Go program now, built here once: the tmux windows run with HOME
+# pointed at the fake home, and a `go run` in there would populate Go caches in it.
+go build -o "$TMP/onboard_agent" ./scripts/onboard_agent
 tmux new-window -t $SESSION -n shim -c "$REPO"
-tmux send-keys -t $SESSION "env HOME=$TMP/home python3 $REPO/scripts/onboard_agent.py --bin-dir $REPO/bin \
+tmux send-keys -t $SESSION "env HOME=$TMP/home $TMP/onboard_agent --bin-dir $REPO/bin \
   shim-agent --url $URL --claude-env $TMP/mockrepo > $TMP/shim.out 2> $TMP/shim.err; tmux wait-for -S w5" Enter
 tmux wait-for w5
 grep -q "deprecated" "$TMP/shim.err" || fail "shim did not warn"
