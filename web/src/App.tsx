@@ -6,6 +6,7 @@ import { Commander } from "./Commander";
 import { SpaceIndex, SpaceSwitcher } from "./Spaces";
 import { api, subscribe, ApiError, getIdentity } from "./api";
 import type { AnalogEvent, Annotation, Canvas as CanvasData, Motivation, Node, Space } from "./api";
+import { emptyDrawing, DRAW_WIDTH, DRAW_HEIGHT } from "./draw";
 import { Connect, adopt, attempt, type Connected } from "./Connect";
 import { clearConnection, describe, loadConnection } from "./connection";
 import fixtureCanvas from "../../contracts/fixtures/canvas.json";
@@ -68,6 +69,7 @@ export default function App() {
   const [rightPanel, setRightPanel] = useState<"comments" | "activity" | null>("comments");
   const [popOut, setPopOut] = useState<Node | null>(null);
   const [commander, setCommander] = useState(false);
+  const [pendingEdit, setPendingEdit] = useState<string | null>(null);
   // Markdown text scale, remembered per browser (#14).
   const [mdScale, setMdScale] = useState(() => {
     const stored = Number(localStorage.getItem("analog.mdscale"));
@@ -299,15 +301,18 @@ export default function App() {
     setSelectedCard(null);
   };
 
-  const createCardAt = (x: number, y: number) => {
+  const createCardAt = (x: number, y: number, kind: "md" | "draw" = "md") => {
     guard(async () => {
-      const [node] = await api.createCards(slug, [
-        { title: "Untitled", content: "", kind: "md", x, y },
-      ]);
+      const draft = kind === "draw"
+        ? { title: "Sketch", content: emptyDrawing(), kind: "svg" as const,
+            x, y, width: DRAW_WIDTH, height: DRAW_HEIGHT }
+        : { title: "Untitled", content: "", kind: "md" as const, x, y };
+      const [node] = await api.createCards(slug, [draft]);
       await refresh();
       setSelectedCard(node!.id);
+      if (kind === "draw") setPendingEdit(node!.id);
       pushUndo({
-        label: "new card",
+        label: kind === "draw" ? "new sketch" : "new card",
         run: () => {
           setSelectedCard(null);
           guard(async () => {
@@ -400,6 +405,7 @@ export default function App() {
       }
       const tag = (event.target as HTMLElement)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if ((event.target as HTMLElement)?.closest?.(".draw-editor")) return;
       if ((event.metaKey || event.ctrlKey) && !event.shiftKey && event.key.toLowerCase() === "z") {
         // Not intercepted inside inputs, so text editing keeps its native undo.
         event.preventDefault();
@@ -543,6 +549,8 @@ export default function App() {
           onDeleteLink={deleteLink}
           onPopOut={setPopOut}
           onCreateCardAt={createCardAt}
+          pendingEdit={pendingEdit}
+          onConsumedPendingEdit={() => setPendingEdit(null)}
         />
 
         {rightPanel === "comments" && (
@@ -606,8 +614,10 @@ export default function App() {
           region</strong> · esc to stop</>
         ) : (
           <>drag to pan · ⌘/ctrl-scroll to zoom · scroll over a card to scroll the card ·
-          double-click empty space for a card · drag the ◇ handle to link ·
-          double-click a card to edit · ⌘K to find a card · ⌘Z to undo · c to comment</>
+          double-click empty space for a card · <strong>shift-double-click for a
+          sketch</strong> · drag the ◇ handle to link ·
+          double-click a card to edit · ✎ on an svg card to draw · ⌘K to find a card ·
+          ⌘Z to undo · c to comment</>
         )}
       </footer>
     </div>

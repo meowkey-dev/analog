@@ -3,6 +3,7 @@ import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import DOMPurify from "dompurify";
 import { DiffView } from "./Diff";
+import { DrawEditor } from "./DrawEditor";
 import { AnnotationOverlay, type DraftAnnotation } from "./Annotations";
 import { api, getConnection, resolveUrl } from "./api";
 import type { Annotation, Node } from "./api";
@@ -72,7 +73,7 @@ const RESIZE_DIRS: ResizeDir[] = ["n", "s", "e", "w", "ne", "nw", "se", "sw"];
  * Renders one card body by sp_kind (SPEC §5).
  *
  *   plain -> <pre>            md -> react-markdown
- *   svg   -> inlined, sanitized
+ *   svg   -> inlined, sanitized; double-click / ✎ opens a pen (#61), not a textarea
  *   html  -> <iframe sandbox="allow-scripts"> with NO allow-same-origin, so agent
  *            HTML can neither read the parent document nor forge an annotation.
  *            The renderer prepends one script of its own (SCROLL_REPORTER) that
@@ -88,7 +89,7 @@ function Body({ node, mdTheme, bodyRef }: {
   const kind = node.type === "file" ? "file" : (node.sp_kind ?? "plain");
 
   const svg = useMemo(
-    () => (kind === "svg" ? DOMPurify.sanitize(node.text ?? "", { USE_PROFILES: { svg: true, svgFilters: true } }) : ""),
+    () => (kind === "svg" ? DOMPurify.sanitize(node.text ?? "", { USE_PROFILES: { svg: true, svgFilters: true }, ADD_ATTR: ["data-analog-stroke"] }) : ""),
     [kind, node.text],
   );
   // Injecting at render time, never into the stored text: the card stays verbatim
@@ -291,6 +292,10 @@ function CardView(props: CardProps) {
         {kind === "html" && (
           <button className="icon" title="Open full window" onClick={() => props.onPopOut(node)}>⤢</button>
         )}
+        {kind === "svg" && !superseded && !editing && (
+          <button className="icon" title="Draw on this card"
+                  onClick={(e) => { e.stopPropagation(); props.onStartEdit(node.id); }}>✎</button>
+        )}
         {kind === "md" && !superseded && (
           <div className="theme-wrap"
                onPointerDown={(e) => e.stopPropagation()}
@@ -332,6 +337,12 @@ function CardView(props: CardProps) {
       <div className="body-zone">
         {superseded && view === "diff" && props.successor && props.successor.text !== undefined ? (
           <DiffView before={node.text ?? ""} after={props.successor.text ?? ""} />
+        ) : editing && kind === "svg" ? (
+          <DrawEditor
+            text={node.text ?? ""}
+            onCommit={(text) => props.onCommitEdit(node.id, text)}
+            onCancel={props.onCancelEdit}
+          />
         ) : editing ? (
           <textarea
             className="card-body editor"
@@ -354,7 +365,7 @@ function CardView(props: CardProps) {
           node={node}
           bodyRef={bodyRef}
           annotations={props.thread}
-          active={props.annotateMode}
+          active={props.annotateMode && !editing}
           draft={props.draft}
           selectedId={props.selectedAnnotation}
           onSelect={props.onSelectAnnotation}
