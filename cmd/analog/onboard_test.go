@@ -48,7 +48,7 @@ func TestOnboardSetsUpTokenSkillAndWrapper(t *testing.T) {
 
 	out := h.run("onboard", "claude-code",
 		"--issue", "--url", h.url,
-		"--skill-into", skills, "--wrapper", wrappers, "--claude-env", project)
+		"--config-dir", skills, "--wrapper", wrappers, "--claude-env", project)
 
 	secret := tokenRE.FindString(out)
 	if secret == "" {
@@ -192,30 +192,37 @@ func TestOnboardClaudeEnvMergesAndNeverClobbers(t *testing.T) {
 func TestOnboardPrintsTheWiring(t *testing.T) {
 	h := newHarness(t)
 
-	envOut := h.run("onboard", "claude-code", "--url", h.url, "--print-env")
+	envOut := h.run("onboard", "claude-code", "--url", h.url, "--verbose")
 	for _, want := range []string{
 		"export ANALOG_URL=" + h.url, "export ANALOG_ACTOR=claude-code",
 		"export ANALOG_TOKEN=<token>", "analog whoami",
 	} {
 		if !strings.Contains(envOut, want) {
-			t.Errorf("print-env output is missing %q:\n%s", want, envOut)
+			t.Errorf("verbose output is missing %q:\n%s", want, envOut)
 		}
 	}
 
 	mcpOut := h.run("onboard", "claude-code", "--url", h.url,
-		"--token", "analog_secret", "--print-mcp")
+		"--token", "analog_secret", "--config-via", "mcp")
 	for _, want := range []string{"claude mcp add analog", "ANALOG_TOKEN=analog_secret",
 		binaries.mcp} {
 		if !strings.Contains(mcpOut, want) {
-			t.Errorf("print-mcp output is missing %q:\n%s", want, mcpOut)
+			t.Errorf("config-via mcp output is missing %q:\n%s", want, mcpOut)
 		}
 	}
+	if strings.Contains(mcpOut, "skill installed") {
+		t.Errorf("config-via mcp installed the skill:\n%s", mcpOut)
+	}
 
-	// A bare onboard prints the shell exports as the fallback, with no token to
-	// echo.
+	// A bare onboard now installs the skill (the default), with no token to
+	// echo and no exports block. (This run shares the harness home with the
+	// verbose run above, so the skill may already be there.)
 	bare := h.run("onboard", "claude-code", "--url", h.url)
-	if !strings.Contains(bare, "export ANALOG_URL=") {
-		t.Errorf("bare onboard printed nothing useful:\n%s", bare)
+	if _, err := os.Stat(filepath.Join(h.dataDir, ".claude", "skills", "analog", "SKILL.md")); err != nil {
+		t.Errorf("bare onboard did not install the skill by default: %v", err)
+	}
+	if strings.Contains(bare, "export ANALOG_URL=") {
+		t.Errorf("bare onboard printed the exports fallback:\n%s", bare)
 	}
 	if strings.Contains(bare, "token:") {
 		t.Errorf("bare onboard echoed a token it was never given:\n%s", bare)
@@ -266,7 +273,7 @@ func TestOnboardWithoutAnIssueSaysHowToGetAToken(t *testing.T) {
 	h := newHarness(t)
 	project := filepath.Join(h.dataDir, "proj")
 	out := h.run("onboard", "claude-code", "--url", h.url,
-		"--claude-env", project, "--print-env")
+		"--claude-env", project, "--verbose")
 	if !strings.Contains(out, "no token written") {
 		t.Errorf("no hint about the missing token:\n%s", out)
 	}
@@ -286,7 +293,7 @@ func TestOnboardIssueWorksFromBareBinaries(t *testing.T) {
 	h := newHarness(t)
 	// The binaries live in one directory with no checkout in sight; `analog
 	// onboard --issue` must find its sibling there.
-	out := h.run("onboard", "solo", "--issue", "--url", h.url, "--print-env")
+	out := h.run("onboard", "solo", "--issue", "--url", h.url)
 	secret := tokenRE.FindString(out)
 	if secret == "" {
 		t.Fatalf("no token minted:\n%s", out)
@@ -310,5 +317,128 @@ func TestOnboardIssueWarnsWhenTheTokenDoesNotAuthenticate(t *testing.T) {
 	if !strings.Contains(r.stderr, "did not authenticate") ||
 		!strings.Contains(r.stderr, "ANALOG_DATA_DIR") {
 		t.Errorf("no warning naming the likely cause:\n%s", r.stderr)
+	}
+}
+
+// Issue #63: the simple form — `--issue --claude-env PROJECT` — installs the
+// skill into the user-level ~/.claude/skills by default, without printing the
+// shell exports, and re-running it is idempotent: an existing skill is skipped.
+func TestOnboardSimpleFormInstallsSkillAndSkipsOnRerun(t *testing.T) {
+	h := newHarness(t)
+	project := filepath.Join(h.dataDir, "proj")
+	out := h.run("onboard", "claude-code", "--issue", "--url", h.url,
+		"--claude-env", project)
+
+	skill := filepath.Join(h.dataDir, ".claude", "skills", "analog", "SKILL.md")
+	if body, err := os.ReadFile(skill); err != nil {
+		t.Fatalf("skill not in the default location: %v", err)
+	} else if !strings.Contains(string(body), "analog feedback") {
+		t.Errorf("installed SKILL.md does not teach the workflow:\n%.80s", body)
+	}
+	if !strings.Contains(out, "skill installed") {
+		t.Errorf("setup did not report the skill install:\n%s", out)
+	}
+	if strings.Contains(out, "export ANALOG_URL=") {
+		t.Errorf("simple form printed the exports fallback:\n%s", out)
+	}
+	if !strings.Contains(out, "token: analog_") {
+		t.Errorf("simple form did not echo the minted token:\n%s", out)
+	}
+
+	// Re-running: the existing user-level skill is left alone.
+	sentinel := "sentinel # not the workflow"
+	if err := os.WriteFile(skill, []byte(sentinel), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out = h.run("onboard", "claude-code", "--url", h.url, "--claude-env", project)
+	if body, err := os.ReadFile(skill); err != nil || string(body) != sentinel {
+		t.Errorf("rerun clobbered the existing skill: %v %q", err, body)
+	}
+	if !strings.Contains(out, "already installed") || !strings.Contains(out, "skipping") {
+		t.Errorf("rerun did not report the skip:\n%s", out)
+	}
+}
+
+// An explicit --config-dir overwrites whatever is there: it is the update path
+// for a stale skill (#63).
+func TestOnboardConfigDirOverwrites(t *testing.T) {
+	h := newHarness(t)
+	skills := filepath.Join(h.dataDir, "skills")
+	target := filepath.Join(skills, "analog", "SKILL.md")
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(target, []byte("sentinel"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	out := h.run("onboard", "claude-code", "--url", h.url,
+		"--token", "analog_x", "--config-dir", skills)
+	if strings.Contains(out, "already installed") {
+		t.Errorf("an explicit dir must overwrite, not skip:\n%s", out)
+	}
+	body, err := os.ReadFile(target)
+	if err != nil || strings.Contains(string(body), "sentinel") ||
+		!strings.Contains(string(body), "analog feedback") {
+		t.Errorf("explicit --config-dir did not overwrite: %v %q", err, body)
+	}
+}
+
+func TestOnboardSkipWiresNothing(t *testing.T) {
+	h := newHarness(t)
+	out := h.run("onboard", "claude-code", "--url", h.url,
+		"--token", "analog_x", "--config-via", "skip")
+	for _, unwant := range []string{"skill installed", "claude mcp add", "export ANALOG_URL="} {
+		if strings.Contains(out, unwant) {
+			t.Errorf("skip wired something: %q in\n%s", unwant, out)
+		}
+	}
+	if !strings.Contains(out, "token: analog_x") {
+		t.Errorf("skip dropped the token:\n%s", out)
+	}
+}
+
+// --config-via skip with nothing to do at all must not be silently empty: an
+// agent reading the output would think it succeeded and is wired.
+func TestOnboardSkipWithNothingElseIsNotSilent(t *testing.T) {
+	h := newHarness(t)
+	r := h.invoke(options{}, "onboard", "codex", "--url", h.url, "--config-via", "skip")
+	if r.code != 0 {
+		t.Fatalf("exit %d: %s%s", r.code, r.stdout, r.stderr)
+	}
+	if strings.TrimSpace(r.stdout)+strings.TrimSpace(r.stderr) == "" {
+		t.Error("a no-op skip printed nothing")
+	}
+}
+
+// --verbose prints both instruction blocks (exports and the MCP command) and
+// the token is not echoed a second time.
+func TestOnboardVerbosePrintsInstructions(t *testing.T) {
+	h := newHarness(t)
+	out := h.run("onboard", "claude-code", "--url", h.url,
+		"--token", "analog_secret", "--verbose")
+	for _, want := range []string{"claude mcp add analog", "ANALOG_TOKEN=analog_secret",
+		"export ANALOG_URL=" + h.url, "analog whoami"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("verbose output is missing %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "token: analog_secret") {
+		t.Errorf("verbose echoed the token twice:\n%s", out)
+	}
+}
+
+func TestOnboardRejectsABadConfigVia(t *testing.T) {
+	h := newHarness(t)
+	if r := h.invoke(options{}, "onboard", "codex", "--config-via", "vibes"); r.code == 0 {
+		t.Error("onboard accepted --config-via vibes")
+	}
+	if r := h.invoke(options{}, "onboard", "codex", "--config-via", "mcp",
+		"--config-dir", "/tmp/x"); r.code == 0 {
+		t.Error("onboard accepted --config-dir without --config-via skill")
+	}
+	if r := h.invoke(options{}, "onboard", "codex", "--config-via", "skip",
+		"--config-dir", "/tmp/x"); r.code == 0 {
+		t.Error("onboard accepted --config-dir with --config-via skip")
 	}
 }

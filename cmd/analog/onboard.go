@@ -26,20 +26,29 @@ import (
 // server binary is. Both are found beside this binary first (they ship together in
 // the release archives and in brew), then on PATH.
 func onboardCmd() *cobra.Command {
-	var kind, url, token, skillInto, claudeEnv, wrapper string
-	var issue, printMCP, printEnv, claudeEnvShared bool
+	var kind, url, token, configVia, configDir, claudeEnv, wrapper string
+	var issue, verbose, claudeEnvShared bool
 
 	cmd := &cobra.Command{
 		Use:   "onboard <actor>",
 		Short: "Set up an agent: token, wiring, and the skill",
 		Long: "Set up an agent with one command: a token (`--issue`, server host " +
-			"only), the skill (`--skill-into`), and the wiring (`--claude-env`, " +
-			"`--wrapper`, or `--print-mcp` / `--print-env`).",
+			"only) and the wiring: `--config-via skill|mcp|skip` (default skill), " +
+			"`--claude-env`, `--wrapper`; `--verbose` prints the wiring " +
+			"instructions as well.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			actor := args[0]
 			if kind != "agent" && kind != "human" {
 				return usage("--kind must be agent or human, not %q", kind)
+			}
+			switch configVia {
+			case "skill", "mcp", "skip":
+			default:
+				return usage("--config-via must be skill, mcp, or skip, not %q", configVia)
+			}
+			if configDir != "" && configVia != "skill" {
+				return usage("--config-dir needs --config-via skill")
 			}
 			if claudeEnvShared && claudeEnv == "" {
 				return usage("--claude-env-shared needs --claude-env PROJECT")
@@ -53,14 +62,26 @@ func onboardCmd() *cobra.Command {
 				token = secret
 			}
 
-			if skillInto != "" {
-				target, err := installSkill(expandTilde(skillInto))
+			if configVia == "skill" {
+				dir, overwrite, err := installDir(configDir)
 				if err != nil {
 					return err
 				}
-				fmt.Printf("skill installed: %s\n", target)
-				fmt.Println("  it loads on demand, so it costs nothing in unrelated sessions.")
-				fmt.Println()
+				target := filepath.Join(dir, "analog")
+				_, statErr := os.Stat(target)
+				if statErr == nil && !overwrite {
+					fmt.Printf("skill already installed: %s\n", target)
+					fmt.Println("  skipping; pass --config-dir to overwrite it.")
+					fmt.Println()
+				} else {
+					installed, err := installSkill(dir)
+					if err != nil {
+						return err
+					}
+					fmt.Printf("skill installed: %s\n", installed)
+					fmt.Println("  it loads on demand, so it costs nothing in unrelated sessions.")
+					fmt.Println()
+				}
 			}
 
 			if claudeEnv != "" {
@@ -99,48 +120,26 @@ func onboardCmd() *cobra.Command {
 				}
 			}
 
-			if printMCP {
-				command, err := mcpBin()
-				if err != nil {
+			if configVia == "mcp" || verbose {
+				if err := printMCPCommand(actor, kind, url, token); err != nil {
 					return err
 				}
-				secret := token
-				if secret == "" {
-					secret = "$ANALOG_TOKEN"
-				}
-				fmt.Println("wire up MCP (stdio) — run this where the agent runs:")
-				fmt.Println()
-				fmt.Println("  claude mcp add analog \\")
-				fmt.Printf("    -e ANALOG_URL=%s \\\n", url)
-				fmt.Printf("    -e ANALOG_ACTOR=%s \\\n", actor)
-				fmt.Printf("    -e ANALOG_ACTOR_KIND=%s \\\n", kind)
-				fmt.Printf("    -e ANALOG_TOKEN=%s \\\n", secret)
-				fmt.Printf("    -- %s\n", command)
-				fmt.Println()
-				fmt.Println("  --scope user puts it in every project; the default is this one only.")
-				fmt.Println("  Check it with:  claude mcp get analog")
-				fmt.Println()
 			}
 
-			if printEnv || (!printMCP && skillInto == "") {
-				analogPath, err := os.Executable()
-				if err != nil {
+			if verbose {
+				if err := printExports(actor, kind, url, token); err != nil {
 					return err
 				}
-				analogPath, _ = filepath.EvalSymlinks(analogPath)
-				fmt.Println("or, for an agent that only has a shell:")
-				fmt.Println()
-				fmt.Printf("  export ANALOG_URL=%s\n", url)
-				fmt.Printf("  export ANALOG_ACTOR=%s\n", actor)
-				fmt.Printf("  export ANALOG_ACTOR_KIND=%s\n", kind)
-				fmt.Printf("  export ANALOG_TOKEN=%s\n", or(token, "<token>"))
-				fmt.Printf("  export PATH=%s:$PATH\n", filepath.Dir(analogPath))
-				fmt.Println()
-				fmt.Println("  then:  analog whoami   # confirms who the server thinks you are")
 			}
 
-			if token != "" && !printMCP && !printEnv {
+			if token != "" && configVia != "mcp" && !verbose {
 				fmt.Printf("token: %s\n", token)
+			}
+
+			if configVia == "skip" && claudeEnv == "" && wrapper == "" &&
+				token == "" && !verbose {
+				errln("nothing to wire: pass --config-via skill (the default) or mcp, " +
+					"or --claude-env / --wrapper / --issue / --token.")
 			}
 			return nil
 		},
@@ -149,10 +148,13 @@ func onboardCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&issue, "issue", false, "mint a token (server host only)")
 	cmd.Flags().StringVar(&url, "url", "http://127.0.0.1:8787", "the server's base URL")
 	cmd.Flags().StringVar(&token, "token", "", "an existing token; implied by --issue")
-	cmd.Flags().StringVar(&skillInto, "skill-into", "", "copy the skill here, e.g. ~/.claude/skills")
-	cmd.Flags().BoolVar(&printMCP, "print-mcp", false, "print the claude mcp add command")
-	cmd.Flags().BoolVar(&printEnv, "print-env", false,
-		"print the exports an agent with only a shell needs")
+	cmd.Flags().StringVar(&configVia, "config-via", "skill",
+		"how to wire the agent: skill (install — the default), mcp (print the claude mcp add command), or skip")
+	cmd.Flags().StringVar(&configDir, "config-dir", "",
+		"with --config-via skill: where to install it, e.g. ~/.claude/skills; "+
+			"an explicit directory is overwritten, the default is skipped when already present")
+	cmd.Flags().BoolVar(&verbose, "verbose", false,
+		"also print the wiring instructions (shell exports, MCP command)")
 	cmd.Flags().StringVar(&claudeEnv, "claude-env", "",
 		"merge ANALOG_* into PROJECT/.claude/settings.local.json; use . for this project")
 	cmd.Flags().BoolVar(&claudeEnvShared, "claude-env-shared", false,
@@ -225,6 +227,21 @@ func issueToken(actor, kind, url string) (string, error) {
 }
 
 // --- the artifacts ---------------------------------------------------------------
+
+// installDir resolves where `--config-via skill` puts the skill. An explicit
+// --config-dir is the update path and overwrites; the default location is
+// polite and skips when the skill is already there (#63), so re-running
+// onboard stays idempotent.
+func installDir(explicit string) (dir string, overwrite bool, err error) {
+	if explicit != "" {
+		return expandTilde(explicit), true, nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", false, err
+	}
+	return filepath.Join(home, ".claude", "skills"), false, nil
+}
 
 // installSkill copies the embedded skill into place. Skills are a folder with a
 // SKILL.md; copying is the whole install.
@@ -331,6 +348,54 @@ func writeClaudeEnv(project, actor, kind, url, token string, shared bool) (strin
 		return "", err
 	}
 	return target, nil
+}
+
+// printMCPCommand prints the filled-in `claude mcp add` command. Under
+// --config-via mcp it IS the wiring — Claude keeps its own MCP config, so this
+// is the command to paste; under --verbose it is the reference for wiring MCP
+// later.
+func printMCPCommand(actor, kind, url, token string) error {
+	command, err := mcpBin()
+	if err != nil {
+		return err
+	}
+	secret := token
+	if secret == "" {
+		secret = "$ANALOG_TOKEN"
+	}
+	fmt.Println("wire up MCP (stdio) — run this where the agent runs:")
+	fmt.Println()
+	fmt.Println("  claude mcp add analog \\")
+	fmt.Printf("    -e ANALOG_URL=%s \\\n", url)
+	fmt.Printf("    -e ANALOG_ACTOR=%s \\\n", actor)
+	fmt.Printf("    -e ANALOG_ACTOR_KIND=%s \\\n", kind)
+	fmt.Printf("    -e ANALOG_TOKEN=%s \\\n", secret)
+	fmt.Printf("    -- %s\n", command)
+	fmt.Println()
+	fmt.Println("  --scope user puts it in every project; the default is this one only.")
+	fmt.Println("  Check it with:  claude mcp get analog")
+	fmt.Println()
+	return nil
+}
+
+// printExports prints the shell exports an agent with only a shell needs.
+func printExports(actor, kind, url, token string) error {
+	analogPath, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	analogPath, _ = filepath.EvalSymlinks(analogPath)
+	fmt.Println("for an agent that only has a shell:")
+	fmt.Println()
+	fmt.Printf("  export ANALOG_URL=%s\n", url)
+	fmt.Printf("  export ANALOG_ACTOR=%s\n", actor)
+	fmt.Printf("  export ANALOG_ACTOR_KIND=%s\n", kind)
+	fmt.Printf("  export ANALOG_TOKEN=%s\n", or(token, "<token>"))
+	fmt.Printf("  export PATH=%s:$PATH\n", filepath.Dir(analogPath))
+	fmt.Println()
+	fmt.Println("  then:  analog whoami   # confirms who the server thinks you are")
+	fmt.Println()
+	return nil
 }
 
 // marshalStable indents like the Python writer did and sorts map keys, so

@@ -57,7 +57,7 @@ pass "server answers /api/health (window: server)"
 tmux new-window -t $SESSION -n onboard -c "$TMP/mockrepo"
 tmux send-keys -t $SESSION "export HOME=$TMP/home ANALOG_DATA_DIR=$TMP/data \
   ANALOG_DB=$TMP/data/analog.db ANALOG_AUTH_FILE=$TMP/data/auth.json; $REPO/bin/analog onboard e2e-agent \
-  --issue --url $URL --skill-into ~/.claude/skills --wrapper ~/.local/bin \
+  --issue --url $URL --wrapper ~/.local/bin \
   --claude-env $TMP/mockrepo > $TMP/onboard.out 2>&1; tmux wait-for -S onboard-done" Enter
 tmux wait-for onboard-done
 grep -q "analog_[A-Za-z0-9_-]*" "$TMP/onboard.out" || fail "no token printed by onboard"
@@ -131,10 +131,10 @@ pass "agent resolved the annotation with a reply"
 go build -o "$TMP/onboard_agent" ./scripts/onboard_agent
 tmux new-window -t $SESSION -n shim -c "$REPO"
 tmux send-keys -t $SESSION "env HOME=$TMP/home $TMP/onboard_agent --bin-dir $REPO/bin \
-  shim-agent --url $URL --claude-env $TMP/mockrepo > $TMP/shim.out 2> $TMP/shim.err; tmux wait-for -S w5" Enter
+  shim-agent --url $URL --claude-env $TMP/mockrepo --verbose > $TMP/shim.out 2> $TMP/shim.err; tmux wait-for -S w5" Enter
 tmux wait-for w5
 grep -q "deprecated" "$TMP/shim.err" || fail "shim did not warn"
-grep -q "ANALOG_ACTOR=e2e-agent\|shim-agent" "$TMP/shim.out" || fail "shim did not forward"
+grep -q "export ANALOG_ACTOR=shim-agent" "$TMP/shim.out" || fail "shim did not forward"
 python3 - <<EOF || fail "shim did not update claude-env"
 import json, pathlib
 env = json.loads(pathlib.Path("$TMP/mockrepo/.claude/settings.local.json").read_text())["env"]

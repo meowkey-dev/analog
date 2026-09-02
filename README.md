@@ -47,18 +47,26 @@ wherever `ANALOG_DATA_DIR` points.
 
 ## Onboard an agent
 
-Once the server is running, give an agent an identity, a surface — MCP or the CLI —
-and the skill that teaches the workflow the API cannot. For Claude Code working in a
-project at `~/src/my-project`, one command sets up all three:
+Once the server is running, give an agent an identity, the wiring it needs, and the
+skill that teaches the workflow the API cannot. For Claude Code working in a project
+at `~/src/my-project`, one command sets all three up:
 
 ```bash
 analog onboard claude-code \
   --issue \
   --url http://127.0.0.1:8787 \
-  --skill-into ~/.claude/skills \
-  --claude-env ~/src/my-project \
-  --print-mcp
+  --claude-env ~/src/my-project
 ```
+
+That mints a token, installs the skill into `~/.claude/skills`, and merges
+`ANALOG_URL`, `ANALOG_ACTOR`, `ANALOG_ACTOR_KIND`, `ANALOG_TOKEN` when supplied, and
+`ANALOG_CONFIG=/nonexistent` into the project's `.claude/settings.local.json`. The
+skill install is the `--config-via skill` default: rerunning skips an existing
+user-level skill, and `--config-dir DIR` installs somewhere else and overwrites —
+the update path. Add `--verbose` to also print the wiring instructions, the shell
+exports and the `claude mcp add` command (the full-form output of earlier releases)
+without changing what gets installed. `--config-via mcp` prints just the MCP command
+and installs no skill; `--config-via skip` wires nothing at all.
 
 In the help output, `--claude-env string` uses `string` as a placeholder for the
 project directory; it is not the literal word `string`. Use `--claude-env .` for the
@@ -75,7 +83,8 @@ is embedded in the binary, so a release or brew install can onboard without a ch
 
 ### MCP
 
-Ten tools over stdio (SPEC §4.1). The command above prints the filled-in command:
+Ten tools over stdio (SPEC §4.1). To wire MCP instead of the skill, `--config-via
+mcp` prints the filled-in command (add `--verbose` to see the exports too):
 
 ```bash
 claude mcp add analog -e ANALOG_URL=http://127.0.0.1:8787 -e ANALOG_ACTOR=claude-code -e ANALOG_ACTOR_KIND=agent -e ANALOG_TOKEN=analog_... -- /path/to/analog-mcp
@@ -141,7 +150,7 @@ The skill teaches the CLI, so it needs the CLI configured — it is documentatio
 credentials:
 
 ```bash
-analog onboard claude-code --url https://analog.example.com --token analog_... --skill-into ~/.claude/skills --claude-env ~/code/that-project
+analog onboard claude-code --url https://analog.example.com --token analog_... --claude-env ~/code/that-project
 ```
 
 `--claude-env-shared` targets the committed `.claude/settings.json` instead of the
