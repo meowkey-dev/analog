@@ -61,7 +61,10 @@ export interface CanvasProps {
   onCreateLink: (from: string, to: string, label: string, color: string | null) => void;
   onDeleteLink: (id: string) => void;
   onPopOut: (node: Node) => void;
-  onCreateCardAt: (x: number, y: number) => void;
+  onCreateCardAt: (x: number, y: number, kind?: "md" | "draw") => void;
+  /** a just-created drawing card the canvas should open the pen on. */
+  pendingEdit?: string | null;
+  onConsumedPendingEdit?: () => void;
 }
 
 export function Canvas(props: CanvasProps) {
@@ -127,7 +130,13 @@ export function Canvas(props: CanvasProps) {
     return counts;
   }, [props.nodes]);
 
-  // Superseded cards start collapsed (SPEC §2.4).
+  // a new sketch should open with the pen down, not as a blank svg to double-click.
+  useEffect(() => {
+    if (!props.pendingEdit) return;
+    setEditing(props.pendingEdit);
+    props.onConsumedPendingEdit?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.pendingEdit]);
   useEffect(() => {
     setCollapsed((previous) => {
       const next = { ...previous };
@@ -390,9 +399,14 @@ export function Canvas(props: CanvasProps) {
       onPointerDown={startPan}
       onWheel={onWheel}
       onDoubleClick={(event) => {
-        if (event.target !== event.currentTarget) return;
+        // .viewport fills the canvas, so the click target is almost never the
+        // canvas node itself. treat anything that is not a card or chrome as
+        // empty space; cards stopPropagation on their own double-click.
+        const el = event.target;
+        if (!(el instanceof Element)) return;
+        if (el.closest("[data-card-id], .zoom, .composer, .draw-editor")) return;
         const [x, y] = toWorld(event.clientX, event.clientY);
-        props.onCreateCardAt(Math.round(x), Math.round(y));
+        props.onCreateCardAt(Math.round(x), Math.round(y), event.shiftKey ? "draw" : "md");
       }}
     >
       <div className="viewport"

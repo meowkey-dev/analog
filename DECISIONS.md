@@ -216,6 +216,19 @@ has the split.
   matching included — the way it already replaces the tauri origins. A custom list
   is a deliberate policy, not a delta on top of the defaults.
 
+## Drawing cards (2026-09-01, #61)
+
+A sketch is an `svg` card, not a new kind. The contract already has svg; a pen is
+how the human authors it. Agents still read the SVG, pins still land on it, export
+still opens in Obsidian.
+
+- **Shift-double-click empty space** drops a 480×360 svg card and opens the pen.
+  Double-click (or ✎) on an existing svg card draws on it rather than opening the
+  source. Agent markup stays; new strokes append as `data-analog-stroke` paths so a
+  later edit can find them without a second `sp_kind`.
+- **Escape discards, clicking outside commits, ⌘Z undoes a stroke** while the pen
+  is down. Analog's own undo then takes the whole edit back after commit.
+
 ## Toolchain
 
 - Go **1.23+**. `CGO_ENABLED=0` everywhere.

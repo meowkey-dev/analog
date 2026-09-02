@@ -249,6 +249,29 @@ input, textarea, select {
 .theme-menu button.on { background: #1e2432; }
 .theme-menu .swatch { width: 12px; height: 12px; border-radius: 3px; border: 1px solid var(--line); flex: none; }
 
+/* drawing editor (#61): a pen on an svg card, not a new kind. */
+.draw-editor {
+  flex: 1; min-height: 0; display: flex; flex-direction: column;
+  background: #161920;
+}
+.draw-tools {
+  display: flex; align-items: center; gap: 4px; flex: none; flex-wrap: wrap;
+  padding: 4px 6px; border-bottom: 1px solid var(--line);
+  background: var(--card-head);
+}
+.draw-tools button { font-size: 11px; padding: 2px 7px; }
+.draw-tools .spacer { flex: 1; min-width: 8px; }
+.draw-swatches, .draw-widths { display: flex; gap: 4px; align-items: center; margin-left: 2px; }
+.draw-widths button { min-width: 22px; padding: 2px 5px; }
+.draw-stack { flex: 1; min-height: 0; position: relative; }
+.draw-backdrop { position: absolute; inset: 0; pointer-events: none; }
+.draw-backdrop svg { width: 100%; height: 100%; display: block; }
+.draw-surface {
+  position: absolute; inset: 0; width: 100%; height: 100%; display: block;
+  cursor: crosshair; touch-action: none;
+}
+.draw-surface.tool-eraser { cursor: cell; }
+
 .md h1, .md h2, .md h3 { margin: .2em 0 .4em; font-size: 1.15em; }.md p { margin: .4em 0; }
 .md ul, .md ol { margin: .4em 0; padding-left: 1.2em; }
 .md code { background: #12151c; padding: 1px 4px; border-radius: 4px; }
