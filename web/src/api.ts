@@ -99,6 +99,8 @@ export interface Health {
   ok: true;
   service: "analog";
   version: string;
+  // binary version (`analog-server --version`); absent on servers before it existed.
+  release?: string;
   auth_required: boolean;
 }
 

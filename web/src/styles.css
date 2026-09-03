@@ -520,6 +520,9 @@ input, textarea, select {
 
 .index { max-width: 760px; margin: 0 auto; padding: 56px 24px 80px; overflow: auto; height: 100%; }
 .index header h1 { color: var(--accent); font-size: 24px; letter-spacing: .04em; margin: 0 0 4px; }
+.index header h1 .release {
+  color: var(--dim); font-size: 13px; font-weight: 500; letter-spacing: 0; margin-left: 10px;
+}
 .index header p { color: var(--dim); margin: 0 0 28px; }
 .index .empty { color: var(--dim); }
 .index-error { border: 1px solid #5a3030; background: #2a1c1c; border-radius: 8px; padding: 12px 14px; margin-bottom: 24px; }

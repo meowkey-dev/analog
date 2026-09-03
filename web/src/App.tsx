@@ -447,7 +447,7 @@ export default function App() {
   }
 
   if (!slug && !fixtureMode) {
-    return <SpaceIndex onOpen={go} />;
+    return <SpaceIndex onOpen={go} release={boot.connected.health.release} />;
   }
 
   if (error) {

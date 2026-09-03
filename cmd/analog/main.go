@@ -149,17 +149,21 @@ func whoamiCmd() *cobra.Command {
 				return out(map[string]any{
 					"url": a.Base, "configured_actor": a.Actor,
 					"ok": health.OK, "service": health.Service, "version": health.Version,
+					"release":       health.Release,
 					"auth_required": health.AuthRequired,
 					"authenticated": identity.Authenticated,
 					"actor":         identity.Actor,
 					"actor_kind":    identity.ActorKind,
 				})
 			}
-			version := health.Version
-			if version == "" {
-				version = "?"
+			release := health.Release
+			if release == "" {
+				release = health.Version
 			}
-			fmt.Printf("server  %s  (analog %s)\n", a.Base, version)
+			if release == "" {
+				release = "?"
+			}
+			fmt.Printf("server  %s  (analog %s)\n", a.Base, release)
 			state := "off"
 			if health.AuthRequired {
 				state = "per-actor tokens"
