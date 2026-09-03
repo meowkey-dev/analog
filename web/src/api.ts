@@ -110,6 +110,12 @@ export interface Whoami {
   actor_kind: ActorKind | null;
 }
 
+export interface Media {
+  url: string;
+  content_type: string;
+  bytes: number;
+}
+
 let connection: Connection = loadConnection();
 
 /** Who this UI writes as. "human" until a token says otherwise (SPEC §2.2). */
@@ -243,6 +249,42 @@ export const api = {
 
   createCards: (slug: string, cards: Array<Partial<Node> & { title?: string; content?: string; kind?: Kind }>) =>
     request<Node[]>("POST", `/spaces/${slug}/cards`, ACTOR_PARAMS(), { cards }),
+
+  /** raw JSON Canvas nodes — the only way to create a `file` node (AMENDMENTS.md #7). */
+  createNodes: (slug: string, nodes: Array<Partial<Node>>) =>
+    request<Node[]>("POST", `/spaces/${slug}/cards`, ACTOR_PARAMS(), { nodes }),
+
+  /**
+   * multipart POST /media. the browser must set the multipart boundary, so this
+   * does not go through `request` (which would stamp application/json).
+   */
+  uploadMedia: async (slug: string, file: File, contentType?: string): Promise<Media> => {
+    const payload = contentType && contentType !== file.type
+      ? new File([file], file.name || "upload", { type: contentType })
+      : file;
+    const body = new FormData();
+    body.append("file", payload, payload.name || "upload");
+    const response = await fetch(url(`/spaces/${slug}/media`, ACTOR_PARAMS()), {
+      method: "POST",
+      headers: authHeaders(),
+      body,
+    });
+    if (!response.ok) {
+      let errBody: any = null;
+      try {
+        errBody = await response.json();
+      } catch {
+        /* non-JSON error body */
+      }
+      throw new ApiError(
+        response.status,
+        errBody?.error ?? "error",
+        errBody?.message ?? response.statusText,
+        errBody,
+      );
+    }
+    return (await response.json()) as Media;
+  },
 
   updateCard: (slug: string, id: string, patch: Partial<Node>, ifMatch?: number) =>
     request<Node>("PATCH", `/spaces/${slug}/cards/${id}`, ACTOR_PARAMS(), patch,

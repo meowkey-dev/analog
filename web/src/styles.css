@@ -99,6 +99,16 @@ input, textarea, select {
 .canvas.annotating { cursor: crosshair; }
 /* A drag must never leave a text selection behind it (#18). */
 .canvas.dragging { user-select: none; -webkit-user-select: none; }
+/* drop an image onto the board (#67): a dashed frame, not a toast. */
+.canvas.drop-target::after {
+  content: "drop to place on the board";
+  position: absolute; inset: 12px;
+  border: 2px dashed var(--accent); border-radius: 12px;
+  display: grid; place-items: center;
+  color: var(--accent); font-weight: 550; letter-spacing: .02em;
+  background: rgba(110, 168, 254, .08);
+  pointer-events: none; z-index: 25;
+}
 
 /* will-change promotes the pan/zoom layer: a JS-set 2D transform is otherwise
    applied at paint time, re-rasterizing the visible board every frame — 4x the
