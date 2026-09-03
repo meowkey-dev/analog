@@ -1,12 +1,13 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Markdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import DOMPurify from "dompurify";
 import { DiffView } from "./Diff";
 import { DrawEditor } from "./DrawEditor";
 import { AnnotationOverlay, type DraftAnnotation } from "./Annotations";
 import { api, getConnection, resolveUrl } from "./api";
 import type { Annotation, Node } from "./api";
+import { mdRemarkPlugins, mdRehypePlugins } from "./markdown";
+import "katex/dist/katex.min.css";
 
 /**
  * A file node's URL cannot go straight into <img src>: an image request carries no
@@ -72,7 +73,7 @@ const RESIZE_DIRS: ResizeDir[] = ["n", "s", "e", "w", "ne", "nw", "se", "sw"];
 /**
  * Renders one card body by sp_kind (SPEC §5).
  *
- *   plain -> <pre>            md -> react-markdown
+ *   plain -> <pre>            md -> react-markdown + KaTeX (#68)
  *   svg   -> inlined, sanitized; double-click / ✎ opens a pen (#61), not a textarea
  *   html  -> <iframe sandbox="allow-scripts"> with NO allow-same-origin, so agent
  *            HTML can neither read the parent document nor forge an annotation.
@@ -103,7 +104,7 @@ function Body({ node, mdTheme, bodyRef }: {
     case "md":
       return (
         <div ref={bodyRef} className={`card-body md md-theme-${mdTheme}`}>
-          <Markdown remarkPlugins={[remarkGfm]}>{node.text ?? ""}</Markdown>
+          <Markdown remarkPlugins={mdRemarkPlugins} rehypePlugins={mdRehypePlugins}>{node.text ?? ""}</Markdown>
         </div>
       );
     case "svg":

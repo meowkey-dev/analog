@@ -47,8 +47,9 @@ annotations are how the human tracks what you've ignored.
 
 - **One idea per card.** A wall of text in a single card cannot be annotated
   usefully, which defeats the point.
-- Use `--kind html` or `--kind svg` for anything visual. It renders; the human
-  can pin comments on specific regions of it.
+- Markdown cards render GFM and LaTeX (`$...$`, `$$...$$`). Use `--kind html`
+  or `--kind svg` for anything visual — it renders, and the human can pin
+  comments on specific regions of it.
 - `analog link <slug> <from> <to> --label "..."` whenever cards relate.
   Always label. Unlabelled edges are noise.
 - Don't post status updates or narration. Analog is for artifacts under

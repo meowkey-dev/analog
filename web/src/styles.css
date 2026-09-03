@@ -218,6 +218,13 @@ input, textarea, select {
 }
 .card-body.md hr { border: none; border-top: 1px solid var(--md-rule, var(--line)); }
 .card-body.md img { max-width: 100%; }
+/* katex inherits --md-ink so nord/paper/solar stay consistent (#68). wide
+   display formulas scroll inside the card instead of overflowing the board. */
+.card-body.md .katex-display {
+  margin: .6em 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
 
 .md-theme-nord {
   --md-bg: #2e3440; --md-ink: #d8dee9; --md-head: #88c0d0; --md-link: #81a1c1;
