@@ -475,7 +475,7 @@ React + Vite. One route: `/s/:slug`.
   points. Draw a new link by dragging from a card's edge handle.
 - **Card rendering** by `sp_kind`:
   - `plain` → `<pre>`
-  - `md` → `react-markdown`
+  - `md` → `react-markdown` with GFM and KaTeX (`$...$`, `$$...$$`)
   - `image` → `<img>`
   - `svg` → inlined, sanitized
   - `html` → `<iframe sandbox="allow-scripts" srcdoc={...}>`, **no** `allow-same-origin`

@@ -229,6 +229,24 @@ still opens in Obsidian.
 - **Escape discards, clicking outside commits, ⌘Z undoes a stroke** while the pen
   is down. Analog's own undo then takes the whole edit back after commit.
 
+## Markdown math (2026-09-02, #68)
+
+Agents writing a derivation should not have to drop into an `html` card for `$x^2$`.
+The card kind is still `md`; math is a renderer plugin, not a new `sp_kind`.
+
+- **KaTeX, not MathJax.** KaTeX is render-only (no TeX engine at runtime), so the
+  cost is fonts + CSS rather than a second interpreter in the bundle. `remark-math`
+  parses `$...$` / `$$...$$`; `rehype-katex` turns those nodes into HTML. The text
+  on the wire stays the TeX source — export, diff, and the editor see `$e^{i\pi}$`,
+  not a formula image.
+- **Malformed TeX does not take the card down.** `throwOnError: false`, so a bad
+  formula is a red error glyph, not a blank body.
+- **Math inherits the markdown theme.** KaTeX does not set a fill colour, so
+  nord/paper/solar (#41) keep working. Display formulas `overflow-x: auto` inside
+  the card so a wide integral does not spill onto the board.
+- **woff2 only.** KaTeX's CSS references woff2, woff and ttf for each face; Vite
+  would have embedded all three. The extra copies are dropped at build time.
+
 ## Toolchain
 
 - Go **1.23+**. `CGO_ENABLED=0` everywhere.
