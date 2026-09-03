@@ -17,7 +17,8 @@ import (
 	"github.com/meowkey-dev/analog/internal/store"
 )
 
-// Version is what /health reports. It matches contracts/openapi.json info.version.
+// Version is the API contract, matching contracts/openapi.json info.version.
+// /health reports it as `version`; the binary's version is `release`.
 const Version = "0.6.0"
 
 // API is the prefix every documented operation sits behind.

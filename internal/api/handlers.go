@@ -11,6 +11,7 @@ import (
 	"github.com/meowkey-dev/analog/internal/config"
 	"github.com/meowkey-dev/analog/internal/sse"
 	"github.com/meowkey-dev/analog/internal/store"
+	"github.com/meowkey-dev/analog/internal/version"
 )
 
 // handle registers one route and remembers the pattern, so contract_test.go can
@@ -68,9 +69,14 @@ func (s *Server) routes(mux *http.ServeMux) {
 
 // health is unauthenticated on purpose: a client has to be able to find out whether
 // this server exists and whether it wants a token before it has one.
+//
+// `version` is the frozen contract (openapi info.version). `release` is the binary,
+// same string `--version` prints, so the UI can show which analog-server this is
+// without an amendment for a field the contract never named.
 func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok": true, "service": "analog", "version": Version,
+		"release":       version.Version,
 		"auth_required": s.Tokens.Enabled(),
 	})
 }

@@ -112,6 +112,7 @@ type Health struct {
 	OK           bool   `json:"ok"`
 	Service      string `json:"service"`
 	Version      string `json:"version"`
+	Release      string `json:"release"`
 	AuthRequired bool   `json:"auth_required"`
 }
 

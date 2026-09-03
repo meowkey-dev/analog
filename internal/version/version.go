@@ -2,10 +2,11 @@
 // time (scripts/build.sh, from the tag in CI): a plain `go build` — tests, `go
 // install` — reports "dev".
 //
-// This is the *binary's* version, which moves on every release. It is not the API
-// contract's: /api/health reports that one (internal/api.Version, matching
-// contracts/openapi.json), and it moves only through the amendment process. A
-// v0.5.3 binary can serve the 0.5.0 contract.
+// This is the *binary's* version, which moves on every release. The API contract's
+// version (internal/api.Version, matching contracts/openapi.json) is a different
+// number and moves only through the amendment process. /api/health reports both:
+// `version` is the contract, `release` is this string. A v0.11.0 binary can serve
+// the 0.6.0 contract.
 package version
 
 import (

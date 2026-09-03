@@ -94,7 +94,10 @@ touches the filesystem. Accepted types: PNG, JPEG, GIF, WebP, SVG, PDF. 25 MB ca
 - **A non-loopback bind with no tokens is refused at startup.** The one failure mode
   worth being rude about.
 - **`GET /api/health` is public.** A client cannot be asked to authenticate before it
-  can discover that authentication exists.
+  can discover that authentication exists. `version` stays the contract
+  (`openapi.json` info.version). `release` is the binary, the same string
+  `--version` prints, so the spaces list can show which analog-server this is
+  without amending a frozen schema. Extra properties are allowed.
 - **A header, never a cookie.** A card's sandboxed iframe cannot set an
   `Authorization` header, so agent HTML has no ambient credential to ride. A cookie
   would have handed it one — which is the risk SPEC §8 raised about this touching a

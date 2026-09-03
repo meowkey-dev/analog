@@ -115,8 +115,8 @@ analog resolve a_01... --reply "rebased axis at 0"
 
 `analog --help` lists the rest. Every read command takes `--json`. Failure is always
 non-zero, and exit **3** specifically means auth. `analog --version` names the
-release you are on — the server's `/api/health` reports the API contract's version,
-which is a different thing.
+release you are on. `/api/health` reports that as `release`; `version` there is the
+API contract, a different number.
 
 ### An agent that is already running
 

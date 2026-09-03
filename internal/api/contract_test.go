@@ -17,6 +17,7 @@ import (
 	"github.com/meowkey-dev/analog/internal/auth"
 	"github.com/meowkey-dev/analog/internal/config"
 	"github.com/meowkey-dev/analog/internal/store"
+	"github.com/meowkey-dev/analog/internal/version"
 )
 
 // The contract is the definition of done, so it is checked mechanically rather than
@@ -127,6 +128,22 @@ func TestVersionMatchesTheContract(t *testing.T) {
 	info, _ := spec["info"].(map[string]any)
 	if info["version"] != Version {
 		t.Errorf("/health reports %q, contracts/openapi.json says %q", Version, info["version"])
+	}
+}
+
+func TestHealthReportsTheRelease(t *testing.T) {
+	s := newTestServer(t)
+	resp := httptest.NewRecorder()
+	s.ServeHTTP(resp, httptest.NewRequest(http.MethodGet, API+"/health", nil))
+	if resp.Code != http.StatusOK {
+		t.Fatalf("status %d", resp.Code)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(resp.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if got := body["release"]; got != version.Version {
+		t.Errorf("release = %v, want %q", got, version.Version)
 	}
 }
 

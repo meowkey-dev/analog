@@ -26,9 +26,18 @@ func securedServer(t *testing.T) *server {
 
 func TestAuth_HealthOnAnOpenServer(t *testing.T) {
 	s := startServer(t)
+	got := s.get(t, "/api/health", nil).obj()
+	// `version` is the frozen contract. `release` is the binary and moves every
+	// tag, so it is checked for presence rather than a pinned string.
 	assertJSONEq(t, "health",
 		jlit(t, `{"ok": true, "service": "analog", "version": "0.6.0", "auth_required": false}`),
-		s.get(t, "/api/health", nil).body)
+		map[string]any{
+			"ok": got["ok"], "service": got["service"],
+			"version": got["version"], "auth_required": got["auth_required"],
+		})
+	if asStr(got["release"]) == "" {
+		t.Error("health.release is empty; it is the analog-server version the UI shows")
+	}
 }
 
 func TestAuth_HealthNeedsNoTokenAndSaysOneIsNeeded(t *testing.T) {

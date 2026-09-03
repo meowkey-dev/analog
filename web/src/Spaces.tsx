@@ -42,7 +42,7 @@ function counts(space: Space) {
   return c;
 }
 
-export function SpaceIndex({ onOpen }: { onOpen: (slug: string) => void }) {
+export function SpaceIndex({ onOpen, release }: { onOpen: (slug: string) => void; release?: string }) {
   const { spaces, error, reload } = useSpaces();
   const [title, setTitle] = useState("");
   const [slug, setSlug] = useState("");
@@ -73,7 +73,7 @@ export function SpaceIndex({ onOpen }: { onOpen: (slug: string) => void }) {
   return (
     <div className="index">
       <header>
-        <h1>analog</h1>
+        <h1>analog{release ? <span className="release" title="analog-server --version">{release}</span> : null}</h1>
         <p>A shared canvas for you and your agents. One space per workstream.</p>
       </header>
 
