@@ -3,6 +3,7 @@ import { Card, type ResizeDir } from "./Card";
 import { Links } from "./Links";
 import type { DraftAnnotation } from "./Annotations";
 import type { Annotation, Edge, Node } from "./api";
+import { filesFromDataTransfer, isFileDrag } from "./upload";
 
 /** Pan/zoom via a CSS transform; cards absolutely positioned; raw pointer events. */
 
@@ -62,6 +63,8 @@ export interface CanvasProps {
   onDeleteLink: (id: string) => void;
   onPopOut: (node: Node) => void;
   onCreateCardAt: (x: number, y: number, kind?: "md" | "draw") => void;
+  /** drop/paste: place file cards at the world point the pointer (or viewport) is on. */
+  onCreateFileCards: (files: File[], x: number, y: number) => void;
   /** a just-created drawing card the canvas should open the pen on. */
   pendingEdit?: string | null;
   onConsumedPendingEdit?: () => void;
@@ -79,6 +82,7 @@ export function Canvas(props: CanvasProps) {
   const [linkColor, setLinkColor] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [threadOpen, setThreadOpen] = useState<Record<string, boolean>>({});
+  const [dropping, setDropping] = useState(false);
 
   // Only the dragged card gets a fresh object identity here. Cloning untouched
   // nodes too would re-render every card — re-parsing every markdown body — on
@@ -366,6 +370,56 @@ export function Canvas(props: CanvasProps) {
       return { scale, x: px - (px - v.x) * ratio, y: py - (py - v.y) * ratio };
     });
 
+  const worldCenter = (): [number, number] => {
+    const element = container.current;
+    if (!element) return [0, 0];
+    const box = element.getBoundingClientRect();
+    return toWorld(box.left + box.width / 2, box.top + box.height / 2);
+  };
+
+  // paste an image onto the board at the viewport centre. skipped inside inputs
+  // so a comment or card edit keeps its native paste.
+  useEffect(() => {
+    const onPaste = (event: ClipboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const tag = target?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if (target?.closest?.("[contenteditable], .draw-editor, .composer")) return;
+      const files = filesFromDataTransfer(event.clipboardData);
+      if (files.length === 0) return;
+      event.preventDefault();
+      const [x, y] = worldCenter();
+      props.onCreateFileCards(files, Math.round(x), Math.round(y));
+    };
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+    // worldCenter closes over viewport via toWorld; re-bind when that moves.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [toWorld, props.onCreateFileCards]);
+
+  const onDragOver = (event: React.DragEvent) => {
+    if (!isFileDrag(event.dataTransfer.types)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+    if (!dropping) setDropping(true);
+  };
+
+  const onDragLeave = (event: React.DragEvent) => {
+    const next = event.relatedTarget;
+    if (next && event.currentTarget.contains(next as globalThis.Node)) return;
+    setDropping(false);
+  };
+
+  const onDrop = (event: React.DragEvent) => {
+    if (!isFileDrag(event.dataTransfer.types)) return;
+    event.preventDefault();
+    setDropping(false);
+    const files = filesFromDataTransfer(event.dataTransfer);
+    if (files.length === 0) return;
+    const [x, y] = toWorld(event.clientX, event.clientY);
+    props.onCreateFileCards(files, Math.round(x), Math.round(y));
+  };
+
   /** Back to 100% about the viewport center (#7). */
   const resetZoom = () =>
     setViewport((v) => {
@@ -395,9 +449,12 @@ export function Canvas(props: CanvasProps) {
   return (
     <div
       ref={container}
-      className={`canvas${props.annotateMode ? " annotating" : ""}${drag?.kind === "pan" ? " panning" : ""}${drag ? " dragging" : ""}`}
+      className={`canvas${props.annotateMode ? " annotating" : ""}${drag?.kind === "pan" ? " panning" : ""}${drag ? " dragging" : ""}${dropping ? " drop-target" : ""}`}
       onPointerDown={startPan}
       onWheel={onWheel}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
       onDoubleClick={(event) => {
         // .viewport fills the canvas, so the click target is almost never the
         // canvas node itself. treat anything that is not a card or chrome as

@@ -250,6 +250,19 @@ The card kind is still `md`; math is a renderer plugin, not a new `sp_kind`.
 - **woff2 only.** KaTeX's CSS references woff2, woff and ttf for each face; Vite
   would have embedded all three. The extra copies are dropped at build time.
 
+## File upload from the board (2026-09-02, #67)
+
+The API and CLI already placed file nodes; the human had no way to. A screenshot
+is a file node, not a new kind — `POST /media` then `POST /cards` with `nodes`.
+
+- **Drop or paste** onto the board places a file card at the pointer (or the
+  viewport centre, for paste). The card is sized to the image, capped at the
+  sketch box so a 4K screenshot does not fill the space.
+- **Upload** in the topbar is the same path without a drop point, so the server
+  auto-lays the card out like `analog upload`.
+- Accepted types and the 25 MB cap match the server; a rejected file is a toast,
+  not a 400 the human has to decode.
+
 ## Toolchain
 
 - Go **1.23+**. `CGO_ENABLED=0` everywhere.

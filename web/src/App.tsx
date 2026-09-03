@@ -7,6 +7,7 @@ import { SpaceIndex, SpaceSwitcher } from "./Spaces";
 import { api, subscribe, ApiError, getIdentity } from "./api";
 import type { AnalogEvent, Annotation, Canvas as CanvasData, Motivation, Node, Space } from "./api";
 import { emptyDrawing, DRAW_WIDTH, DRAW_HEIGHT } from "./draw";
+import { acceptFile, cardSizeForFile, FILE_CASCADE, isFileDrag, MEDIA_ACCEPT, titleOf } from "./upload";
 import { Connect, adopt, attempt, type Connected } from "./Connect";
 import { clearConnection, describe, loadConnection } from "./connection";
 import fixtureCanvas from "../../contracts/fixtures/canvas.json";
@@ -70,6 +71,7 @@ export default function App() {
   const [popOut, setPopOut] = useState<Node | null>(null);
   const [commander, setCommander] = useState(false);
   const [pendingEdit, setPendingEdit] = useState<string | null>(null);
+  const picker = useRef<HTMLInputElement>(null);
   // Markdown text scale, remembered per browser (#14).
   const [mdScale, setMdScale] = useState(() => {
     const stored = Number(localStorage.getItem("analog.mdscale"));
@@ -324,6 +326,52 @@ export default function App() {
     });
   };
 
+  // post /media then a file node. `at` is the drop/paste point; omitted for the
+  // picker so the server auto-lays the card out the way `analog upload` does.
+  const createFileCards = (files: File[], at?: { x: number; y: number }) => {
+    const accepted: { file: File; contentType: string }[] = [];
+    for (const file of files) {
+      const verdict = acceptFile(file);
+      if (verdict.ok) accepted.push({ file, contentType: verdict.contentType });
+      else notify(verdict.reason);
+    }
+    if (accepted.length === 0) return;
+    guard(async () => {
+      const drafts: Array<Partial<Node>> = [];
+      for (const [i, item] of accepted.entries()) {
+        const media = await api.uploadMedia(slug, item.file, item.contentType);
+        const size = await cardSizeForFile(item.file);
+        const node: Partial<Node> = {
+          type: "file",
+          file: media.url,
+          sp_title: titleOf(item.file),
+          width: size.width,
+          height: size.height,
+        };
+        if (at) {
+          node.x = at.x + i * FILE_CASCADE;
+          node.y = at.y + i * FILE_CASCADE;
+        }
+        drafts.push(node);
+      }
+      const nodes = await api.createNodes(slug, drafts);
+      await refresh();
+      const last = nodes[nodes.length - 1];
+      if (last) setSelectedCard(last.id);
+      const ids = nodes.map((n) => n.id);
+      pushUndo({
+        label: ids.length === 1 ? "upload" : `upload ${ids.length}`,
+        run: () => {
+          setSelectedCard(null);
+          guard(async () => {
+            for (const id of ids) await api.deleteCard(slug, id);
+            await refresh();
+          });
+        },
+      });
+    });
+  };
+
   const createLink = (from: string, to: string, label: string, color: string | null) => {
     guard(async () => {
       const edge = await api.createLink(slug, from, to, label, undefined, color ?? undefined);
@@ -432,6 +480,20 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKey);
   });
 
+  // a drop onto the topbar (or anywhere that is not the canvas) must not navigate
+  // the tab to the file. the canvas handles placement; everywhere else is a no-op.
+  useEffect(() => {
+    const allow = (event: DragEvent) => {
+      if (event.dataTransfer && isFileDrag(event.dataTransfer.types)) event.preventDefault();
+    };
+    window.addEventListener("dragover", allow);
+    window.addEventListener("drop", allow);
+    return () => {
+      window.removeEventListener("dragover", allow);
+      window.removeEventListener("drop", allow);
+    };
+  }, []);
+
   if (boot.phase === "checking") {
     return <div className="index"><header><h1>analog</h1><p>connecting…</p></header></div>;
   }
@@ -494,6 +556,21 @@ export default function App() {
           <button onClick={() => setMdScale((s) => Math.min(2, Math.round((s + 0.125) * 1000) / 1000))}
                   disabled={mdScale >= 2}>A+</button>
         </div>
+        <button onClick={() => picker.current?.click()} title="Upload an image onto the board">
+          upload
+        </button>
+        <input
+          ref={picker}
+          type="file"
+          hidden
+          multiple
+          accept={MEDIA_ACCEPT}
+          onChange={(event) => {
+            const files = Array.from(event.target.files ?? []);
+            event.target.value = "";
+            if (files.length > 0) createFileCards(files);
+          }}
+        />
         <button className={annotateMode ? "on" : ""} onClick={() => setAnnotateMode((on) => !on)}
                 title="Click a card to pin a comment; shift-drag for a region (c)">
           {annotateMode ? "commenting…" : "comment"}
@@ -549,6 +626,7 @@ export default function App() {
           onDeleteLink={deleteLink}
           onPopOut={setPopOut}
           onCreateCardAt={createCardAt}
+          onCreateFileCards={(files, x, y) => createFileCards(files, { x, y })}
           pendingEdit={pendingEdit}
           onConsumedPendingEdit={() => setPendingEdit(null)}
         />
@@ -615,7 +693,7 @@ export default function App() {
         ) : (
           <>drag to pan · ⌘/ctrl-scroll to zoom · scroll over a card to scroll the card ·
           double-click empty space for a card · <strong>shift-double-click for a
-          sketch</strong> · drag the ◇ handle to link ·
+          sketch</strong> · drop or paste an image onto the board · drag the ◇ handle to link ·
           double-click a card to edit · ✎ on an svg card to draw · ⌘K to find a card ·
           ⌘Z to undo · c to comment</>
         )}
