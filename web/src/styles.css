@@ -589,3 +589,17 @@ a.brand { text-decoration: none; }
 .topbar .server:hover { color: var(--ink); }
 .topbar .server .who { color: var(--accent); }
 .card-body.file.muted { color: var(--dim); }
+
+.export-wrap { position: relative; }
+.export-menu {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 90;
+  min-width: 220px; background: var(--panel); border: 1px solid var(--line);
+  border-radius: 8px; padding: 4px; box-shadow: 0 12px 32px rgba(0,0,0,.5);
+}
+.export-menu button {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
+  width: 100%; background: transparent; border: none; border-radius: 6px;
+  padding: 7px 9px; text-align: left;
+}
+.export-menu button:hover { background: #232833; }
+.export-menu .muted { color: var(--dim); font-size: 11px; font-weight: 400; }

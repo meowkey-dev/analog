@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -549,6 +550,114 @@ func TestFindAnnotationReportsAnAbsentOne(t *testing.T) {
 	api, _ := newTestClient(t)
 	if _, _, err := api.FindAnnotation("a_missing"); !Is(err, CodeNotFound) {
 		t.Errorf("err = %v, want not_found", err)
+	}
+}
+
+func TestGetMediaFetchesBytesNotJSON(t *testing.T) {
+	calls := &[]recorded{}
+	png := "\x89PNG\r\n"
+	api := New(Options{URL: "http://testserver", Actor: "claude-code", Config: map[string]string{},
+		Token: "tok",
+		Transport: stub{t: t, calls: calls, handler: func(r *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: 200,
+				Header:     http.Header{"Content-Type": []string{"image/png"}},
+				Body:       io.NopCloser(strings.NewReader(png)),
+			}, nil
+		}}})
+	data, ctype, err := api.GetMedia("/api/spaces/redesign/media/m_01.png")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != png || ctype != "image/png" {
+		t.Fatalf("got %q %q", data, ctype)
+	}
+	if (*calls)[0].Path != "/api/spaces/redesign/media/m_01.png" {
+		t.Errorf("path = %s", (*calls)[0].Path)
+	}
+	if got := (*calls)[0].Headers.Get("Authorization"); got != "Bearer tok" {
+		t.Errorf("Authorization = %q", got)
+	}
+}
+
+func TestGetMediaSurfaces404(t *testing.T) {
+	calls := &[]recorded{}
+	api := New(Options{URL: "http://testserver", Actor: "claude-code", Config: map[string]string{},
+		Transport: stub{t: t, calls: calls, handler: func(*http.Request) (*http.Response, error) {
+			return respond(404, `{"error":"not_found","message":"nope"}`), nil
+		}}})
+	_, _, err := api.GetMedia("/api/spaces/redesign/media/missing.png")
+	if !Is(err, CodeNotFound) {
+		t.Errorf("err = %v, want not_found", err)
+	}
+}
+
+func TestGetMediaDoesNotSendBearerToExternalURL(t *testing.T) {
+	var authorization string
+	external := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authorization = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "image/png")
+		_, _ = w.Write([]byte("png"))
+	}))
+	defer external.Close()
+
+	api := New(Options{URL: "http://analog.example", Config: map[string]string{}, Token: "secret"})
+	data, _, err := api.GetMedia(external.URL + "/image.png")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "png" {
+		t.Fatalf("data = %q", data)
+	}
+	if authorization != "" {
+		t.Fatalf("external media received Authorization %q", authorization)
+	}
+}
+
+func TestGetMediaStripsBearerWhenMediaRedirectsAway(t *testing.T) {
+	var authorization string
+	external := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authorization = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "image/png")
+		_, _ = w.Write([]byte("png"))
+	}))
+	defer external.Close()
+
+	analog := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, external.URL+"/redirected.png", http.StatusFound)
+	}))
+	defer analog.Close()
+
+	api := New(Options{URL: analog.URL, Config: map[string]string{}, Token: "secret"})
+	data, _, err := api.GetMedia("/api/spaces/redesign/media/m_01.png")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "png" {
+		t.Fatalf("data = %q", data)
+	}
+	if authorization != "" {
+		t.Fatalf("redirect target received Authorization %q", authorization)
+	}
+}
+
+func TestGetMediaCapsRedirects(t *testing.T) {
+	var requests int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		time.Sleep(time.Millisecond)
+		http.Redirect(w, r, r.URL.String(), http.StatusFound)
+	}))
+	defer server.Close()
+
+	api := New(Options{URL: server.URL, Config: map[string]string{}, Token: "secret", Timeout: 500 * time.Millisecond})
+	api.sleep = func(time.Duration) {}
+	_, _, err := api.GetMedia("/api/spaces/redesign/media/m_01.png")
+	if err == nil {
+		t.Fatal("redirect loop unexpectedly succeeded")
+	}
+	if requests > maxMediaRedirects*2+2 {
+		t.Fatalf("redirect loop made %d requests; cap is %d per attempt", requests, maxMediaRedirects)
 	}
 }
 

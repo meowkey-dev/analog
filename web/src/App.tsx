@@ -7,6 +7,7 @@ import { SpaceIndex, SpaceSwitcher } from "./Spaces";
 import { api, subscribe, ApiError, getIdentity } from "./api";
 import type { AnalogEvent, Annotation, Canvas as CanvasData, Motivation, Node, Space } from "./api";
 import { emptyDrawing, DRAW_WIDTH, DRAW_HEIGHT } from "./draw";
+import { ExportMenu } from "./ExportMenu";
 import { acceptFile, cardSizeForFile, FILE_CASCADE, isFileDrag, MEDIA_ACCEPT, titleOf } from "./upload";
 import { Connect, adopt, attempt, type Connected } from "./Connect";
 import { clearConnection, describe, loadConnection } from "./connection";
@@ -570,6 +571,12 @@ export default function App() {
             event.target.value = "";
             if (files.length > 0) createFileCards(files);
           }}
+        />
+        <ExportMenu
+          title={space?.title ?? slug}
+          slug={slug}
+          onError={notify}
+          onBusy={(message) => setToast(message)}
         />
         <button className={annotateMode ? "on" : ""} onClick={() => setAnnotateMode((on) => !on)}
                 title="Click a card to pin a comment; shift-drag for a region (c)">

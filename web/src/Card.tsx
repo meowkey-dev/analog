@@ -182,7 +182,9 @@ function FileBody({ node, bodyRef }: { node: Node; bodyRef: (el: HTMLElement | n
     <div ref={bodyRef} className="card-body file">
       {isImage
         ? <img src={src} alt={node.sp_title ?? ""} draggable={false} />
-        : <a href={src} target="_blank" rel="noreferrer">{node.sp_title || node.file}</a>}
+        : <a data-file-card-link="true" href={src} target="_blank" rel="noreferrer">
+            {node.sp_title || node.file}
+          </a>}
     </div>
   );
 }

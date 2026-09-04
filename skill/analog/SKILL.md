@@ -79,6 +79,7 @@ default replaces in place.
     analog comments <slug>               # open annotations
     analog rm <slug> <card_id>           # your own cards only
     analog export <slug> > out.canvas    # JSON Canvas; opens in Obsidian
+    analog export <slug> --format html > out.html
     analog import <slug> < in.canvas     # merges, never deletes
 
 `--json` works on every read command. Everything exits non-zero on failure, so check

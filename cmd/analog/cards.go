@@ -3,12 +3,14 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/meowkey-dev/analog/client"
+	"github.com/meowkey-dev/analog/internal/portable"
 )
 
 func addCmd() *cobra.Command {
@@ -211,19 +213,59 @@ func unlinkCmd() *cobra.Command {
 
 func exportCmd() *cobra.Command {
 	var deleted bool
+	var format string
 	cmd := &cobra.Command{
 		Use:   "export <slug>",
-		Short: "Write the space as JSON Canvas on stdout. Opens in Obsidian.",
-		Args:  cobra.ExactArgs(1),
+		Short: "Write the space on stdout: JSON Canvas (default), HTML, or PDF.",
+		Long: "Write the space on stdout.\n\n" +
+			"  --format canvas  JSON Canvas 1.0; opens in Obsidian (default)\n" +
+			"  --format html    a portable page; Analog media inlined as data URIs\n" +
+			"  --format pdf     the HTML, printed through Chrome/Chromium\n\n" +
+			"PDF needs a chrome binary (ANALOG_CHROME overrides). Without one, save\n" +
+			"HTML and use Print to PDF, or Export in the board UI.",
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			canvas, err := newClient().GetCanvas(args[0], deleted)
+			c := newClient()
+			canvas, err := c.GetCanvas(args[0], deleted)
 			if err != nil {
 				return fail(err)
 			}
-			return out(canvas)
+			switch strings.ToLower(format) {
+			case "", "canvas":
+				return out(canvas)
+			case "html", "pdf":
+				title := args[0]
+				if space, err := c.GetSpace(args[0]); err == nil && space.Title != "" {
+					title = space.Title
+				}
+				page, err := portable.HTML(canvas, portable.Options{
+					Title: title, Slug: args[0],
+					Fetch: c.GetMedia,
+				})
+				if err != nil {
+					return err
+				}
+				if strings.EqualFold(format, "html") {
+					fmt.Print(page)
+					return nil
+				}
+				if st, err := os.Stdout.Stat(); err == nil && st.Mode()&os.ModeCharDevice != 0 {
+					return usage("pdf is binary; redirect to a file: analog export %s --format pdf > %s.pdf",
+						args[0], args[0])
+				}
+				pdf, err := portable.PDF(page)
+				if err != nil {
+					return err
+				}
+				_, err = os.Stdout.Write(pdf)
+				return err
+			default:
+				return usage("unknown --format %s (canvas, html, pdf)", format)
+			}
 		},
 	}
 	cmd.Flags().BoolVar(&deleted, "deleted", false, "include deleted cards")
+	cmd.Flags().StringVar(&format, "format", "canvas", "canvas, html, or pdf")
 	return cmd
 }
 

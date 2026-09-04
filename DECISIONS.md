@@ -263,6 +263,40 @@ is a file node, not a new kind — `POST /media` then `POST /cards` with `nodes`
 - Accepted types and the 25 MB cap match the server; a rejected file is a toast,
   not a 400 the human has to decode.
 
+## Portable export (2026-09-03, #72)
+
+JSON Canvas is the git-diffable interop format; HTML and PDF are for handing the
+board to someone who is not running analog-server.
+
+- **No new endpoint.** Both formats are a presentation of `GET /canvas` plus
+  `GET /media`. The contract stays frozen.
+- **HTML is the portable snapshot.** Cards keep their canvas positions, file
+  nodes become data URIs, html cards stay in a sandboxed `srcdoc` iframe. The
+  UI export serialises the live DOM (markdown, KaTeX, themes, drawings already
+  rendered). The CLI rebuilds the same layout in Go with goldmark for `md`
+  cards — math stays as `$...$` there, because KaTeX is a renderer plugin, not
+  a second copy of the web bundle inside `analog`.
+- **Portability has an explicit boundary.** Analog's captured styles (including
+  the markdown/KaTeX styles present in the live document) and uploaded file-card
+  media are embedded in the HTML. A sandboxed html card remains an iframe, so
+  the exporter cannot safely inspect or rewrite its user-authored document;
+  external images, stylesheets, fonts, scripts, and other HTML dependencies in
+  that iframe may remain external. Parent-document resources are fetched without
+  ambient credentials when they can be captured; CORS or an unavailable resource
+  leaves its original URL in place rather than making export fail.
+- **PDF is that HTML, printed.** The topbar Export → PDF opens a print dialog
+  (`window.print()`) only after the exported page reports that fonts, media, and
+  iframe documents have settled. `analog export --format pdf` shells out to
+  Chrome/Chromium (`ANALOG_CHROME` overrides) with `--print-to-pdf`. The CLI
+  requires a structurally complete PDF (xref/root plus the final `%%EOF`) and
+  waits for stable bytes before stopping a headless process that stays alive;
+  otherwise it waits for clean exit and reports an incomplete file. It never
+  disables Chrome's sandbox. analog-server stays CGO-free and under 20 MB; a Go
+  PDF library that could paint HTML cards, SVG and KaTeX would be neither.
+  Without Chrome, save HTML and Print to PDF.
+- **Annotations, handles, and the rest of the chrome stay off the snapshot.**
+  The export is the board, not the conversation.
+
 ## Toolchain
 
 - Go **1.23+**. `CGO_ENABLED=0` everywhere.
