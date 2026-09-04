@@ -1,0 +1,139 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { color-scheme: light; font: 14px/1.4 system-ui, sans-serif; }
+  body { margin: 16px; color: #17202a; }
+  label { display: block; margin: 8px 0; }
+  input[type="text"] { box-sizing: border-box; width: 100%; padding: 6px 8px; }
+  button { padding: 6px 10px; }
+  #status { font-weight: 650; }
+  #status[data-state="pass"] { color: #16734a; }
+  #status[data-state="error"] { color: #b42318; }
+  pre { white-space: pre-wrap; background: #f2f4f7; padding: 8px; }
+</style>
+<h3>AG-UI sidecar request</h3>
+<label>Message <input id="message" type="text" value="hello from an Analog HTML card"></label>
+<label><input id="approved" type="checkbox"> Approved</label>
+<p id="status" data-state="ready">starting…</p>
+<p id="reply"></p>
+<pre id="events">waiting for SSE…</pre>
+<button id="run" type="button">send to sidecar</button>
+<script>
+  // This is the request shape used by AG-UI HttpAgent.requestInit: JSON POST
+  // in, text/event-stream out. The endpoint is deliberately a sidecar, not
+  // Analog — Analog remains the canvas that hosts this card.
+  // This credentialless demo deliberately does not put a bearer token in the
+  // stored card. A real trusted card must obtain short-lived/user-supplied
+  // credentials out of band; Origin: null is not an authentication signal.
+  const AGENT_URL = "http://127.0.0.1:9191/agent";
+  const expected = [
+    "RUN_STARTED",
+    "TEXT_MESSAGE_START",
+    "TEXT_MESSAGE_CONTENT",
+    "TEXT_MESSAGE_CONTENT",
+    "TEXT_MESSAGE_END",
+    "RUN_FINISHED",
+  ];
+  const status = document.getElementById("status");
+  const messageInput = document.getElementById("message");
+  const approvedInput = document.getElementById("approved");
+  const reply = document.getElementById("reply");
+  const eventLog = document.getElementById("events");
+  const runButton = document.getElementById("run");
+
+  function show(text, state) {
+    status.textContent = text;
+    status.dataset.state = state || "ready";
+  }
+
+  function report(result) {
+    // The demo harness uses this message only to show the result outside the
+    // opaque frame. A real card does not need parent access to use fetch().
+    parent.postMessage({ type: "ag-ui-demo-result", ...result }, "*");
+  }
+
+  async function run() {
+    runButton.disabled = true;
+    show("POST sent; reading streamed events…", "ready");
+    reply.textContent = "";
+    eventLog.textContent = "";
+    const received = [];
+    try {
+      const response = await fetch(AGENT_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "text/event-stream",
+        },
+        body: JSON.stringify({
+          threadId: "analog-demo-thread",
+          runId: "analog-demo-run",
+          state: { approved: approvedInput.checked },
+          messages: [{
+            id: "analog-demo-message",
+            role: "user",
+            content: messageInput.value,
+          }],
+          tools: [],
+          context: [],
+          forwardedProps: {},
+        }),
+      });
+      if (!response.ok || !response.body) {
+        throw new Error(`agent response ${response.status}`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let dataLines = [];
+      const dispatch = () => {
+        if (!dataLines.length) return;
+        const event = JSON.parse(dataLines.join("\n"));
+        received.push(event);
+        eventLog.textContent = received.map((item) => item.type).join("\n");
+        dataLines = [];
+      };
+      const consume = (final) => {
+        const lines = buffer.split(/\r?\n/);
+        buffer = final ? "" : (lines.pop() || "");
+        for (const line of lines) {
+          if (line === "") {
+            dispatch();
+          } else if (line.startsWith("data:")) {
+            // Keep data lines outside this call: an SSE frame may be split
+            // between arbitrary ReadableStream chunks.
+            dataLines.push(line.slice(5).trimStart());
+          }
+        }
+        if (final) dispatch();
+      };
+      for (;;) {
+        const part = await reader.read();
+        buffer += decoder.decode(part.value || new Uint8Array(), { stream: !part.done });
+        consume(part.done);
+        if (part.done) break;
+      }
+
+      const types = received.map((event) => event.type);
+      const ok = JSON.stringify(types) === JSON.stringify(expected);
+      if (!ok) throw new Error(`unexpected events: ${types.join(", ")}`);
+      reply.textContent = received
+        .filter((event) => event.type === "TEXT_MESSAGE_CONTENT")
+        .map((event) => event.delta || "")
+        .join("");
+      show(`PASS — ${received.length} AG-UI events; frame origin is ${location.origin}`, "pass");
+      report({ ok: true, events: types, origin: location.origin });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      show(`FAIL — ${message}`, "error");
+      report({ ok: false, error: message, origin: location.origin });
+    } finally {
+      runButton.disabled = false;
+    }
+  }
+
+  runButton.addEventListener("click", run);
+  run();
+</script>

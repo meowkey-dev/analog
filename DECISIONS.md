@@ -297,6 +297,35 @@ board to someone who is not running analog-server.
 - **Annotations, handles, and the rest of the chrome stay off the snapshot.**
   The export is the board, not the conversation.
 
+## HTML card network boundary (2026-09-04, #62/#64)
+
+An HTML card is an opaque-origin `srcdoc` document with exactly
+`sandbox="allow-scripts"`. The sandbox protects Analog's parent document,
+credentials and annotation layer from agent-authored HTML; it is not a network
+firewall. We do not add `allow-same-origin`, `allow-forms`, or a persisted
+per-space opt-in. Forms are unrelated to the supported network path.
+
+AG-UI's `HttpAgent` sends a JSON `POST` with `Content-Type: application/json`
+and `Accept: text/event-stream`, then consumes streamed SSE events from the
+response body. A card can use that same shape with a sidecar endpoint. Because
+the sandboxed document's origin is `null`, the sidecar must handle the CORS
+preflight and return `Access-Control-Allow-Origin: null`, allow `POST` and the
+headers the card sends, and keep the SSE response CORS-readable. An agent
+endpoint that needs an authorization header must allow that header in its
+preflight; Analog never injects its bearer token into the card. `Origin: null`
+is shared by arbitrary opaque origins and is not an authentication signal. The
+credentialless loopback demo must not be copied by embedding a long-lived
+bearer token in stored card HTML; trusted cards arrange user-supplied or
+short-lived credentials out of band and the sidecar authenticates them.
+
+The main card, its pop-out, and both portable export paths preserve this
+scripts-only iframe boundary. Export preserves the card document but neither
+proxies nor embeds its sidecar, so an exported card is interactive only while
+that external endpoint remains available and permits the opaque origin. The
+checked-in `examples/ag-ui` sidecar, card, and `scripts/ag-ui-smoke.sh` prove
+the path in a real browser. Analog remains a canvas and review surface, not an
+agent runtime.
+
 ## Toolchain
 
 - Go **1.23+**. `CGO_ENABLED=0` everywhere.
