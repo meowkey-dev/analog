@@ -49,6 +49,16 @@ describe("wrapExportDocument", () => {
     expect(html).toContain("const deadline = Date.now() + 4000");
     expect(html).toContain("await Promise.all([fontReady, mediaReadyGroup, frameReadyGroup])");
   });
+
+  it("does not add capabilities to an exported html card", () => {
+    const html = wrapExportDocument({
+      title: "Demo", slug: "demo", css: "", width: 100, height: 80,
+      body: '<iframe sandbox="allow-scripts" srcdoc="&lt;p&gt;demo&lt;/p&gt;"></iframe>',
+    });
+    expect(html).toContain('sandbox="allow-scripts"');
+    expect(html).not.toContain("allow-same-origin");
+    expect(html).not.toContain("allow-forms");
+  });
 });
 
 describe("buildExportHTML", () => {

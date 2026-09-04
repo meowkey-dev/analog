@@ -96,6 +96,24 @@ func TestHTMLSanitizesHostileSVG(t *testing.T) {
 	}
 }
 
+func TestHTMLCardKeepsTheOpaqueOriginSandbox(t *testing.T) {
+	html, err := HTML(client.Canvas{Nodes: []client.Node{{
+		"id": "c_1", "type": "text", "x": 0, "y": 0, "width": 160, "height": 100,
+		"text": `<button>run</button>`, "sp_kind": "html", "sp_title": "demo",
+	}}}, Options{Slug: "s"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(html, `sandbox="allow-scripts"`) {
+		t.Fatalf("html card lost its scripts-only sandbox: %s", html)
+	}
+	for _, capability := range []string{"allow-same-origin", "allow-forms"} {
+		if strings.Contains(html, capability) {
+			t.Errorf("portable html card unexpectedly grants %s", capability)
+		}
+	}
+}
+
 func TestHTMLNormalizesHostileEdgeColor(t *testing.T) {
 	canvas := client.Canvas{
 		Nodes: []client.Node{

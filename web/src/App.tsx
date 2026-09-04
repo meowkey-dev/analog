@@ -11,6 +11,7 @@ import { ExportMenu } from "./ExportMenu";
 import { acceptFile, cardSizeForFile, FILE_CASCADE, isFileDrag, MEDIA_ACCEPT, titleOf } from "./upload";
 import { Connect, adopt, attempt, type Connected } from "./Connect";
 import { clearConnection, describe, loadConnection } from "./connection";
+import { HTMLCardFrame } from "./html-card";
 import fixtureCanvas from "../../contracts/fixtures/canvas.json";
 import fixtureAnnotations from "../../contracts/fixtures/annotations.json";
 import fixtureEvents from "../../contracts/fixtures/events.json";
@@ -676,7 +677,7 @@ export default function App() {
               {popOut.sp_title || popOut.id}
               <button onClick={() => setPopOut(null)}>close</button>
             </header>
-            <iframe sandbox="allow-scripts" srcDoc={popOut.text ?? ""} title={popOut.sp_title ?? popOut.id} />
+            <HTMLCardFrame srcDoc={popOut.text ?? ""} title={popOut.sp_title ?? popOut.id} />
           </div>
         </div>
       )}

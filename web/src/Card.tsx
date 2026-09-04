@@ -6,6 +6,7 @@ import { DrawEditor } from "./DrawEditor";
 import { AnnotationOverlay, type DraftAnnotation } from "./Annotations";
 import { api, getConnection, resolveUrl } from "./api";
 import type { Annotation, Node } from "./api";
+import { HTMLCardFrame } from "./html-card";
 import { mdRemarkPlugins, mdRehypePlugins } from "./markdown";
 import "katex/dist/katex.min.css";
 
@@ -111,10 +112,9 @@ function Body({ node, mdTheme, bodyRef }: {
       return <div ref={bodyRef} className="card-body svg" dangerouslySetInnerHTML={{ __html: svg }} />;
     case "html":
       return (
-        <iframe
+        <HTMLCardFrame
           ref={bodyRef}
           className="card-body html"
-          sandbox="allow-scripts"
           srcDoc={html}
           title={node.sp_title ?? node.id}
         />

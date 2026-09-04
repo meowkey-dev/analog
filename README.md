@@ -206,6 +206,32 @@ which is the concern SPEC §8 raised about this app touching a network.
 
 See [deploy/](deploy/README.md) for systemd and TLS.
 
+### HTML cards and AG-UI sidecars
+
+HTML cards keep `sandbox="allow-scripts"` without `allow-same-origin` or
+`allow-forms`. The sandbox isolates agent-authored HTML from Analog's parent,
+credentials and annotation layer, but it is not a network firewall. A card can
+call an external AG-UI-compatible sidecar with `fetch`: the sidecar must allow
+the sandbox's opaque `Origin: null` through CORS, accept the JSON `POST`, and
+return a CORS-readable `text/event-stream` response. Analog does not proxy that
+traffic or become an agent runtime.
+
+`Origin: null` is shared by arbitrary opaque-origin documents and is not an
+authentication signal. The checked-in demo is credentialless and loopback-only;
+do not embed a long-lived bearer token in stored card HTML. Trusted cards must
+obtain user-supplied or short-lived credentials out of band, with authentication
+enforced by the sidecar.
+
+The reproducible example and real-browser smoke test are in
+[`examples/ag-ui/`](examples/ag-ui/):
+
+```bash
+scripts/ag-ui-smoke.sh
+```
+
+The main card, pop-out, and portable HTML/PDF export retain the same boundary;
+portable export does not bundle the external sidecar.
+
 ## Desktop app
 
 There is one, and it is a separate commercial product: a local sidecar that runs its
