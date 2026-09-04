@@ -111,6 +111,7 @@ analog feedback redesign               # the important one
 analog add redesign --title "Option E" --kind md --file draft.md
 cat chart.svg | analog add redesign --title "Revenue" --kind svg -
 analog resolve a_01... --reply "rebased axis at 0"
+analog export redesign --format html > redesign.html
 ```
 
 `analog --help` lists the rest. Every read command takes `--json`. Failure is always

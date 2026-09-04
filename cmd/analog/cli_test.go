@@ -630,6 +630,50 @@ func TestExportIsJSONCanvasAndImportRoundTrips(t *testing.T) {
 	}
 }
 
+func TestExportHTMLIsAPortablePage(t *testing.T) {
+	h := newHarness(t)
+	h.run("new", "redesign", "--title", "Nav redesign")
+	h.addCard("redesign", "Option A", "## hello\n\n- lowest risk")
+	html := h.run("export", "redesign", "--format", "html")
+	for _, want := range []string{"<!DOCTYPE html>", "Nav redesign", "Option A", "lowest risk", "/redesign"} {
+		if !strings.Contains(html, want) {
+			t.Errorf("html missing %q", want)
+		}
+	}
+	if strings.Contains(html, `"nodes"`) && strings.Contains(html, `"edges"`) && !strings.Contains(html, "<article") {
+		t.Error("html format still looked like JSON Canvas")
+	}
+}
+
+func TestExportHTMLInlinesFileNodes(t *testing.T) {
+	h := newHarness(t)
+	h.run("new", "redesign")
+	png := filepath.Join(h.dataDir, "shot.png")
+	if err := os.WriteFile(png, []byte("\x89PNG\r\n\x1a\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	h.run("upload", "redesign", png, "--title", "shot")
+	html := h.run("export", "redesign", "--format", "html")
+	if !strings.Contains(html, "data:image/png;base64,") {
+		t.Errorf("file node was not inlined:\n%s", html)
+	}
+	if !strings.Contains(html, "shot") {
+		t.Error("missing file card title")
+	}
+}
+
+func TestExportRejectsAnUnknownFormat(t *testing.T) {
+	h := newHarness(t)
+	h.run("new", "redesign")
+	r := h.invoke(options{}, "export", "redesign", "--format", "pptx")
+	if r.code == 0 {
+		t.Fatal("unknown format succeeded")
+	}
+	if !strings.Contains(r.stderr, "pptx") {
+		t.Errorf("stderr = %q", r.stderr)
+	}
+}
+
 func TestImportIsAdditive(t *testing.T) {
 	h := newHarness(t)
 	h.run("new", "redesign")

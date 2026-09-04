@@ -164,8 +164,30 @@ function url(path: string, params: Record<string, unknown> = {}, base = connecti
 
 /** Absolute URL for a path the server handed us, e.g. a file node's `file`. */
 export function resolveUrl(path: string): string {
-  if (/^https?:\/\//i.test(path)) return path;
-  return `${connection.baseUrl}${path}`;
+  const base = connection.baseUrl || (typeof window === "undefined" ? "http://localhost/" : window.location.href);
+  try {
+    return new URL(path, base).toString();
+  } catch {
+    return path;
+  }
+}
+
+/**
+ * Bearers are valid only for the server's own media route. A file node can be
+ * imported from elsewhere, so external media remains useful as an anonymous
+ * fetch, but it must never inherit Analog's credential.
+ */
+export function isAnalogMediaUrl(path: string): boolean {
+  if (typeof window === "undefined" && !connection.baseUrl) return false;
+  const base = connection.baseUrl || window.location.href;
+  try {
+    const target = new URL(path, base);
+    const server = new URL(base);
+    if (target.origin !== server.origin || target.username || target.password) return false;
+    return /^\/api\/spaces\/[^/]+\/media\/[^/]+$/.test(target.pathname);
+  } catch {
+    return false;
+  }
 }
 
 function authHeaders(token: string | null = connection.token): Record<string, string> {
@@ -230,9 +252,14 @@ export const api = {
   whoami: () => request<Whoami>("GET", "/whoami"),
 
   /** Media cannot be an <img src>: an image request carries no Authorization
-   *  header. Fetch it and hand back an object URL the caller must revoke. */
+   *  header. Fetch it and hand back an object URL the caller must revoke. An
+   *  imported external URL is fetched without the Analog bearer. */
   mediaObjectUrl: async (path: string): Promise<string> => {
-    const response = await fetch(resolveUrl(path), { headers: authHeaders() });
+    const target = resolveUrl(path);
+    const response = await fetch(target, {
+      credentials: "omit",
+      headers: isAnalogMediaUrl(target) ? authHeaders() : {},
+    });
     if (!response.ok) throw new ApiError(response.status, "error", response.statusText, null);
     return URL.createObjectURL(await response.blob());
   },

@@ -52,6 +52,8 @@ type Client struct {
 	sleep func(time.Duration)
 }
 
+const maxMediaRedirects = 10
+
 func New(opts Options) *Client {
 	config := opts.Config
 	if config == nil {
@@ -525,6 +527,101 @@ func (c *Client) UploadMedia(slug, path, contentType string) (Media, error) {
 	}
 	return out, c.do(request{method: "POST", path: "/spaces/" + slug + "/media",
 		params: params, raw: buf.Bytes(), ctype: writer.FormDataContentType()}, &out)
+}
+
+// GetMedia fetches a file node's bytes. `file` is the node's `file` field, usually
+// `/api/spaces/<slug>/media/<name>`. Same-origin Analog media gets the bearer;
+// external media is fetched anonymously so imported boards stay useful without
+// turning an arbitrary URL into a credential sink. This is a GET of an existing
+// object, not a JSON round-trip, so it cannot go through do().
+func (c *Client) GetMedia(file string) ([]byte, string, error) {
+	target := c.resolveURL(file)
+	targetURL, err := url.Parse(target)
+	if err != nil {
+		return nil, "", err
+	}
+	authenticated := c.Token != "" && isAnalogMediaURL(c.WebURL, targetURL)
+	// A media URL can redirect. Keep the bearer token on the narrow media
+	// allowlist only; an open redirect must never turn a media fetch into a
+	// credential transfer to another route or origin.
+	httpClient := &http.Client{
+		Transport: c.http.Transport,
+		Timeout:   c.http.Timeout,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= maxMediaRedirects {
+				return fmt.Errorf("media fetch stopped after %d redirects", maxMediaRedirects)
+			}
+			if authenticated && isAnalogMediaURL(c.WebURL, req.URL) {
+				req.Header.Set("Authorization", "Bearer "+c.Token)
+			} else {
+				req.Header.Del("Authorization")
+			}
+			return nil
+		},
+	}
+	var response *http.Response
+	var lastErr error
+	for attempt := 0; attempt < 2; attempt++ {
+		httpReq, err := http.NewRequest(http.MethodGet, target, nil)
+		if err != nil {
+			return nil, "", err
+		}
+		if authenticated {
+			httpReq.Header.Set("Authorization", "Bearer "+c.Token)
+		}
+		response, lastErr = httpClient.Do(httpReq)
+		if lastErr == nil {
+			break
+		}
+		if attempt == 0 {
+			c.sleep(250 * time.Millisecond)
+		}
+	}
+	if lastErr != nil {
+		return nil, "", &Error{Status: 0, Code: CodeUnreachable,
+			Message: fmt.Sprintf("cannot reach %s: %v", c.Base, lastErr), URL: file}
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		return nil, "", err
+	}
+	if response.StatusCode >= 400 {
+		return nil, "", errorFrom(response.StatusCode, body, target)
+	}
+	ctype := response.Header.Get("Content-Type")
+	if parsed, _, err := mime.ParseMediaType(ctype); err == nil {
+		ctype = parsed
+	}
+	return body, ctype, nil
+}
+
+func (c *Client) resolveURL(path string) string {
+	base, err := url.Parse(c.WebURL)
+	if err != nil {
+		return path
+	}
+	ref, err := url.Parse(path)
+	if err != nil {
+		return path
+	}
+	return base.ResolveReference(ref).String()
+}
+
+func isAnalogMediaURL(base string, target *url.URL) bool {
+	if target == nil || target.Scheme == "" || target.Host == "" || target.User != nil {
+		return false
+	}
+	origin, err := url.Parse(base)
+	if err != nil || origin.Scheme == "" || origin.Host == "" || origin.User != nil {
+		return false
+	}
+	if !strings.EqualFold(origin.Scheme, target.Scheme) || !strings.EqualFold(origin.Host, target.Host) {
+		return false
+	}
+	parts := strings.Split(strings.Trim(target.EscapedPath(), "/"), "/")
+	return len(parts) == 5 && parts[0] == "api" && parts[1] == "spaces" &&
+		parts[2] != "" && parts[3] == "media" && parts[4] != ""
 }
 
 // --- convenience ----------------------------------------------------------------------------

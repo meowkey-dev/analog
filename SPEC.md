@@ -376,6 +376,8 @@ analog link redesign c_a c_c --label "depends on"
 analog resolve a_7f --reply "rebased axis at 0"
 
 analog export redesign > redesign.canvas       # JSON Canvas, opens in Obsidian
+analog export redesign --format html > redesign.html
+analog export redesign --format pdf  > redesign.pdf
 analog import redesign < redesign.canvas
 
 analog onboard claude-code --issue --claude-env ~/src/my-project --verbose
