@@ -349,6 +349,17 @@ agent runtime.
   badge and overlay still contain only unresolved comments, so closing a comment
   removes its pin without hiding the discussion that led to the resolution.
 
+## In-card search (2026-09-11, #81)
+
+- **⌘/Ctrl-F searches the selected card; ⌘K still locates cards.** The two scopes
+  stay separate: board search chooses a card, while in-card search selects and
+  scrolls through rendered matches inside that card. A header control makes the
+  scoped search discoverable without knowing the shortcut.
+- **HTML search stays inside the existing sandbox.** The injected read-only helper
+  finds and selects text in its own document and reports only the match count and
+  index through `postMessage`. The iframe remains scripts-only with an opaque
+  origin; no DOM access or additional sandbox capability is granted to the parent.
+
 ## Toolchain
 
 - Go **1.23+**. `CGO_ENABLED=0` everywhere.

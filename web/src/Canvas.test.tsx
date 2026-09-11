@@ -64,11 +64,11 @@ afterEach(() => {
   host = null;
 });
 
-function renderCanvas(): HTMLDivElement {
+function renderCanvas(overrides: Partial<ComponentProps<typeof Canvas>> = {}): HTMLDivElement {
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
-  act(() => root!.render(<Canvas {...props} />));
+  act(() => root!.render(<Canvas {...props} {...overrides} />));
   return host;
 }
 
@@ -105,5 +105,52 @@ describe("Canvas drag gestures", () => {
 
     expect(target).not.toBeNull();
     expect(pointerDown(target!).defaultPrevented).toBe(false);
+  });
+});
+
+describe("in-card search", () => {
+  it("opens from the card header and navigates rendered matches", () => {
+    const searchable = { ...node, text: "first card and second card" };
+    const container = renderCanvas({
+      nodes: [searchable],
+      allNodes: [searchable],
+      selectedCard: node.id,
+    });
+    const button = container.querySelector<HTMLButtonElement>(
+      'button[title="Search this card (⌘/Ctrl-F)"]',
+    );
+    expect(button).not.toBeNull();
+    act(() => button!.click());
+
+    const input = container.querySelector<HTMLInputElement>('.card-search input');
+    expect(input).not.toBeNull();
+    act(() => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      setter?.call(input, "card");
+      input!.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+
+    expect(container.querySelector(".card-search-count")?.textContent).toBe("1/2");
+    expect(document.getSelection()?.toString()).toBe("card");
+
+    const next = container.querySelector<HTMLButtonElement>('button[title="Next match"]');
+    act(() => next!.click());
+    expect(container.querySelector(".card-search-count")?.textContent).toBe("2/2");
+    expect(document.getSelection()?.toString()).toBe("card");
+  });
+
+  it("opens on the selected card with the native find shortcut", () => {
+    const container = renderCanvas({ selectedCard: node.id });
+    const event = new KeyboardEvent("keydown", {
+      bubbles: true,
+      cancelable: true,
+      ctrlKey: true,
+      key: "f",
+    });
+
+    act(() => window.dispatchEvent(event));
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(container.querySelector('.card-search input')).not.toBeNull();
   });
 });
