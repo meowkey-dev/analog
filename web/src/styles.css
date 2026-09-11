@@ -470,7 +470,12 @@ input, textarea, select {
   display: flex; flex-direction: column; overflow: hidden;
 }
 .popout-inner header { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--line); }
-.popout-inner iframe { flex: 1; border: none; background: #fff; }
+/* Keep a full-window HTML card readable on a wide display without reaching into
+   or restyling its sandboxed document (#82). */
+.popout-inner iframe {
+  flex: 1; width: min(1200px, 100%); align-self: center;
+  border: none; border-inline: 1px solid var(--line); background: #fff;
+}
 
 .toast {
   position: fixed; left: 50%; top: 56px; transform: translateX(-50%);
@@ -565,6 +570,9 @@ input, textarea, select {
   position: absolute; top: calc(100% + 6px); left: 0; z-index: 90;
   min-width: 280px; background: var(--panel); border: 1px solid var(--line);
   border-radius: 8px; padding: 4px; box-shadow: 0 12px 32px rgba(0,0,0,.5);
+  /* A long space list stays inside the viewport instead of putting its tail
+     beyond reach (#78). */
+  max-height: calc(100dvh - 56px); overflow-y: auto; overscroll-behavior: contain;
 }
 .switcher-row {
   display: flex; align-items: center; gap: 8px; width: 100%;

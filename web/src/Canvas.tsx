@@ -198,6 +198,14 @@ export function Canvas(props: CanvasProps) {
 
   const startPan = (event: React.PointerEvent) => {
     if (event.button !== 0 && event.button !== 1) return;
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    // Card content and canvas chrome keep their native selection/focus behavior;
+    // only an empty board surface begins a pan.
+    if (target.closest("[data-card-id], .zoom, .composer, .draw-editor")) return;
+    // CSS only sees the dragging class after React renders it. Cancel the native
+    // gesture at pointerdown too, before the browser can begin a selection (#79).
+    event.preventDefault();
     props.onSelectCard(null);
     props.onSelectEdge(null);
     props.onSelectAnnotation(null);
@@ -210,6 +218,9 @@ export function Canvas(props: CanvasProps) {
 
   const startCardDrag = (event: React.PointerEvent, node: Node) => {
     if (event.button !== 0 || props.annotateMode) return;
+    const target = event.target;
+    if (target instanceof Element && target.closest("button, input, textarea, select, a")) return;
+    event.preventDefault();
     event.stopPropagation();
     setDrag({
       kind: "card", id: node.id, node,
@@ -219,6 +230,7 @@ export function Canvas(props: CanvasProps) {
   };
 
   const startResize = (event: React.PointerEvent, node: Node, dir: ResizeDir) => {
+    event.preventDefault();
     event.stopPropagation();
     setDrag({
       kind: "resize", id: node.id, dir, node,

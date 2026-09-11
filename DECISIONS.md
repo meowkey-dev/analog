@@ -326,6 +326,19 @@ checked-in `examples/ag-ui` sidecar, card, and `scripts/ag-ui-smoke.sh` prove
 the path in a real browser. Analog remains a canvas and review surface, not an
 agent runtime.
 
+## Canvas polish (2026-09-10, #78/#79/#82)
+
+- **Drag gestures cancel their native pointer action immediately.** Applying
+  `user-select: none` after drag state renders is too late to stop the browser from
+  beginning a selection on pointerdown. Pan, card move and resize all cancel it at
+  the gesture boundary; card bodies remain selectable when no drag starts.
+- **The space switcher scrolls inside the viewport.** Its list has no product-level
+  limit, so clipping the menu would make later spaces unreachable.
+- **A popped-out HTML card gets a centred 1200px-wide viewport on wide displays.**
+  The authored document is not rewritten or styled from the parent. Its
+  scripts-only sandbox remains identical to the main card; only the iframe chrome
+  is constrained.
+
 ## Toolchain
 
 - Go **1.23+**. `CGO_ENABLED=0` everywhere.
