@@ -170,6 +170,20 @@ input, textarea, select {
 .icon:hover { color: var(--ink); background: transparent; }
 .icon.danger:hover { color: var(--danger); }
 
+.card-search {
+  display: flex; align-items: center; gap: 3px; flex: none;
+  padding: 4px 6px; border-bottom: 1px solid var(--line); background: #1b1f28;
+}
+.card-search input {
+  flex: 1; min-width: 0; border: none; background: transparent; padding: 2px 4px;
+}
+.card-search input:focus { outline: none; }
+.card-search-count {
+  min-width: 32px; color: var(--dim); font-size: 10px; text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.card-search .icon { flex: none; }
+
 .superseded-note {
   display: flex; align-items: center; justify-content: space-between;
   font-size: 10px; color: var(--warn); padding: 3px 6px 3px 10px;

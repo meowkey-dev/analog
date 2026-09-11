@@ -8,6 +8,7 @@ import { api, getConnection, resolveUrl } from "./api";
 import type { Annotation, Node } from "./api";
 import { HTMLCardFrame } from "./html-card";
 import { mdRemarkPlugins, mdRehypePlugins } from "./markdown";
+import { clearTextRange, findTextRanges, selectTextRange } from "./card-search";
 import "katex/dist/katex.min.css";
 
 /**
@@ -85,8 +86,11 @@ const RESIZE_DIRS: ResizeDir[] = ["n", "s", "e", "w", "ne", "nw", "se", "sw"];
  *            only displaces its own pins.
  *   file  -> <img>, because binary content is a JSON Canvas file node (§2.1).
  */
-function Body({ node, mdTheme, bodyRef }: {
-  node: Node; mdTheme: MdTheme; bodyRef: (el: HTMLElement | null) => void;
+function Body({ node, mdTheme, bodyRef, onHTMLLoad }: {
+  node: Node;
+  mdTheme: MdTheme;
+  bodyRef: (el: HTMLElement | null) => void;
+  onHTMLLoad: () => void;
 }) {
   const kind = node.type === "file" ? "file" : (node.sp_kind ?? "plain");
 
@@ -117,6 +121,7 @@ function Body({ node, mdTheme, bodyRef }: {
           className="card-body html"
           srcDoc={html}
           title={node.sp_title ?? node.id}
+          onLoad={onHTMLLoad}
         />
       );
     case "file":
@@ -152,6 +157,15 @@ const SCROLL_REPORTER = [
   "if(rects[i].left<=t.right&&rects[i].right>=t.left&&rects[i].top<=t.bottom&&rects[i].bottom>=t.top){parts.push(n.nodeValue);break;}}}",
   "out=parts.join(' ').replace(/\\s+/g,' ').trim();",
   "return out.length>240?out.slice(0,240)+'…':out;}",
+  "function searchFor(query,index){",
+  "var parts=[],text='',w=document.createTreeWalker(document.body||document.documentElement,NodeFilter.SHOW_TEXT),n,p,start,end,range,ranges=[];",
+  "while((n=w.nextNode())){p=n.parentElement;if(!n.nodeValue||(p&&p.closest('script,style,noscript,[aria-hidden=\"true\"]')))continue;parts.push({n:n,s:text.length,e:text.length+n.nodeValue.length});text+=n.nodeValue;}",
+  "if(query){var escaped=query.replace(/[.*+?^${}()|[\\]\\\\]/g,'\\\\$&'),re=new RegExp(escaped,'giu'),match,at,len;while((match=re.exec(text))){at=match.index;len=match[0].length;",
+  "start=parts.find(function(x){return at<x.e;});end=parts.find(function(x){return at+len<=x.e;});",
+  "if(start&&end){range=document.createRange();range.setStart(start.n,at-start.s);range.setEnd(end.n,at+len-end.s);ranges.push(range);}}}",
+  "index=ranges.length?((index%ranges.length)+ranges.length)%ranges.length:0;",
+  "getSelection().removeAllRanges();if(ranges[index]){getSelection().addRange(ranges[index]);p=ranges[index].startContainer.parentElement;if(p)p.scrollIntoView({block:'center',inline:'nearest'});}",
+  "parent.postMessage({type:'analog-search-result',count:ranges.length,index:index},'*');}",
   "addEventListener('scroll',soon,true);",
   "addEventListener('resize',soon);",
   "addEventListener('load',send);",
@@ -159,15 +173,15 @@ const SCROLL_REPORTER = [
   "addEventListener('message',function(e){",
   "if(e.source!==parent)return;",
   "var d=e.data;",
-  "if(!d||d.type!=='analog-quote')return;",
-  "var t=quoteFor(d.vx||0,d.vy||0,d.vw||0,d.vh||0);",
-  "if(t)parent.postMessage({type:'analog-quote',text:t},'*');});",
+  "if(!d)return;",
+  "if(d.type==='analog-search'){searchFor(String(d.query||''),Number(d.index)||0);return;}",
+  "if(d.type==='analog-quote'){var t=quoteFor(d.vx||0,d.vy||0,d.vw||0,d.vh||0);if(t)parent.postMessage({type:'analog-quote',text:t},'*');}});",
   "send();",
   "})();</script>",
 ].join("");
 
 /** Insert after the doctype if there is one; ahead of it would flip quirks mode. */
-function withScrollReporter(html: string): string {
+export function withScrollReporter(html: string): string {
   const doctype = /^\s*<!DOCTYPE[^>]*>/i.exec(html);
   return doctype
     ? html.replace(doctype[0], doctype[0] + SCROLL_REPORTER)
@@ -230,10 +244,100 @@ function CardView(props: CardProps) {
   const [view, setView] = useState<"content" | "diff">("content");
   const [mdTheme, setMdTheme] = useState<MdTheme>(() => loadMdTheme(node.id));
   const [themeOpen, setThemeOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchIndex, setSearchIndex] = useState(0);
+  const [searchCount, setSearchCount] = useState(0);
+  const [htmlLoad, setHTMLLoad] = useState(0);
+  const searchInput = useRef<HTMLInputElement>(null);
+  const selectedRange = useRef<Range | null>(null);
   // The scrollable body element (the iframe itself for html): the annotation
   // overlay measures it to anchor pins to the content (#23).
   const bodyRef = useRef<HTMLElement | null>(null);
   const setBody = useCallback((el: HTMLElement | null) => { bodyRef.current = el; }, []);
+
+  const openSearch = useCallback(() => {
+    setView("content");
+    setSearchOpen(true);
+  }, []);
+
+  const closeSearch = useCallback(() => {
+    const body = bodyRef.current;
+    if (body) {
+      clearTextRange(body, selectedRange.current);
+      if (body instanceof HTMLIFrameElement) {
+        body.contentWindow?.postMessage({ type: "analog-search", query: "", index: 0 }, "*");
+      }
+    }
+    selectedRange.current = null;
+    setSearchOpen(false);
+    setSearchQuery("");
+    setSearchIndex(0);
+    setSearchCount(0);
+  }, []);
+
+  useEffect(() => {
+    if (!selected || editing || node.type !== "text") return;
+    const onFind = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "f") {
+        const target = event.target as HTMLElement | null;
+        const tag = target?.tagName;
+        if ((tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") &&
+            !target?.closest(".card-search")) return;
+        event.preventDefault();
+        openSearch();
+      }
+    };
+    window.addEventListener("keydown", onFind);
+    return () => window.removeEventListener("keydown", onFind);
+  }, [editing, node.type, openSearch, selected]);
+
+  useEffect(() => {
+    if (searchOpen) searchInput.current?.focus();
+  }, [searchOpen]);
+
+  useEffect(() => {
+    if (editing && searchOpen) closeSearch();
+  }, [closeSearch, editing, searchOpen]);
+
+  useEffect(() => {
+    const body = bodyRef.current;
+    if (!searchOpen || !body) return;
+    if (body instanceof HTMLIFrameElement) {
+      body.contentWindow?.postMessage({
+        type: "analog-search",
+        query: searchQuery,
+        index: searchIndex,
+      }, "*");
+      return;
+    }
+
+    clearTextRange(body, selectedRange.current);
+    selectedRange.current = null;
+    const ranges = findTextRanges(body, searchQuery);
+    setSearchCount(ranges.length);
+    const index = ranges.length ? ((searchIndex % ranges.length) + ranges.length) % ranges.length : 0;
+    if (index !== searchIndex) setSearchIndex(index);
+    const range = ranges[index];
+    if (range) {
+      selectedRange.current = range;
+      selectTextRange(body, range);
+    }
+  }, [htmlLoad, kind, node.text, searchIndex, searchOpen, searchQuery, view]);
+
+  useEffect(() => {
+    if (!searchOpen || kind !== "html") return;
+    const result = (event: MessageEvent) => {
+      const frame = bodyRef.current;
+      if (!(frame instanceof HTMLIFrameElement) || event.source !== frame.contentWindow) return;
+      const data = event.data as { type?: string; count?: number; index?: number } | null;
+      if (data?.type !== "analog-search-result" || typeof data.count !== "number") return;
+      setSearchCount(data.count);
+      if (typeof data.index === "number" && data.index !== searchIndex) setSearchIndex(data.index);
+    };
+    window.addEventListener("message", result);
+    return () => window.removeEventListener("message", result);
+  }, [kind, searchIndex, searchOpen]);
 
   const chooseMdTheme = (theme: MdTheme) => {
     setMdTheme(theme);
@@ -247,6 +351,9 @@ function CardView(props: CardProps) {
     width: node.width,
     height: superseded && collapsed ? undefined : node.height,
   };
+  const shownSearchIndex = searchCount > 0
+    ? ((searchIndex % searchCount) + searchCount) % searchCount + 1
+    : 0;
 
   // A superseded card collapses to a stub so a long chain doesn't swamp the canvas.
   if (superseded && collapsed) {
@@ -297,6 +404,10 @@ function CardView(props: CardProps) {
         {kind === "html" && (
           <button className="icon" title="Open full window" onClick={() => props.onPopOut(node)}>⤢</button>
         )}
+        {node.type === "text" && !editing && (
+          <button className={`icon${searchOpen ? " on" : ""}`} title="Search this card (⌘/Ctrl-F)"
+                  onClick={(event) => { event.stopPropagation(); searchOpen ? closeSearch() : openSearch(); }}>⌕</button>
+        )}
         {kind === "svg" && !superseded && !editing && (
           <button className="icon" title="Draw on this card"
                   onClick={(e) => { e.stopPropagation(); props.onStartEdit(node.id); }}>✎</button>
@@ -322,6 +433,34 @@ function CardView(props: CardProps) {
         )}
         <button className="icon danger" title="Delete card" onClick={() => props.onDelete(node.id)}>×</button>
       </div>
+
+      {searchOpen && (
+        <div className="card-search" onPointerDown={(event) => event.stopPropagation()}>
+          <input
+            ref={searchInput}
+            type="search"
+            value={searchQuery}
+            aria-label={`Search ${node.sp_title || node.id}`}
+            placeholder="Find in card…"
+            onChange={(event) => { setSearchQuery(event.target.value); setSearchIndex(0); }}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); closeSearch(); }
+              if (event.key === "Enter") {
+                event.preventDefault();
+                setSearchIndex((index) => index + (event.shiftKey ? -1 : 1));
+              }
+            }}
+          />
+          <span className="card-search-count" aria-live="polite">
+            {searchCount > 0 ? `${shownSearchIndex}/${searchCount}` : "0/0"}
+          </span>
+          <button className="icon" disabled={searchCount === 0} title="Previous match"
+                  onClick={() => setSearchIndex((index) => index - 1)}>↑</button>
+          <button className="icon" disabled={searchCount === 0} title="Next match"
+                  onClick={() => setSearchIndex((index) => index + 1)}>↓</button>
+          <button className="icon" title="Close search" onClick={closeSearch}>×</button>
+        </div>
+      )}
 
       {superseded && (
         <div className="superseded-note">
@@ -363,7 +502,8 @@ function CardView(props: CardProps) {
             }}
           />
         ) : (
-          <Body node={node} mdTheme={mdTheme} bodyRef={setBody} />
+          <Body node={node} mdTheme={mdTheme} bodyRef={setBody}
+                onHTMLLoad={() => setHTMLLoad((value) => value + 1)} />
         )}
 
         <AnnotationOverlay

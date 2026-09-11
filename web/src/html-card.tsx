@@ -11,13 +11,15 @@ export const HTMLCardFrame = forwardRef<HTMLIFrameElement, {
   className?: string;
   srcDoc: string;
   title: string;
-}>(({ className, srcDoc, title }, ref) => (
+  onLoad?: () => void;
+}>(({ className, srcDoc, title, onLoad }, ref) => (
   <iframe
     ref={ref}
     className={className}
     sandbox={HTML_CARD_SANDBOX}
     srcDoc={srcDoc}
     title={title}
+    onLoad={onLoad}
   />
 ));
 HTMLCardFrame.displayName = "HTMLCardFrame";
