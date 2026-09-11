@@ -25,7 +25,7 @@ const LINK_COLORS = [
 ];
 
 /** Stable empty for cards with no comments; a fresh [] would defeat Card's memo. */
-const NO_THREAD: Annotation[] = [];
+const NO_ANNOTATIONS: Annotation[] = [];
 
 interface DragState {
   kind: "card" | "resize" | "pan" | "link";
@@ -103,10 +103,19 @@ export function Canvas(props: CanvasProps) {
     return map;
   }, [props.allNodes, ghost]);
 
-  // Unresolved comments per card, grouped once per annotation change. The arrays
-  // feed both the in-card thread and the overlay pins; handing Card a fresh
-  // filtered array per render would re-render every card on every pan frame (#45).
+  // Full history and actionable pins have different lifetimes. Group both once
+  // per annotation change; fresh filtered arrays here would re-render every card
+  // on every pan frame (#45).
   const threads = useMemo(() => {
+    const map = new Map<string, Annotation[]>();
+    for (const a of props.annotations) {
+      const list = map.get(a.card_id);
+      if (list) list.push(a);
+      else map.set(a.card_id, [a]);
+    }
+    return map;
+  }, [props.annotations]);
+  const openAnnotations = useMemo(() => {
     const map = new Map<string, Annotation[]>();
     for (const a of props.annotations) {
       if (a.resolved) continue;
@@ -496,10 +505,11 @@ export function Canvas(props: CanvasProps) {
             successor={node.sp_superseded_by ? linkNodes.get(node.sp_superseded_by) : undefined}
             selected={props.selectedCard === node.id}
             editing={editing === node.id}
-            openCount={threads.get(node.id)?.length ?? 0}
+            openCount={openAnnotations.get(node.id)?.length ?? 0}
             revisions={revisionCount.get(node.id) ?? 1}
             collapsed={collapsed[node.id] ?? false}
-            thread={threads.get(node.id) ?? NO_THREAD}
+            thread={threads.get(node.id) ?? NO_ANNOTATIONS}
+            overlayAnnotations={openAnnotations.get(node.id) ?? NO_ANNOTATIONS}
             threadOpen={threadOpen[node.id] ?? false}
             annotateMode={props.annotateMode}
             draft={props.draft}

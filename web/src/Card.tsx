@@ -198,8 +198,10 @@ export interface CardProps {
   openCount: number;
   revisions: number;
   collapsed: boolean;
-  /** Unresolved comments on this card: the in-card thread (#5) and the overlay pins. */
+  /** Every comment on this card, including resolved history. */
   thread: Annotation[];
+  /** Unresolved comments only; resolved history must not recreate pins. */
+  overlayAnnotations: Annotation[];
   threadOpen: boolean;
   annotateMode: boolean;
   /** The in-flight pin, while annotate mode is drafting on this card. */
@@ -367,7 +369,7 @@ function CardView(props: CardProps) {
         <AnnotationOverlay
           node={node}
           bodyRef={bodyRef}
-          annotations={props.thread}
+          annotations={props.overlayAnnotations}
           active={props.annotateMode && !editing}
           draft={props.draft}
           selectedId={props.selectedAnnotation}
@@ -380,11 +382,20 @@ function CardView(props: CardProps) {
         <div className="card-thread" onPointerDown={(e) => e.stopPropagation()}>
           {props.thread.map((a) => (
             <div key={a.id}
-                 className={`thread-item${props.selectedAnnotation === a.id ? " selected" : ""}`}
+                 className={`thread-item${a.resolved ? " resolved" : ""}${a.stale ? " stale" : ""}${props.selectedAnnotation === a.id ? " selected" : ""}`}
                  onClick={() => props.onSelectAnnotation(a.id)}>
-              <span className="who">{a.creator}</span>
-              <span className="body">{a.body}</span>
-              {a.stale && <span className="badge stale" title="The card changed after this was written">stale</span>}
+              <div className="thread-main">
+                <span className={`who ${a.creator_kind}`}>{a.creator}</span>
+                <span className="body">{a.body}</span>
+                {a.resolved && <span className="resolved-marker" title="This comment is resolved">✓ resolved</span>}
+                {a.stale && <span className="badge stale" title="The card changed after this was written">stale</span>}
+              </div>
+              {a.resolved && a.resolved_reply && (
+                <div className="reply-bubble">
+                  <span className="who">reply</span>
+                  {a.resolved_reply}
+                </div>
+              )}
             </div>
           ))}
         </div>
