@@ -339,6 +339,16 @@ agent runtime.
   scripts-only sandbox remains identical to the main card; only the iframe chrome
   is constrained.
 
+## Comment presentation (2026-09-10, #80/#83)
+
+- **Comment author colors follow actor kind everywhere.** Human author labels use
+  `var(--ok)` and agent labels use `var(--accent)`, matching the activity panel.
+  Motivation badges, selection, and pins keep their own semantic colors.
+- **Card threads are history; pins and counts are open work.** A card thread keeps
+  resolved comments in insertion order and shows their resolution replies. The
+  badge and overlay still contain only unresolved comments, so closing a comment
+  removes its pin without hiding the discussion that led to the resolution.
+
 ## Toolchain
 
 - Go **1.23+**. `CGO_ENABLED=0` everywhere.

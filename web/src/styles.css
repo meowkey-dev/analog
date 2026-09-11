@@ -411,7 +411,7 @@ input, textarea, select {
 .comment { padding: 10px 12px; border-bottom: 1px solid var(--line); cursor: pointer; }
 .comment:hover { background: #1b1f28; }
 .comment.selected { background: #1e2432; box-shadow: inset 2px 0 0 var(--accent); }
-.comment.resolved { opacity: .6; }
+.comment.resolved { background: #181b22; border-left: 2px solid #394154; }
 .comment.stale .comment-body { color: var(--dim); }
 .comment-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 4px; }
 .motivation {
@@ -421,8 +421,11 @@ input, textarea, select {
 .motivation.editing { background: #3a2222; color: #f0a0a0; }
 .motivation.assessing { background: #3a3320; color: var(--warn); }
 .comment-head .on { color: var(--dim); }
+.badge.resolved-status { background: #20382d; color: var(--ok); }
 .comment-body { margin: 0 0 5px; white-space: pre-wrap; }
 .comment-meta { font-size: 10px; color: var(--dim); }
+.comment-author { color: var(--accent); font-weight: 600; }
+.comment-author.human { color: var(--ok); }
 .comment-actions { display: flex; gap: 6px; margin-top: 7px; }
 .comment-actions input { flex: 1; min-width: 0; }
 .comment-reply { margin-top: 6px; font-size: 11px; color: var(--dim); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
@@ -439,15 +442,25 @@ input, textarea, select {
   border-top: 1px solid var(--line); background: #1a1d26; z-index: 6;
 }
 .thread-item {
-  display: flex; gap: 6px; align-items: baseline;
+  display: flex; flex-direction: column; gap: 4px;
   padding: 5px 10px; border-bottom: 1px solid var(--line);
   font-size: 11px; cursor: pointer;
 }
+.thread-main { display: flex; gap: 6px; align-items: baseline; }
 .thread-item:last-child { border-bottom: none; }
 .thread-item:hover { background: #1e222d; }
 .thread-item.selected { background: #1e2432; box-shadow: inset 2px 0 0 var(--accent); }
-.thread-item .who { color: var(--ok); font-weight: 600; flex: none; }
+.thread-item.resolved { background: #181b22; border-left: 2px solid #394154; }
+.thread-item .who { color: var(--accent); font-weight: 600; flex: none; }
+.thread-item .who.human { color: var(--ok); }
 .thread-item .body { flex: 1; white-space: pre-wrap; word-break: break-word; }
+.thread-item.stale:not(.resolved) .body { color: var(--dim); }
+.resolved-marker {
+  color: var(--ok); font-size: 10px; font-weight: 600; white-space: nowrap;
+  text-transform: uppercase; letter-spacing: .04em;
+}
+.thread-item .reply-bubble { color: var(--dim); font-size: 11px; }
+.thread-item .reply-bubble .who { color: var(--warn); }
 
 .activity-row {
   display: flex; gap: 8px; align-items: baseline;
