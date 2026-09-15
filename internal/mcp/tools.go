@@ -59,8 +59,8 @@ func (s *Server) register() {
 				"slug": str("space slug"),
 				"cards": map[string]any{
 					"type": "array",
-					"description": "{title, content, kind?: md|html|svg|plain, x?, y?}. " +
-						"Omit x/y and the server places the card for you.",
+					"description": "{title, content, kind?: md|html|svg|plain, x?, y?, width?, height?}. " +
+						"Omit x/y for auto-layout; omit width/height for 320x200.",
 					"items": object([]string{"title", "content"}, map[string]any{
 						"title":   str(""),
 						"content": str(""),
@@ -110,12 +110,23 @@ func (s *Server) register() {
 		},
 		{
 			Name:        "update_card",
-			Description: "Rewrite a card. In branch mode this returns the NEW card.",
+			Description: "Update a card's content or geometry. In branch mode a content update returns the NEW card.",
 			InputSchema: object([]string{"slug", "card_id", "patch"}, map[string]any{
 				"slug":    str("space slug"),
 				"card_id": str("the card to rewrite"),
-				"patch": map[string]any{"type": "object",
-					"description": "Any subset of a JSON Canvas node, e.g. {'text': '...'}"},
+				"patch": map[string]any{
+					"type":        "object",
+					"description": "Any subset of a JSON Canvas node. Geometry-only changes do not revise content.",
+					"properties": map[string]any{
+						"text":     str("new card content"),
+						"sp_title": str("new card title"),
+						"sp_kind":  enum("md | html | svg | plain", "md", "html", "svg", "plain"),
+						"x":        map[string]any{"type": "number", "description": "canvas x coordinate"},
+						"y":        map[string]any{"type": "number", "description": "canvas y coordinate"},
+						"width":    map[string]any{"type": "number", "description": "card width"},
+						"height":   map[string]any{"type": "number", "description": "card height"},
+					},
+				},
 				"mode": enum("replace | branch", "replace", "branch"),
 				"if_match": map[string]any{"type": "integer",
 					"description": "The sp_rev you read. Returns a conflict if it moved on."},

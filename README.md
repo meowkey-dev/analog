@@ -113,6 +113,9 @@ analog whoami                          # who the server thinks you are
 analog feedback redesign               # the important one
 analog add redesign --title "Option E" --kind md --file draft.md
 cat chart.svg | analog add redesign --title "Revenue" --kind svg -
+analog add redesign --title "Overview" --kind html --file overview.html \
+  --width 560 --height 420
+analog update redesign c_01... --x 40 --y 80 --width 560 --height 420
 analog resolve a_01... --reply "rebased axis at 0"
 analog export redesign --format html > redesign.html
 ```
@@ -171,8 +174,8 @@ claude-code --kind agent` — since that is where the token store lives.
 This is the half that matters. MCP and the CLI give an agent the operations; the
 skill teaches the conventions that decide whether the tool stays usable — read
 feedback *first*, one idea per card, always label links, don't resolve what you
-haven't acted on, don't rearrange the human's canvas. An agent with the tools and no
-skill will use Analog as a dumping ground.
+haven't acted on, don't rearrange cards the human positioned. An agent with the
+tools and no skill will use Analog as a dumping ground.
 
 ## Running it somewhere else
 

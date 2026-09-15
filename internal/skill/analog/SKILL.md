@@ -46,6 +46,7 @@ annotations are how the human tracks what you've ignored.
 
     analog add <slug> --title "..." --kind md --file draft.md
     cat chart.svg | analog add <slug> --title "Revenue" --kind svg -
+    analog add <slug> --title "Overview" --kind html --file overview.html --width 560 --height 420
 
 - **One idea per card.** A wall of text in a single card cannot be annotated
   usefully, which defeats the point.
@@ -58,6 +59,9 @@ annotations are how the human tracks what you've ignored.
   only, distinct regions a comment can land on.
 - `analog link <slug> <from> <to> --label "..."` whenever cards relate.
   Always label. Unlabelled edges are noise.
+- Set `--width` and `--height` when a card was designed for a particular viewport.
+  Use `--x` and `--y` only when the spatial relationship is part of the artifact;
+  otherwise let the server place it.
 - Don't post status updates or narration. Analog is for artifacts under
   review, not a log.
 
@@ -65,6 +69,7 @@ annotations are how the human tracks what you've ignored.
 
     analog update <slug> <card_id> --file fixed.svg
     analog update <slug> <card_id> --file fixed.svg --mode branch   # keep the old one
+    analog update <slug> <card_id> --x 40 --y 80 --width 560 --height 420
 
 `--mode branch` keeps the old card, marks it superseded and links it to the new one.
 Use it when the human is comparing options or should see what you changed; the
@@ -74,7 +79,8 @@ default replaces in place.
 
 - Don't delete or edit cards the human created — annotate them instead.
 - Don't resolve annotations you haven't acted on.
-- Don't rearrange the canvas. Positions are the human's.
+- Don't rearrange cards the human positioned. Position and size your own cards only
+  when it makes the work clearer.
 
 ## Commands
 

@@ -339,6 +339,25 @@ func TestUpdateCard(t *testing.T) {
 	}
 }
 
+func TestUpdateCardSchemaAdvertisesGeometry(t *testing.T) {
+	server, _ := newTestServer(t)
+	var update Tool
+	for _, tool := range server.Tools() {
+		if tool.Name == "update_card" {
+			update = tool
+			break
+		}
+	}
+	properties := update.InputSchema["properties"].(map[string]any)
+	patch := properties["patch"].(map[string]any)
+	geometry := patch["properties"].(map[string]any)
+	for _, key := range []string{"x", "y", "width", "height"} {
+		if geometry[key] == nil {
+			t.Errorf("update_card patch schema is missing %q", key)
+		}
+	}
+}
+
 func TestUpdateCardForwardsModeAndIfMatch(t *testing.T) {
 	server, mock := newTestServer(t)
 	if _, err := server.Call("update_card", map[string]any{

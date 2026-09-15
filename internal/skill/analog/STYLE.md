@@ -134,10 +134,10 @@ table or code block may exceed the width, each inside its own
 ```
 
 Everything is real text, the regions are addressable, the figure carries its
-unit, and the source is on the card. Size it when you post it: the MCP
-`add_cards` tool takes `width` and `height`, so send the dimensions the card
-was designed for. A 480×360 ELI5 or a 560×420 infographic lands readable; the
-human resizes from there.
+unit, and the source is on the card. Size it when you post it: MCP `add_cards`
+takes `width` and `height`, and the CLI takes `--width` and `--height`, so send
+the dimensions the card was designed for. A 480×360 ELI5 or a 560×420
+infographic lands readable; the human resizes from there.
 
 ## Before you post
 

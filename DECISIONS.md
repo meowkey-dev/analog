@@ -394,6 +394,19 @@ agent runtime.
   onboard's banner has no room for. `onboard` keeps its polite skip (#63) and
   now names the refresh command; both share `installSkill`.
 
+## Agent card geometry (2026-09-15, #90)
+
+- **Geometry uses the existing JSON Canvas fields.** Agents set `x`, `y`, `width`
+  and `height`; there is no separate scale property or transform to reconcile with
+  export, links, annotations and the human's resize handles.
+- **Both agent surfaces expose the same controls.** MCP advertises geometry on
+  `add_cards` and `update_card`; the CLI accepts `--x`, `--y`, `--width` and
+  `--height` on both `add` and `update`. Omitted creation coordinates still invoke
+  server auto-layout, including when a coordinate would otherwise be zero.
+- **Geometry-only updates retain move semantics.** They do not bump `sp_rev` or
+  stale annotations. Agents may deliberately lay out and size their own work, but
+  the skill still tells them not to rearrange cards the human positioned.
+
 ## Toolchain
 
 - Go **1.23+**. `CGO_ENABLED=0` everywhere.
