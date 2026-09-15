@@ -155,6 +155,10 @@ Two suites, different jobs:
 - **CLI writes are optimistic**: `analog update --if-match <rev>` and
   `--mode replace|branch` (a stale rev is a 409); most commands take `--json`
   for machine-readable output.
+- **Installed skills go stale.** `skill/analog/` is embedded into `analog` and
+  copied out by `onboard` (which skips an existing copy) or `analog skill
+  install` (which overwrites). Edit `skill/analog/`, mirror it into
+  `internal/skill/analog/` (a test enforces byte equality), then reinstall.
 - **`analog login` writes `~/.analog.toml` for the user** — an agent running as
   you would inherit your identity. Agents use `ANALOG_URL`/`ANALOG_ACTOR`/
   `ANALOG_TOKEN` env vars (or `analog onboard --wrapper`); `ANALOG_ACTOR` has

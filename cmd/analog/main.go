@@ -115,7 +115,7 @@ func root() *cobra.Command {
 	cmd.CompletionOptions.DisableDefaultCmd = true
 	version.Attach(cmd)
 	cmd.AddCommand(
-		whoamiCmd(), loginCmd(), tokenCmd(), onboardCmd(),
+		whoamiCmd(), loginCmd(), tokenCmd(), onboardCmd(), skillCmd(),
 		spacesCmd(), newSpaceCmd(), openCmd(), rmSpaceCmd(),
 		feedbackCmd(),
 		addCmd(), cardsCmd(), updateCmd(), rmCmd(), linkCmd(), unlinkCmd(),
