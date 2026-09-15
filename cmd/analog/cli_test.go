@@ -305,6 +305,19 @@ func TestAddReportsTheNewID(t *testing.T) {
 	}
 }
 
+func TestAddAcceptsGeometry(t *testing.T) {
+	h := newHarness(t)
+	h.run("new", "redesign")
+	h.run("add", "redesign", "--text", "hi", "--title", "T",
+		"--x", "40", "--y", "0", "--width", "480", "--height", "360")
+	node := decodeJSON[[]map[string]any](t, h.run("cards", "redesign", "--json"))[0]
+	for key, want := range map[string]float64{"x": 40, "y": 0, "width": 480, "height": 360} {
+		if node[key] != want {
+			t.Errorf("%s = %v, want %v", key, node[key], want)
+		}
+	}
+}
+
 func TestAddWithoutContentIsAUsageError(t *testing.T) {
 	h := newHarness(t)
 	h.run("new", "redesign")
@@ -355,6 +368,20 @@ func TestUpdateFromAFileBumpsRev(t *testing.T) {
 	node := decodeJSON[[]map[string]any](t, h.run("cards", "redesign", "--json"))[0]
 	if node["text"] != "<svg/>" || node["sp_rev"].(float64) != 2 {
 		t.Errorf("node = %v", node)
+	}
+}
+
+func TestUpdateAcceptsGeometryWithoutBumpingRev(t *testing.T) {
+	h := newHarness(t)
+	h.run("new", "redesign")
+	card := h.addCard("redesign", "T", "v1")
+	h.run("update", "redesign", card["id"].(string),
+		"--x", "-20", "--y", "0", "--width", "560", "--height", "420")
+	node := decodeJSON[[]map[string]any](t, h.run("cards", "redesign", "--json"))[0]
+	for key, want := range map[string]float64{"x": -20, "y": 0, "width": 560, "height": 420, "sp_rev": 1} {
+		if node[key] != want {
+			t.Errorf("%s = %v, want %v", key, node[key], want)
+		}
 	}
 }
 

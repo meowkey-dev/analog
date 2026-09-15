@@ -21,8 +21,9 @@ human changed, already diffed. Nothing back means nothing changed.
 
 One idea per card — a wall of text cannot be annotated usefully. Use kind="html"
 or kind="svg" for anything visual; the human can pin comments on regions of it.
-Always label links. Don't edit or delete the human's cards, don't rearrange the
-canvas, and don't resolve annotations you haven't acted on.
+Always label links. Set geometry when your card needs a deliberate size or position,
+but don't rearrange cards the human positioned. Don't edit or delete the human's
+cards, and don't resolve annotations you haven't acted on.
 `
 
 // API is the slice of the client these tools use. An interface so the tools can be

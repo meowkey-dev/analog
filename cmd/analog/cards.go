@@ -15,6 +15,7 @@ import (
 
 func addCmd() *cobra.Command {
 	var title, kind, file, text string
+	var x, y, width, height float64
 	var asJSON bool
 	cmd := &cobra.Command{
 		Use:   "add <slug> [source]",
@@ -29,8 +30,21 @@ func addCmd() *cobra.Command {
 					return err
 				}
 			}
-			nodes, err := newClient().CreateCards(args[0],
-				[]client.CardDraft{{Title: title, Content: content, Kind: kind}})
+			draft := client.CardDraft{Title: title, Content: content, Kind: kind}
+			for _, geometry := range []struct {
+				name  string
+				value float64
+				into  **float64
+			}{
+				{"x", x, &draft.X}, {"y", y, &draft.Y},
+				{"width", width, &draft.Width}, {"height", height, &draft.Height},
+			} {
+				if cmd.Flags().Changed(geometry.name) {
+					value := geometry.value
+					*geometry.into = &value
+				}
+			}
+			nodes, err := newClient().CreateCards(args[0], []client.CardDraft{draft})
 			if err != nil {
 				return fail(err)
 			}
@@ -48,6 +62,10 @@ func addCmd() *cobra.Command {
 	cmd.Flags().StringVar(&kind, "kind", "md", "md | html | svg | plain")
 	cmd.Flags().StringVar(&file, "file", "", "read content from this file")
 	cmd.Flags().StringVar(&text, "text", "", "inline content")
+	cmd.Flags().Float64Var(&x, "x", 0, "canvas x coordinate (omit for auto-layout)")
+	cmd.Flags().Float64Var(&y, "y", 0, "canvas y coordinate (omit for auto-layout)")
+	cmd.Flags().Float64Var(&width, "width", 0, "card width (default 320)")
+	cmd.Flags().Float64Var(&height, "height", 0, "card height (default 200)")
 	cmd.Flags().BoolVar(&asJSON, "json", false, "machine-readable output")
 	return cmd
 }
@@ -100,11 +118,12 @@ func cardsCmd() *cobra.Command {
 
 func updateCmd() *cobra.Command {
 	var file, text, title, mode, kind string
+	var x, y, width, height float64
 	var ifMatch int64
 	var asJSON bool
 	cmd := &cobra.Command{
 		Use:   "update <slug> <card_id> [source]",
-		Short: "Replace a card's content",
+		Short: "Update a card's content or geometry",
 		Args:  cobra.RangeArgs(2, 3),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			source := third(args)
@@ -125,8 +144,18 @@ func updateCmd() *cobra.Command {
 			if cmd.Flags().Changed("kind") {
 				patch["sp_kind"] = kind
 			}
+			for _, geometry := range []struct {
+				name  string
+				value float64
+			}{
+				{"x", x}, {"y", y}, {"width", width}, {"height", height},
+			} {
+				if cmd.Flags().Changed(geometry.name) {
+					patch[geometry.name] = geometry.value
+				}
+			}
 			if len(patch) == 0 {
-				return usage("nothing to update: pass a file, --text, --title or --kind")
+				return usage("nothing to update: pass content, title, kind, or geometry")
 			}
 			var match *int64
 			if cmd.Flags().Changed("if-match") {
@@ -147,6 +176,10 @@ func updateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&text, "text", "", "inline content")
 	cmd.Flags().StringVar(&title, "title", "", "new title")
 	cmd.Flags().StringVar(&kind, "kind", "", "md | html | svg | plain")
+	cmd.Flags().Float64Var(&x, "x", 0, "new canvas x coordinate")
+	cmd.Flags().Float64Var(&y, "y", 0, "new canvas y coordinate")
+	cmd.Flags().Float64Var(&width, "width", 0, "new card width")
+	cmd.Flags().Float64Var(&height, "height", 0, "new card height")
 	cmd.Flags().StringVar(&mode, "mode", "", "replace | branch")
 	cmd.Flags().Int64Var(&ifMatch, "if-match", 0, "the sp_rev you read")
 	cmd.Flags().BoolVar(&asJSON, "json", false, "machine-readable output")
