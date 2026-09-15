@@ -62,8 +62,11 @@ That mints a token, installs the skill into `~/.claude/skills`, and merges
 `ANALOG_URL`, `ANALOG_ACTOR`, `ANALOG_ACTOR_KIND`, `ANALOG_TOKEN` when supplied, and
 `ANALOG_CONFIG=/nonexistent` into the project's `.claude/settings.local.json`. The
 skill install is the `--config-via skill` default: rerunning skips an existing
-user-level skill, and `--config-dir DIR` installs somewhere else and overwrites —
-the update path. Add `--verbose` to also print the wiring instructions, the shell
+user-level skill, and `--config-dir DIR` installs somewhere else and overwrites.
+Installed copies do not update themselves; after upgrading the binary, `analog
+skill install` replaces the copy with the embedded one and says whether it
+changed, and `analog skill status` exits non-zero when it is stale, for a CI
+step. Add `--verbose` to also print the wiring instructions, the shell
 exports and the `claude mcp add` command (the full-form output of earlier releases)
 without changing what gets installed. `--config-via mcp` prints just the MCP command
 and installs no skill; `--config-via skip` wires nothing at all.
@@ -137,8 +140,11 @@ analog-claude-code whoami
 analog-claude-code feedback <slug>
 ```
 
-Then paste `skill/analog/SKILL.md` into the conversation, or tell it to read the
-file. That is the workflow half, and it matters more than the wiring.
+Then paste the skill into the conversation (`analog skill cat` prints the copy
+that matches the binary), or tell it to read `skill/analog/SKILL.md`. That is
+the workflow half, and it matters more than the wiring. `STYLE.md` beside it
+(`analog skill cat STYLE.md`) is the card half: how to write an `html` or `svg`
+card that reviews well.
 
 It sidesteps a trap worth knowing about: `analog login` writes `~/.analog.toml` for
 the **user**, so an agent running as you would inherit your identity and post under

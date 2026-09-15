@@ -360,6 +360,40 @@ agent runtime.
   index through `postMessage`. The iframe remains scripts-only with an opaque
   origin; no DOM access or additional sandbox capability is granted to the parent.
 
+## Analog style (2026-09-14, #76)
+
+- **The skill folder gains `STYLE.md`, a sibling of `SKILL.md`.** SKILL.md
+  teaches the workflow and stays short because it loads on demand; the card
+  guidance is longer and only matters when an agent writes an `html` or `svg`
+  card, so it lives in a second file SKILL.md points at. A file, not a
+  subdirectory: the embed test rejects directories, and `analog onboard`
+  copies the whole folder, so no install code changes.
+- **A card paints itself, in Nord, single-theme.** The sandbox passes nothing
+  in and the frame behind an unpainted document is white, so the guide fixes
+  `color-scheme: dark`, the exact Nord values `md-theme-nord` already uses, and
+  an explicit ground; it forbids `prefers-color-scheme` switching so the human,
+  the export and the agent's own check all see the same card. Nord rather than
+  a per-card palette because a board mixes markdown and html cards, and one
+  palette keeps them from reading as two products.
+- **The column is centred.** The pop-out is 1200px wide (#82) and the parent
+  never restyles the document, so centring has to come from the card itself:
+  the guide asks for a capped measure with `margin-inline: auto`.
+- **Real text and addressable regions are the design constraint.** Pins,
+  rectangles and in-card search all walk DOM text (#23, #81). The guide
+  therefore bans text in canvas or raster and asks for spaced regions, so a
+  shift-drag selects one claim. This is the reason the style exists at all,
+  not a taste.
+- **No external resources.** Portable export (#72) carries the document and
+  nothing else, and the guide follows that boundary: no CDN scripts, no remote
+  images, system fonts by default.
+- **`analog skill install|status|cat` is the update path, not an optional
+  actor on `onboard`.** Every onboard flag takes its meaning from the actor, so
+  making the argument optional would turn one command into two modes where
+  half the flags become errors. Refreshing an installed skill after a binary
+  upgrade needs no identity and wants a changed/unchanged answer, which
+  onboard's banner has no room for. `onboard` keeps its polite skip (#63) and
+  now names the refresh command; both share `installSkill`.
+
 ## Toolchain
 
 - Go **1.23+**. `CGO_ENABLED=0` everywhere.

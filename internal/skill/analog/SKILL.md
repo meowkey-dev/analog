@@ -2,7 +2,9 @@
 name: analog
 description: Use when working in a shared Analog space with a human reviewer —
   posting work for review, reading back human comments, or when the user mentions a
-  space slug or asks you to "put it on Analog".
+  space slug or asks you to "put it on Analog". Also when they ask for an
+  infographic, an ELI5, a comparison or a diagram to review: an "analog-style"
+  card (see STYLE.md).
 ---
 
 # Analog
@@ -50,6 +52,10 @@ annotations are how the human tracks what you've ignored.
 - Markdown cards render GFM and LaTeX (`$...$`, `$$...$$`). Use `--kind html`
   or `--kind svg` for anything visual — it renders, and the human can pin
   comments on specific regions of it.
+- Before writing an `html` or `svg` card, read `STYLE.md` next to this file.
+  It is the card flavour that reviews well — infographic, ELI5, comparison,
+  diagram — and what the sandbox forces: paint your own colours, real text
+  only, distinct regions a comment can land on.
 - `analog link <slug> <from> <to> --label "..."` whenever cards relate.
   Always label. Unlabelled edges are noise.
 - Don't post status updates or narration. Analog is for artifacts under

@@ -71,7 +71,7 @@ func onboardCmd() *cobra.Command {
 				_, statErr := os.Stat(target)
 				if statErr == nil && !overwrite {
 					fmt.Printf("skill already installed: %s\n", target)
-					fmt.Println("  skipping; pass --config-dir to overwrite it.")
+					fmt.Println("  skipping; `analog skill install` refreshes it.")
 					fmt.Println()
 				} else {
 					installed, err := installSkill(dir)
