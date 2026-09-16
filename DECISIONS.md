@@ -375,9 +375,11 @@ agent runtime.
   the export and the agent's own check all see the same card. Nord rather than
   a per-card palette because a board mixes markdown and html cards, and one
   palette keeps them from reading as two products.
-- **The column is centred.** The pop-out is 1200px wide (#82) and the parent
-  never restyles the document, so centring has to come from the card itself:
-  the guide asks for a capped measure with `margin-inline: auto`.
+- **The column is fluid until it is centred and capped.** The main card is
+  resizable and the pop-out is 1200px wide (#82), while the parent never
+  restyles the document. The guide therefore makes the card body fill the
+  available frame with `width: 100%` and `box-sizing: border-box`, then caps its
+  measure and centres it with `margin-inline: auto`.
 - **Real text and addressable regions are the design constraint.** Pins,
   rectangles and in-card search all walk DOM text (#23, #81). The guide
   therefore bans text in canvas or raster and asks for spaced regions, so a
