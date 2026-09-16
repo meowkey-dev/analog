@@ -11,8 +11,11 @@ before writing `--kind html` or `--kind svg`; SKILL.md covers the workflow.
   reaches in: no theme, no stylesheet, no fonts, no token. Paint every colour
   and set every font yourself. Links cannot open (no popups), so cite in text.
 - **320×200 to start, resized by the human, popped out to at most 1200 wide.**
-  It scrolls; it never scales. Design one column that reads at 320–600px, and
-  cap the measure so a pop-out does not stretch lines across the window.
+  It scrolls; it never scales. Treat the frame like a mobile viewport: make the
+  column fill every available pixel as the card is resized, then stop it at a
+  readable `max-width`. Use `width: 100%` with `box-sizing: border-box` so the
+  gutter is included rather than causing overflow. Do not fix the column to one
+  card size or wait for a breakpoint to make it fluid.
 - **A dark sheet on a dark desk.** Analog's chrome is near-black and its
   markdown cards default to Nord, so an `html` card paints the same Nord
   ground and the board reads as one surface. Declare `color-scheme: dark` and
@@ -89,13 +92,15 @@ characters, a scale of three sizes (label, body, display figure) and stay on
 it. Display figures and any column of digits use `tabular-nums`. Uppercase
 labels get a touch of letter-spacing; headings get `text-wrap: balance`.
 
-Layout: `body` carries the 16–20px gutter, a `max-width` around 62ch and
-`margin-inline: auto`; sibling groups sit in flex or grid with `gap`, and
-nothing carries per-element margins that collapse. Regions separate by space or a single
-rule, not by card-on-card borders. Nothing is `position: fixed` or `sticky`;
-the frame scrolls and a pinned bar eats a card-sized viewport. Only a wide
-table or code block may exceed the width, each inside its own
-`overflow-x: auto`. No `height: 100vh` anywhere.
+Layout: `body` carries the 16–20px gutter, `box-sizing: border-box`, `width: 100%`,
+a `max-width` around 62ch and `margin-inline: auto`. That makes the content fluid
+below the cap and centred at the cap above it; the ground still fills the frame.
+Sibling groups sit in flex or grid with `gap`, and nothing carries per-element
+margins that collapse. Regions separate by space or a single rule, not by
+card-on-card borders. Nothing is `position: fixed` or `sticky`; the frame scrolls
+and a pinned bar eats a card-sized viewport. Only a wide table or code block may
+exceed the width, each inside its own `overflow-x: auto`. No `height: 100vh`
+anywhere.
 
 ## Skeleton
 
@@ -112,7 +117,8 @@ table or code block may exceed the width, each inside its own
     font: 15px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   }
   html { background: var(--paper); }
-  body { margin: 0 auto; padding: 18px 20px; max-width: 62ch; color: var(--ink);
+  body { box-sizing: border-box; width: 100%; margin: 0 auto; padding: 18px 20px;
+         max-width: 62ch; color: var(--ink);
          display: flex; flex-direction: column; gap: 18px; }
   h1 { font-size: 20px; line-height: 1.2; margin: 0; text-wrap: balance; }
   .label { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
@@ -143,7 +149,7 @@ infographic lands readable; the human resizes from there.
 
 - Opens at rest with the whole point visible, no scroll needed for the claim.
 - Every colour comes from the Nord tokens; `html` paints the ground.
-- The column is capped and centred, so a pop-out does not leave it top-left.
+- The column fills a narrow frame, then stays capped and centred as it widens.
 - All text is DOM text or SVG `<text>`. Nothing readable lives in a canvas.
 - Every number has a unit, and the source is on the card.
 - Regions have space between them; a rectangle can select one claim.
