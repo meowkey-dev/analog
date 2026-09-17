@@ -31,6 +31,34 @@ curl -L https://github.com/meowkey-dev/analog/releases/latest/download/analog-da
 ./analog-server
 ```
 
+With Nix, build and run the CLI directly from source:
+
+```bash
+nix run github:meowkey-dev/analog
+```
+
+The flake also provides all three binaries as `packages.default`, a Go 1.25 +
+Node 22 development shell, and a NixOS module:
+
+```nix
+{
+  inputs.analog.url = "github:meowkey-dev/analog";
+  outputs = { self, nixpkgs, analog, ... }: {
+    nixosConfigurations.my-host = nixpkgs.lib.nixosSystem {
+      system = "x86_64-linux";
+      modules = [
+        analog.nixosModules.default
+        { services.analog.enable = true; }
+      ];
+    };
+  };
+}
+```
+
+The service listens only on `127.0.0.1:8787` and stores its state in
+`/var/lib/analog` by default. `services.analog.port`, `.dataDir`, and `.package`
+are configurable; put a TLS reverse proxy in front before exposing it remotely.
+
 Then open <http://127.0.0.1:8787>.
 
 ## Run
