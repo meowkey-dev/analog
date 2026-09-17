@@ -9,7 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/meowkey-dev/analog/internal/skill"
+	"github.com/meowkey-dev/analog/skill"
 )
 
 // The `skill` group manages the installed copy of the skill without an actor in

@@ -13,7 +13,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/meowkey-dev/analog/client"
-	"github.com/meowkey-dev/analog/internal/skill"
+	"github.com/meowkey-dev/analog/skill"
 )
 
 // onboardCmd gives an agent everything it needs to use an Analog server: a token
