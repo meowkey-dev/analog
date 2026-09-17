@@ -56,7 +56,8 @@ annotations are how the human tracks what you've ignored.
 - Before writing an `html` or `svg` card, read `STYLE.md` next to this file.
   It is the card flavour that reviews well — infographic, ELI5, comparison,
   diagram — and what the sandbox forces: paint your own colours, real text
-  only, distinct regions a comment can land on.
+  only, distinct regions a comment can land on. It also covers interactive
+  feedback controls and the supported AG-UI sidecar pattern for HTML cards.
 - `analog link <slug> <from> <to> --label "..."` whenever cards relate.
   Always label. Unlabelled edges are noise.
 - Set `--width` and `--height` when a card was designed for a particular viewport.
