@@ -145,6 +145,112 @@ takes `width` and `height`, and the CLI takes `--width` and `--height`, so send
 the dimensions the card was designed for. A 480×360 ELI5 or a 560×420
 infographic lands readable; the human resizes from there.
 
+## Interactive elements for feedback
+
+Use an `html` card when the human should try a value, choose an option or run a
+small interaction before commenting. Use native controls with explicit labels,
+visible focus styles and an `aria-live="polite"` status region. Give every button
+`type="button"`: the iframe deliberately does not have `allow-forms`, so form
+submission is not a supported transport. Keep the card useful at rest and show
+the current selection as real DOM text so it can be searched, quoted and pinned.
+
+Changing a control is local browser state, not durable Analog feedback. The human
+still uses a pin or region comment to put feedback into `analog feedback`. If the
+choice itself must reach an agent immediately, send it to an external sidecar from
+the card with `fetch`; Analog does not receive, store or proxy that exchange.
+Controls receive pointer input while comment mode is off; comment mode intentionally
+puts Analog's pin-and-region overlay above the card.
+
+```html
+<label for="choice">Direction</label>
+<select id="choice">
+  <option value="simpler">Make it simpler</option>
+  <option value="deeper">Go deeper</option>
+</select>
+<p>Current selection: <output id="current">Make it simpler</output></p>
+<button id="send" type="button">Send feedback</button>
+<p id="status" aria-live="polite">No feedback sent.</p>
+<script>
+  const endpoint = "http://127.0.0.1:9191/agent";
+  const choice = document.querySelector("#choice");
+  const current = document.querySelector("#current");
+  const send = document.querySelector("#send");
+  const status = document.querySelector("#status");
+
+  choice.addEventListener("change", () => {
+    current.textContent = choice.selectedOptions[0].textContent;
+  });
+
+  async function readSSE(body, onEvent) {
+    const reader = body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let data = [];
+    for (;;) {
+      const part = await reader.read();
+      buffer += decoder.decode(part.value || new Uint8Array(), { stream: !part.done });
+      const lines = buffer.split(/\r?\n/);
+      buffer = part.done ? "" : (lines.pop() || "");
+      for (const line of lines) {
+        if (line === "" && data.length) {
+          onEvent(JSON.parse(data.join("\n")));
+          data = [];
+        } else if (line.startsWith("data:")) {
+          data.push(line.slice(5).trimStart());
+        }
+      }
+      if (part.done) {
+        if (data.length) onEvent(JSON.parse(data.join("\n")));
+        return;
+      }
+    }
+  }
+
+  send.addEventListener("click", async () => {
+    send.disabled = true;
+    status.textContent = "Sending…";
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "text/event-stream",
+        },
+        body: JSON.stringify({
+          threadId: "review-thread",
+          runId: `review-${Date.now()}`,
+          state: { direction: choice.value },
+          messages: [], tools: [], context: [], forwardedProps: {},
+        }),
+      });
+      if (!response.ok || !response.body) throw new Error(`sidecar returned ${response.status}`);
+      let reply = "";
+      await readSSE(response.body, (event) => {
+        if (event.type === "TEXT_MESSAGE_CONTENT") reply += event.delta || "";
+        status.textContent = reply || event.type;
+      });
+    } catch (error) {
+      status.textContent = `Could not send: ${error instanceof Error ? error.message : error}`;
+    } finally {
+      send.disabled = false;
+    }
+  });
+</script>
+```
+
+This is the request shape supported by Analog's AG-UI example: JSON `POST` in,
+streamed SSE out. The card runs at opaque origin `null`, so the sidecar must answer
+the CORS preflight and response with `Access-Control-Allow-Origin: null`, allow
+`POST` and `OPTIONS`, and allow the request headers it accepts. `Origin: null` is
+not authentication. Never store an Analog token or another long-lived credential
+in card HTML; arrange user-supplied or short-lived credentials out of band and
+enforce them at the sidecar. Analog never exposes its own credential to a card.
+
+For a complete chunk-safe SSE reader and sidecar, use `examples/ag-ui/card.html`
+and `examples/ag-ui/` in the Analog repository. The scripts-only sandbox is the
+same in the card, pop-out and portable export. An exported interaction works only
+while its external sidecar remains reachable and continues to allow origin `null`.
+
 ## Before you post
 
 - Opens at rest with the whole point visible, no scroll needed for the claim.
@@ -154,4 +260,6 @@ infographic lands readable; the human resizes from there.
 - Every number has a unit, and the source is on the card.
 - Regions have space between them; a rectangle can select one claim.
 - No CDN, no remote image, no `fixed`, no `100vh`, no link that needs a click.
+- Interactive controls have labels, visible state and an `aria-live` result; no
+  form submission or embedded long-lived credential.
 - `svg` cards: `viewBox`, explicit fills, no scripts.
