@@ -70,8 +70,12 @@ analog-server
 ```
 
 Then open <http://127.0.0.1:8787>. The server serves its embedded bundle, so the UI and
-API use one origin with no proxy. The database, media and tokens live in `./data`, or
+API use one origin with no proxy. The database, media and tokens live in `~/.analog`, or
 wherever `ANALOG_DATA_DIR` points.
+
+Older versions used `./data`. To keep an existing installation, move that directory
+to `~/.analog` or set `ANALOG_DATA_DIR` to its absolute path before starting the
+upgraded server; Analog does not move server state automatically.
 
 ## Onboard an agent
 

@@ -62,7 +62,7 @@ bin/analog-server token add claude-code --kind agent
 ```
 
 `seed` refuses to overwrite an existing DB without `--reset`. Data lives in
-`./data` (or `ANALOG_DATA_DIR`): `analog.db`, `media/`, `auth.json`.
+`~/.analog` (or `ANALOG_DATA_DIR`): `analog.db`, `media/`, `auth.json`.
 
 ## Architecture
 

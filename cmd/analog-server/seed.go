@@ -42,8 +42,8 @@ func seedCmd() *cobra.Command {
 			return runSeed(dbPath, mediaDir, fixtures, reset)
 		},
 	}
-	cmd.Flags().StringVar(&dbPath, "db", "", "defaults to ANALOG_DB / data/analog.db")
-	cmd.Flags().StringVar(&mediaDir, "media-dir", "", "defaults to data/media")
+	cmd.Flags().StringVar(&dbPath, "db", "", "defaults to ANALOG_DB / ~/.analog/analog.db")
+	cmd.Flags().StringVar(&mediaDir, "media-dir", "", "defaults to ~/.analog/media")
 	cmd.Flags().StringVar(&fixtures, "fixtures", filepath.Join("contracts", "fixtures"),
 		"directory holding the frozen fixtures")
 	cmd.Flags().BoolVar(&reset, "reset", false, "delete an existing DB first")
