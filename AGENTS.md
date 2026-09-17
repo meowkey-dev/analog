@@ -157,8 +157,8 @@ Two suites, different jobs:
   for machine-readable output.
 - **Installed skills go stale.** `skill/analog/` is embedded into `analog` and
   copied out by `onboard` (which skips an existing copy) or `analog skill
-  install` (which overwrites). Edit `skill/analog/`, mirror it into
-  `internal/skill/analog/` (a test enforces byte equality), then reinstall.
+  install` (which overwrites). `skill/analog/` is the single authored copy and
+  the embedded build input; edit it there, then reinstall.
 - **`analog login` writes `~/.analog.toml` for the user** — an agent running as
   you would inherit your identity. Agents use `ANALOG_URL`/`ANALOG_ACTOR`/
   `ANALOG_TOKEN` env vars (or `analog onboard --wrapper`); `ANALOG_ACTOR` has
