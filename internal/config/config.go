@@ -83,13 +83,17 @@ func LoopbackOriginsAllowed() bool {
 
 // --- storage -----------------------------------------------------------------
 
-// DataDir is `./data`, or ANALOG_DATA_DIR.
+// DataDir is ~/.analog, or ANALOG_DATA_DIR.
 //
-// A binary has no repo to sit beside, so it makes a `data/` where you ran it.
-// ANALOG_DATA_DIR is the answer whenever that guess is wrong.
+// Server state belongs to the user rather than the directory the server happened
+// to start in. The relative fallback is only for environments without a home
+// directory; ANALOG_DATA_DIR remains the explicit answer for deployments.
 func DataDir() string {
 	if v := os.Getenv("ANALOG_DATA_DIR"); v != "" {
 		return abs(v)
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		return filepath.Join(home, ".analog")
 	}
 	return abs("data")
 }

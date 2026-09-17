@@ -12,7 +12,7 @@ Contract-derived values are marked; the rest are reversible defaults.
 | API prefix | `/api` | Contract, same source. |
 | Web dev server | `5173` (Vite default, `strictPort`) | Proxies `/api` → 8787, so the app is same-origin in dev exactly as in prod. This matters: SPEC §5's iframe-sandbox reasoning assumes the annotation overlay and the artifact iframe are not same-origin with each other, and a cross-origin dev setup would have hidden a mistake there. |
 | CORS | allowlist `http://localhost:5173`, `http://127.0.0.1:5173`; `ANALOG_CORS_ORIGINS` overrides | Only needed if someone runs the web app without the proxy. Not `*` — cheap to keep narrow. |
-| Data directory | `./data`, or `ANALOG_DATA_DIR` | A binary has no checkout to sit beside, so it makes a `data/` where you ran it. |
+| Data directory | `~/.analog`, or `ANALOG_DATA_DIR` | Server state is user-global, not relative to whichever directory launched the binary (#84). |
 
 ## Identifiers
 
@@ -31,7 +31,7 @@ would not round-trip them.
 
 ## Storage
 
-    data/                       ANALOG_DATA_DIR
+    ~/.analog/                 ANALOG_DATA_DIR
       analog.db                 ANALOG_DB overrides the full path
       media/<space_id>/<m_ulid>.<ext>
 
@@ -408,6 +408,19 @@ agent runtime.
 - **Geometry-only updates retain move semantics.** They do not bump `sp_rev` or
   stale annotations. Agents may deliberately lay out and size their own work, but
   the skill still tells them not to rearrange cards the human positioned.
+
+## User-global server state (2026-09-17, #84)
+
+- **The unconfigured data directory is `~/.analog`, not `./data`.** Starting the
+  same binary from a different working directory must not produce an apparently
+  empty server. A user-owned home directory also works for release binaries without
+  requiring elevated permissions.
+- **Existing overrides are unchanged.** `ANALOG_DATA_DIR` still relocates all
+  state; `ANALOG_DB` and `ANALOG_AUTH_FILE` still override their individual files.
+  Deployments already use these explicit paths.
+- **There is no implicit migration from `./data`.** A working directory is not a
+  stable installation identity, so choosing and moving one automatically could
+  select the wrong data or collide with an existing global installation.
 
 ## Toolchain
 

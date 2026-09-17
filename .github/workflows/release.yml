@@ -72,8 +72,9 @@ jobs:
 
           # Run it from an empty directory with no checkout in sight.
           workdir=$(mktemp -d)
-          cp bin/linux-amd64/analog-server "$workdir/"
-          (cd "$workdir" && ./analog-server --port 8788 &)
+          mkdir -p "$workdir/home" "$workdir/run"
+          cp bin/linux-amd64/analog-server "$workdir/run/"
+          (cd "$workdir/run" && HOME="$workdir/home" ./analog-server --port 8788 &)
           for _ in $(seq 1 100); do
             curl -fsS http://127.0.0.1:8788/api/health >/dev/null 2>&1 && break
             sleep 0.1
@@ -84,8 +85,11 @@ jobs:
           # ...and it serves the UI, not just the API.
           curl -fsS http://127.0.0.1:8788/ | grep -qi '<!doctype html' \
             || { echo "the web bundle is not embedded"; exit 1; }
-          # It made its own data directory rather than needing one.
-          test -f "$workdir/data/analog.db" || { echo "no data/ was created"; exit 1; }
+          # Its state follows the user rather than the directory it started in.
+          test -f "$workdir/home/.analog/analog.db" \
+            || { echo "no user-global database was created"; exit 1; }
+          test ! -e "$workdir/run/data" \
+            || { echo "working-directory data/ should not be created"; exit 1; }
 
       - name: Run the conformance suite against what is being released
         working-directory: tests
