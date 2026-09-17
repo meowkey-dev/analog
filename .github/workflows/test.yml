@@ -93,3 +93,19 @@ jobs:
       - name: Web unit tests
         working-directory: web
         run: npm test
+
+  nix:
+    name: nix source build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: DeterminateSystems/nix-installer-action@v23
+
+      - name: Evaluate every supported system
+        run: nix flake check --all-systems --no-build
+
+      - name: Build the package
+        run: nix build .#
