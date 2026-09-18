@@ -31,8 +31,10 @@ func TestSkillInstallAndStatus(t *testing.T) {
 	if !strings.Contains(string(body), "analog feedback") {
 		t.Errorf("installed SKILL.md does not teach the workflow:\n%.80s", body)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "analog", "STYLE.md")); err != nil {
-		t.Errorf("STYLE.md was not installed beside SKILL.md: %v", err)
+	for _, name := range []string{"STYLE.md", "EXPLAIN.md"} {
+		if _, err := os.Stat(filepath.Join(dir, "analog", name)); err != nil {
+			t.Errorf("%s was not installed beside SKILL.md: %v", name, err)
+		}
 	}
 
 	out = h.run("skill", "status", "--dir", dir)
@@ -75,6 +77,9 @@ func TestSkillCatPrintsTheEmbeddedFiles(t *testing.T) {
 	}
 	if out := h.run("skill", "cat", "STYLE.md"); !strings.Contains(out, "# Analog style") {
 		t.Errorf("cat STYLE.md:\n%.80s", out)
+	}
+	if out := h.run("skill", "cat", "EXPLAIN.md"); !strings.Contains(out, "# Analog explainers") {
+		t.Errorf("cat EXPLAIN.md:\n%.80s", out)
 	}
 	if r := h.invoke(options{}, "skill", "cat", "nope.md"); r.code != exitError {
 		t.Errorf("cat of a missing file should fail, got exit %d", r.code)

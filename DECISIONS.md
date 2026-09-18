@@ -422,6 +422,40 @@ agent runtime.
   stable installation identity, so choosing and moving one automatically could
   select the wrong data or collide with an existing global installation.
 
+## Explainer sets (2026-09-18)
+
+- **A third skill file, `EXPLAIN.md`, not a second skill.** SKILL.md teaches the
+  workflow, STYLE.md how one card looks, and this one the shape of a *set* of
+  cards. The three load on demand and only the relevant one costs context; a
+  separate skill would need its own wiring, its own install path and its own
+  copy of the auth and feedback rules. A file for the same reason STYLE.md is a
+  file (#76): the embed test rejects directories and `onboard` copies the whole
+  folder, so no install code changes.
+- **The survey is a step, not a sentence.** The methodology this borrows from
+  confirms the learner's level in passing. Analog makes asking cheap — a probe
+  card is one `md` post and `await_feedback` blocks on the answer — and makes
+  guessing wrong expensive, because the whole set has to be rewritten at the
+  right level. So the probe is step one and has its own rules: five questions,
+  a three-way answer, never a grade.
+- **The probe asks about meta-concepts, not the topic.** The two to four ideas
+  everything else leans on are the only ones whose answer changes the route. A
+  quiz on details would measure knowledge the cards are there to supply.
+- **The links are the map.** The source methodology publishes a table of
+  contents page because a folder of HTML files has no other structure. Analog
+  already has a graph, so the route card carries the target, the meta-concepts
+  and the assumed floor, and labelled edges carry the dependencies. A listed
+  contents page would duplicate the graph and go stale against it.
+- **No clock.** The original budgets 180 minutes across four acts. A board is
+  not paced: the human scrolls, annotates and comes back. The budget is six to
+  twelve cards on a dependency ladder, which is the thing that actually bounds
+  the work.
+- **One spine covers a topic and a session recap.** Both are a human who must
+  hold ideas they do not yet hold; only the material differs (research versus
+  the diff) and the ending (understanding versus a verdict). Two skills would
+  have diverged on the four rules they share. The recap half inherits SKILL.md's
+  rule that Analog is not a log: order by what must be understood first, never
+  by chronology.
+
 ## Toolchain
 
 - Go **1.23+**. `CGO_ENABLED=0` everywhere.

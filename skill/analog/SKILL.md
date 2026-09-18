@@ -4,7 +4,9 @@ description: Use when working in a shared Analog space with a human reviewer —
   posting work for review, reading back human comments, or when the user mentions a
   space slug or asks you to "put it on Analog". Also when they ask for an
   infographic, an ELI5, a comparison or a diagram to review: an "analog-style"
-  card (see STYLE.md).
+  card (see STYLE.md). Also when they ask you to teach them a topic, or to
+  explain what you did across a long session: a set of explainer cards
+  (see EXPLAIN.md).
 ---
 
 # Analog
@@ -58,6 +60,11 @@ annotations are how the human tracks what you've ignored.
   diagram — and what the sandbox forces: paint your own colours, real text
   only, distinct regions a comment can land on. It also covers interactive
   feedback controls and the supported AG-UI sidecar pattern for HTML cards.
+- A whole set of cards that teaches something — a topic the human asked to
+  learn, or the work from a session they did not watch — has its own shape:
+  survey what they already hold, post the route, then one card per idea. Read
+  `EXPLAIN.md` next to this file before you start; a set that skips the survey
+  is usually pitched at the wrong level.
 - `analog link <slug> <from> <to> --label "..."` whenever cards relate.
   Always label. Unlabelled edges are noise.
 - Set `--width` and `--height` when a card was designed for a particular viewport.

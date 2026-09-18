@@ -179,7 +179,9 @@ Then paste the skill into the conversation (`analog skill cat` prints the copy
 that matches the binary), or tell it to read `skill/analog/SKILL.md`. That is
 the workflow half, and it matters more than the wiring. `STYLE.md` beside it
 (`analog skill cat STYLE.md`) is the card half: how to write an `html` or `svg`
-card that reviews well.
+card that reviews well. `EXPLAIN.md` is the third: how to build a set of cards
+that teaches a topic or explains a long session's work, starting by asking the
+human what they already know.
 
 It sidesteps a trap worth knowing about: `analog login` writes `~/.analog.toml` for
 the **user**, so an agent running as you would inherit your identity and post under
