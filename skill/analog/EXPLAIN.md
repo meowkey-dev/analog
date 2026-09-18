@@ -113,6 +113,44 @@ A term of art appears once, defined where it appears. Every figure is real and
 carries its unit and its source; a placeholder invites a comment about the
 placeholder. STYLE.md has the rest.
 
+Put a quiet orientation line at the top of each card: which rung, and which
+card of how many. The board shows the graph, not the reading order, and a
+learner who cannot tell how much is left rations attention badly.
+
+### Picture first, few words
+
+The discipline that makes these cards work is **a big picture and little
+text**. Budget about 150 words of prose per card, labels inside the figure
+excluded. The figure carries the mechanism and the prose says what it means;
+when the prose explains the mechanism too, the figure has become decoration and
+the card is now an essay nobody reads at a glance.
+
+If an idea will not fit in 150 words, it is two ideas. Split it and link them.
+
+### Choosing the shape
+
+STYLE.md has four card shapes and says how each looks. Pick one per card — the
+beats above are the content, the shape is the arrangement:
+
+- **ELI5** is the default for a concept card, and it is what the six beats
+  above already describe: the claim in plain words, the picture, why it is
+  true in a few beats, then the caveat.
+- **Infographic** whenever a real number carries the point — a rate, a size, a
+  duration, a share, a before and after. Prefer it over a paragraph containing
+  the same number: a figure at display size with its unit and scale is the one
+  thing a reader keeps, and it is far easier to disagree with precisely, which
+  is what the annotation is for. If the card has a number that matters, that
+  number leads.
+- **Comparison** when the human's real question is "which", or when two things
+  are confusable and the confusion is the obstacle. Same slots, same order.
+- **Diagram** (`svg`) for anything with parts and arrows — flow, state,
+  structure, dependency. It is sanitized, it renders on the card ground, and
+  the human can draw on it.
+
+A concept card with no number and no parts is still an ELI5 with a picture,
+never a wall of prose. "There is nothing to draw" almost always means the
+mechanism is not yet understood well enough to explain.
+
 ## 4. Recap
 
 The last card is where the human does the work:
@@ -144,6 +182,11 @@ Same spine, different material and a different ending.
 - **The meta-concepts are what they must hold to judge the work** — the
   vocabulary the change is written in, the invariants you had to respect, the
   shape of what moved. Not a summary of the code.
+- **The shape of the change is an infographic.** What moved and how much, in
+  real units — files touched, the benchmark before and after, tests added,
+  what the numbers were when you started. A reviewer orients on that in five
+  seconds and cannot orient on a paragraph saying "substantial refactoring".
+  Every number comes from a command you actually ran, not an estimate.
 - **Cite the work.** `internal/store/cards.go:210`, a commit subject, a test
   name. Cards cannot open links, so the path is the citation; a reviewer who
   wants the code will go there.
@@ -164,6 +207,7 @@ Same spine, different material and a different ending.
 - Explain before the probe comes back, when the human is there to answer it.
 - Write a probe that grades, or one that takes ten minutes.
 - Put a whole rung on one card because it is all connected. Link it instead.
+- Write a card that would read the same with the figure deleted.
 - Give an analogy no boundary.
 - Invent a source, a figure or a citation. A real gap is a card that says so.
 - Re-explain a meta-concept the human said they use.
@@ -175,6 +219,9 @@ Same spine, different material and a different ending.
 - Two to four meta-concepts, named, glossed in plain words, each with a card.
 - Nothing depends on a card that comes after it.
 - Every card's title is a claim; every analogy has a boundary.
+- Every card is a picture and about 150 words, not prose with a picture under
+  it, and each one names its rung and its place in the set.
+- Every card that turns on a number leads with that number, in its own unit.
 - Every explainer is linked from the route with a labelled edge.
 - Six to twelve explainers, one idea each.
 - The recap asks for an explain-back, names the stall points, and — for your

@@ -449,6 +449,18 @@ agent runtime.
   not paced: the human scrolls, annotates and comes back. The budget is six to
   twelve cards on a dependency ladder, which is the thing that actually bounds
   the work.
+- **EXPLAIN.md chooses the shape; STYLE.md draws it.** The source methodology
+  makes every page an eli5 infographic — a big picture, little text — and that
+  discipline is the reason its pages work at all. STYLE.md already has the four
+  shapes and how each looks, so EXPLAIN.md does not restate them: it says which
+  shape a card should be (eli5 by default, infographic whenever a real number
+  carries the point, comparison for a "which", `svg` for parts and arrows) and
+  keeps the one rule STYLE.md has no place for, the ~150-word prose budget per
+  card. An idea that does not fit is two ideas.
+- **The set says where you are, because the graph does not.** The original
+  stamps each page with its act and its minute. Dropping the clock dropped the
+  orientation with it, so each card names its rung and its place in the set. A
+  board shows structure, never reading order or how much is left.
 - **One spine covers a topic and a session recap.** Both are a human who must
   hold ideas they do not yet hold; only the material differs (research versus
   the diff) and the ending (understanding versus a verdict). Two skills would
