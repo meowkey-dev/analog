@@ -165,11 +165,14 @@ The last card is where the human does the work:
   their own. Their analogy is better than yours, because it is theirs.
 - **Three to five places to go deeper**, chosen, not dumped.
 
-Then read `analog feedback` and act on it. An `assessing` annotation on an
-explainer means that card did not land: rewrite it, do not defend it. Use
-`analog update --mode branch` when the human should see both versions, the
-default replace when the old one was simply wrong. A concept the probe said
-they use, explained anyway, is the mistake to avoid next time.
+Then read `analog feedback` and act on it. `assessing` marks a verdict, not a
+complaint — read the body before you touch anything, because the verdict may
+be that the card works, and rewriting an explanation the human just accepted
+throws away the one signal that it landed. Where the body does report a card
+missing, rewrite it rather than defending it: `analog update --mode branch`
+when the human should see both versions, the default replace when the old one
+was simply wrong. A concept the probe said they use, explained anyway, is the
+mistake to avoid next time.
 
 ## When the subject is your own work
 
@@ -192,8 +195,10 @@ Same spine, different material and a different ending.
   wants the code will go there.
 - **One card per decision a reasonable person could have made differently**:
   what you chose, what you rejected, why. These are the cards that earn
-  annotations, and an `assessing` annotation on one is the human overruling
-  you. That is the point of posting it.
+  annotations, and an `assessing` annotation on one carries the verdict you
+  asked for. Read which way it goes: it may ratify the choice, and a ratified
+  decision is settled rather than reopened. Where it goes against you, the
+  call is the human's. Either way that is the point of posting it.
 - **Name what you are unsure about and what you did not do.** A recap that
   reports only successes wastes the review it asked for.
 - **Do not narrate chronology.** Analog is not a log. Order by what the human
