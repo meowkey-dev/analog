@@ -31,7 +31,8 @@ is the first thing to run when something 401s or 403s.
 
 Nothing printed means nothing changed. Otherwise:
 - `motivation: editing` — an instruction. Do it.
-- `motivation: assessing` — a verdict. Don't argue; adjust.
+- `motivation: assessing` — a verdict, either way. Read which way it goes; where
+  it goes against you, don't argue; adjust.
 - `motivation: commenting` — context. Read it, no action required.
 - `(stale)` — the card changed after the comment was written. It may already be
   fixed, or you may have rewritten around it. Check before you act, and never

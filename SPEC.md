@@ -434,7 +434,8 @@ Space slug is in the project's AGENTS.md, or ask.
 
 Nothing printed means nothing changed. Otherwise:
 - `motivation: editing` — an instruction. Do it.
-- `motivation: assessing` — a verdict. Don't argue; adjust.
+- `motivation: assessing` — a verdict, either way. Read which way it goes; where
+  it goes against you, don't argue; adjust.
 - `motivation: commenting` — context. Read it, no action required.
 - deleted cards — the human rejected that idea. Don't re-add it.
 - new links — the human sees a relationship you didn't. Consider why.
