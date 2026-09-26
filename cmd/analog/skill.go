@@ -22,8 +22,9 @@ func skillCmd() *cobra.Command {
 		Use:   "skill",
 		Short: "Install and check the agent skill shipped inside this binary",
 		Long: "Install and check the agent skill shipped inside this binary. The skill " +
-			"is the workflow half of Analog (SKILL.md), the card style (STYLE.md) " +
-			"and the shape of an explainer set (EXPLAIN.md); " +
+			"is the workflow half of Analog (SKILL.md), the card style (STYLE.md), " +
+			"the shape of an explainer set (EXPLAIN.md) and the working-context " +
+			"cards (CONTEXT.md); " +
 			"installed copies do not update themselves, so run `skill install` after " +
 			"upgrading.",
 	}

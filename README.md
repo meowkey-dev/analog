@@ -181,7 +181,9 @@ the workflow half, and it matters more than the wiring. `STYLE.md` beside it
 (`analog skill cat STYLE.md`) is the card half: how to write an `html` or `svg`
 card that reviews well. `EXPLAIN.md` is the third: how to build a set of cards
 that teaches a topic or explains a long session's work, starting by asking the
-human what they already know.
+human what they already know. `CONTEXT.md` is the fourth: the `⌂` cards that
+make a space the working context, so an agent whose context was cut, or a
+different agent, picks the work up from the space without a handoff document.
 
 It sidesteps a trap worth knowing about: `analog login` writes `~/.analog.toml` for
 the **user**, so an agent running as you would inherit your identity and post under

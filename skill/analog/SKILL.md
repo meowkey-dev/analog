@@ -6,7 +6,9 @@ description: Use when working in a shared Analog space with a human reviewer —
   infographic, an ELI5, a comparison or a diagram to review: an "analog-style"
   card (see STYLE.md). Also when they ask you to teach them a topic, or to
   explain what you did across a long session: a set of explainer cards
-  (see EXPLAIN.md).
+  (see EXPLAIN.md). Also when they say to use the space as the working
+  context, to checkpoint it, or to pick up from it: the `⌂` context cards
+  (see CONTEXT.md).
 ---
 
 # Analog
@@ -67,13 +69,18 @@ annotations are how the human tracks what you've ignored.
   survey what they already hold, post the route, then one card per idea. Read
   `EXPLAIN.md` next to this file before you start; a set that skips the survey
   is usually pitched at the wrong level.
+- When the human says to use the space as the working context, the space
+  becomes what any agent continues from — you after your context is cut,
+  another agent, you tomorrow. Read `CONTEXT.md` next to this file: five `⌂`
+  cards, what goes on them, and when to write, checkpoint and pick up.
 - `analog link <slug> <from> <to> --label "..."` whenever cards relate.
   Always label. Unlabelled edges are noise.
 - Set `--width` and `--height` when a card was designed for a particular viewport.
   Use `--x` and `--y` only when the spatial relationship is part of the artifact;
   otherwise let the server place it.
 - Don't post status updates or narration. Analog is for artifacts under
-  review, not a log.
+  review, not a log. The one exception is the five `⌂` working-context cards
+  in CONTEXT.md, which are replaced in place, never appended to.
 
 ## Revising a card
 

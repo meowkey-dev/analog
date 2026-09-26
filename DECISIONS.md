@@ -468,6 +468,42 @@ agent runtime.
   rule that Analog is not a log: order by what must be understood first, never
   by chronology.
 
+## Working context (2026-09-26)
+
+- **A fourth skill file, `CONTEXT.md`, for the reasons EXPLAIN.md is one.** It
+  loads on demand, `onboard` and `skill install` copy the whole folder, and the
+  auth and feedback rules stay in SKILL.md alone.
+- **The space is the handoff, so there is no handoff document.** The test is
+  that an agent with only the space and the repo can take the next step. A
+  separate document would be a second source that drifts from the cards and
+  that the human cannot annotate.
+- **Only what the repo cannot rebuild, and only what still matters.** Code,
+  diffs and history are pointed at, never copied. What a conversation holds and
+  a repo does not — the goal in the human's words, chat instructions, decisions
+  and what was rejected, coined vocabulary, hypotheses, dead ends, what the
+  dirty tree is for — is the whole content. Over-preserving is a failure too: a
+  context that cannot be read in two minutes is skimmed.
+- **Five cards, split by how often they change.** Brief and Decisions change
+  rarely, State constantly. Replacing a card bumps `sp_rev` and marks its
+  annotations stale, so the human's comments belong on cards that do not churn;
+  questions get their own card (Open threads) for the same reason. Decisions is
+  one ledger rather than a card per decision, because reload cost is what the
+  set is budgeted by.
+- **A title prefix, not a feature.** `⌂` marks the context cards in a shared
+  space and a dedicated one alike. `sp_meta` could carry a role, but the CLI
+  does not expose it and a convention needs no code; a command that prints the
+  set can come once the convention has settled.
+- **Replace in place, with `--if-match`, never branch.** The cards are the
+  current truth, so they are the one bounded exception to "Analog is not a
+  log". A branch would leave two cards with one title; a `409` is merged, not
+  overwritten, because the other writer may be the human.
+- **Nothing about compaction.** The triggers are start, checkpoint and pick
+  up, and none of them asks why the work was interrupted. Pick up folds in any
+  newer notes the reader holds — a summary, a handoff someone else's tooling
+  left — so the space composes with such tools without naming them, and
+  promoting durable learnings to the repo's docs is left to whoever owns them;
+  a finding only carries a `(durable)` hint.
+
 ## Toolchain
 
 - Go **1.23+**. `CGO_ENABLED=0` everywhere.
