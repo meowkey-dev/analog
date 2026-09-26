@@ -8,6 +8,18 @@
  * PDF is the browser's print of the same document. analog-server stays CGO-free.
  */
 
+import { resolveUrl } from "./api";
+import vendorBootstrap from "../../internal/chartlib/export-bootstrap.js?raw";
+
+const VENDOR_PATH = "/vendor/plotly-basic-2.35.2.min.js";
+
+function isVendorScript(src: string | null): boolean {
+  if (!src) return false;
+  if (src === VENDOR_PATH) return true;
+  try { return new URL(src, document.baseURI).pathname === VENDOR_PATH; }
+  catch { return false; }
+}
+
 const STRIP =
   ".handle, .icon, .theme-wrap, .annotation-layer, .card-thread, " +
   ".edge-hit, .edge-delete, .edge-delete-x, .badge.comments, .draw-tools";
@@ -55,9 +67,18 @@ const READY_SCRIPT = `<script>
     return loaded(element, deadline);
   };
   const frameReady = (frame, deadline) => {
+    if (frame.hasAttribute('data-analog-vendor-loading')) {
+      return loadedEvent(frame, 'analog-vendor-ready', deadline);
+    }
     if (frame.contentDocument && frame.contentDocument.readyState === 'complete') return Promise.resolve();
     return loaded(frame, deadline);
   };
+  const loadedEvent = (element, name, deadline) => new Promise(resolve => {
+    let timer;
+    const finish = () => { clearTimeout(timer); element.removeEventListener(name, finish); resolve(); };
+    element.addEventListener(name, finish, { once: true });
+    timer = setTimeout(finish, Math.max(0, deadline - Date.now()));
+  });
   const ready = async () => {
     const deadline = Date.now() + ${RESOURCE_TIMEOUT};
     const fontReady = document.fonts && document.fonts.ready
@@ -99,6 +120,7 @@ export function wrapExportDocument(opts: {
   width: number;
   height: number;
   mdScale?: string;
+  vendorScript?: string;
 }): string {
   const mdScale = opts.mdScale?.trim() || "1";
   const pageH = opts.height + 44;
@@ -124,7 +146,7 @@ html, body { margin: 0; min-height: 100%; overflow: auto; height: auto; }
 .card.selected { border-color: var(--line); box-shadow: 0 6px 18px rgba(0,0,0,.3); }
 * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 @page { size: ${opts.width}px ${pageH}px; margin: 0; }
-</style>${READY_SCRIPT}</head>
+</style>${opts.vendorScript ?? ""}${READY_SCRIPT}</head>
 <body>
 <header class="export-head"><span class="brand">analog</span>
 <span class="title">${escapeHtml(opts.title)}</span>
@@ -156,6 +178,7 @@ export async function buildExportHTML(opts: { title: string; slug: string }): Pr
   clone.style.transform = "";
   clone.style.position = "relative";
   await inlineMedia(clone);
+  const vendorScript = await prepareVendorFrames(clone);
 
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   for (const card of cards) {
@@ -193,8 +216,31 @@ export async function buildExportHTML(opts: { title: string; slug: string }): Pr
 
   return wrapExportDocument({
     title: opts.title, slug: opts.slug, css,
-    body: board.outerHTML, width, height, mdScale,
+    body: board.outerHTML, width, height, mdScale, vendorScript,
   });
+}
+
+async function prepareVendorFrames(root: ParentNode): Promise<string | undefined> {
+  let found = false;
+  root.querySelectorAll<HTMLIFrameElement>("iframe[srcdoc]").forEach((frame) => {
+    const source = frame.getAttribute("srcdoc") ?? "";
+    if (!source.includes(VENDOR_PATH)) return;
+    const parsed = new DOMParser().parseFromString(source, "text/html");
+    if (![...parsed.querySelectorAll("script[src]")].some((script) =>
+      isVendorScript(script.getAttribute("src")))) return;
+    frame.setAttribute("data-analog-srcdoc", source);
+    frame.removeAttribute("srcdoc");
+    found = true;
+  });
+  if (!found) return undefined;
+  const response = await fetch(resolveUrl(VENDOR_PATH), { credentials: "omit" });
+  if (!response.ok) throw new Error(`chart library unavailable: ${response.status}`);
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  let binary = "";
+  for (let start = 0; start < bytes.length; start += 32768) {
+    binary += String.fromCharCode(...bytes.subarray(start, start + 32768));
+  }
+  return `<script>${vendorBootstrap.replace("__ANALOG_PLOTLY_BASE64__", btoa(binary))}</script>`;
 }
 
 function replaceEditors(root: ParentNode): void {

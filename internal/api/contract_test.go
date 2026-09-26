@@ -255,3 +255,31 @@ func TestAMissingAssetIs404(t *testing.T) {
 		}
 	}
 }
+
+func TestVendorChartLibraryIsPublicAndPinned(t *testing.T) {
+	server := newTestServer(t)
+	for _, method := range []string{"GET", "HEAD"} {
+		recorder := httptest.NewRecorder()
+		server.ServeHTTP(recorder, httptest.NewRequest(method, "/vendor/plotly-basic-2.35.2.min.js", nil))
+		if recorder.Code != http.StatusOK {
+			t.Fatalf("%s vendor = %d", method, recorder.Code)
+		}
+		if got := recorder.Header().Get("Content-Type"); !strings.HasPrefix(got, "text/javascript") {
+			t.Errorf("content type = %q", got)
+		}
+		if got := recorder.Header().Get("Cache-Control"); !strings.Contains(got, "immutable") {
+			t.Errorf("cache control = %q", got)
+		}
+		if method == "GET" && len(recorder.Body.Bytes()) < 1_000_000 {
+			t.Errorf("vendor body = %d bytes", recorder.Body.Len())
+		}
+		if method == "HEAD" && recorder.Body.Len() != 0 {
+			t.Error("HEAD returned a body")
+		}
+	}
+	missing := httptest.NewRecorder()
+	server.ServeHTTP(missing, httptest.NewRequest("GET", "/vendor/unknown.js", nil))
+	if missing.Code != http.StatusNotFound {
+		t.Errorf("missing vendor = %d", missing.Code)
+	}
+}

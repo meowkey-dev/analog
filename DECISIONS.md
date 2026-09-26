@@ -468,6 +468,22 @@ agent runtime.
   rule that Analog is not a log: order by what must be understood first, never
   by chronology.
 
+## Shared chart library (2026-09-26, #101)
+
+- **Plotly basic 2.35.2 is pinned at `/vendor/plotly-basic-2.35.2.min.js`.**
+  HTML cards keep the same scripts-only sandbox and can load one cached copy per
+  browser origin instead of storing the same megabyte in every card. The path is
+  public because a sandboxed `srcdoc` cannot attach Analog's bearer token.
+- **The asset has one source in `internal/chartlib/`.** The Go server embeds it,
+  the Vite dev server reads it there, and CLI export uses those same bytes. The
+  source package records the hash and license.
+- **Portable export carries one copy per board.** A small parent script sends
+  the embedded bytes to each chart iframe when it loads; each frame then parses
+  its own `srcdoc` with Plotly inlined. A parent-created blob URL is blocked by
+  Chromium when the exported file is opened from disk. The library still runs
+  inside the opaque-origin sandbox; the parent never reads card DOM or gives the
+  frame an API credential.
+
 ## Toolchain
 
 - Go **1.23+**. `CGO_ENABLED=0` everywhere.

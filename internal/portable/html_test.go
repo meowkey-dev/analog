@@ -114,6 +114,32 @@ func TestHTMLCardKeepsTheOpaqueOriginSandbox(t *testing.T) {
 	}
 }
 
+func TestHTMLCarriesSharedChartLibraryOnce(t *testing.T) {
+	card := func(id string) client.Node {
+		return client.Node{
+			"id": id, "type": "text", "x": 0, "y": 0, "width": 160, "height": 100,
+			"sp_kind": "html", "sp_title": id,
+			"text": `<script src="/vendor/plotly-basic-2.35.2.min.js"></script><div id="chart"></div>`,
+		}
+	}
+	page, err := HTML(client.Canvas{Nodes: []client.Node{card("a"), card("b")}}, Options{Slug: "s"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Count(page, "const encoded =") != 1 {
+		t.Fatal("chart library must be embedded once per export")
+	}
+	if strings.Count(page, `data-analog-srcdoc=`) != 2 {
+		t.Fatal("both chart frames must be initialized by the shared bootstrap")
+	}
+	if strings.Contains(page, `srcdoc="&lt;script src=`) {
+		t.Fatal("chart frames must not load the server path before bootstrap")
+	}
+	if !strings.Contains(page, `sandbox="allow-scripts"`) {
+		t.Fatal("chart frames lost their sandbox")
+	}
+}
+
 func TestHTMLNormalizesHostileEdgeColor(t *testing.T) {
 	canvas := client.Canvas{
 		Nodes: []client.Node{

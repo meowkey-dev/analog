@@ -1,5 +1,29 @@
 import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
+import { readFileSync } from "node:fs";
+import type { IncomingMessage, ServerResponse } from "node:http";
+
+const plotlyPath = "/vendor/plotly-basic-2.35.2.min.js";
+const plotlyFile = new URL("../internal/chartlib/plotly-basic.min.js", import.meta.url);
+
+function serveChartVendor(req: IncomingMessage, res: ServerResponse, next: () => void): void {
+  if (req.url?.split("?", 1)[0] !== plotlyPath) return next();
+  res.setHeader("Content-Type", "text/javascript; charset=utf-8");
+  res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+  res.end(readFileSync(plotlyFile));
+}
+
+function chartVendor(): Plugin {
+  return {
+    name: "chart-vendor",
+    configureServer(server) {
+      server.middlewares.use(serveChartVendor);
+    },
+    configurePreviewServer(server) {
+      server.middlewares.use(serveChartVendor);
+    },
+  };
+}
 
 /**
  * katex ships woff2+woff+ttf for each face. analog-server embeds the bundle,
@@ -26,7 +50,7 @@ function katexWoff2Only(): Plugin {
 // /api through the dev server keeps the app same-origin in development, which means
 // the sandboxed-iframe reasoning in SPEC §5 holds in dev exactly as it does in prod.
 export default defineConfig({
-  plugins: [react(), katexWoff2Only()],
+  plugins: [react(), katexWoff2Only(), chartVendor()],
   // WP3/WP4 render contracts/fixtures/ with no server behind them (?fixture),
   // which means importing JSON from outside web/.
   server: {
