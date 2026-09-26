@@ -30,7 +30,10 @@ before writing `--kind html` or `--kind svg`; SKILL.md covers the workflow.
   into a canvas or raster is invisible to all three. Build the card as a few
   distinct regions with space between them, so a rectangle selects one claim.
 - **Export carries the document and nothing else.** No CDN scripts, no remote
-  images, no library stylesheets. Inline SVG for pictures, data URIs for the
+  images, no library stylesheets. For interactive bar, pie, or scatter charts,
+  `<script src="/vendor/plotly-basic-2.35.2.min.js"></script>` loads Analog's
+  pinned Plotly basic bundle; HTML and PDF export include it once per board.
+  Keep figure data in the card. Inline SVG for pictures, data URIs for the
   rare small raster. System font stacks by default; a Google Fonts link is
   fine only with a real fallback stack, so the card holds when it never loads.
 

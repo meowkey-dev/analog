@@ -1,4 +1,19 @@
 import { forwardRef } from "react";
+import { getConnection, resolveUrl } from "./api";
+
+const VENDOR_PATH = "/vendor/plotly-basic-2.35.2.min.js";
+
+export function serverVendorSource(source: string): string {
+  if (!getConnection().baseUrl || !source.includes(VENDOR_PATH)) return source;
+  const doc = new DOMParser().parseFromString(source, "text/html");
+  let changed = false;
+  doc.querySelectorAll("script[src]").forEach((script) => {
+    if (script.getAttribute("src") !== VENDOR_PATH) return;
+    script.setAttribute("src", resolveUrl(VENDOR_PATH));
+    changed = true;
+  });
+  return changed ? "<!doctype html>\n" + doc.documentElement.outerHTML : source;
+}
 
 /**
  * The sandbox is the boundary around agent-authored documents. Scripts may
@@ -17,7 +32,7 @@ export const HTMLCardFrame = forwardRef<HTMLIFrameElement, {
     ref={ref}
     className={className}
     sandbox={HTML_CARD_SANDBOX}
-    srcDoc={srcDoc}
+    srcDoc={serverVendorSource(srcDoc)}
     title={title}
     onLoad={onLoad}
   />

@@ -21,6 +21,7 @@
     "remark-math": "6.0.0"
   },
   "devDependencies": {
+    "@types/node": "22.19.16",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.5",
     "@vitejs/plugin-react": "6.1.1",

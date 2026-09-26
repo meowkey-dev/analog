@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/meowkey-dev/analog/internal/apierr"
+	"github.com/meowkey-dev/analog/internal/chartlib"
 )
 
 // assetPrefix is where the bundle keeps its content-hashed files.
@@ -24,6 +25,24 @@ const assetPrefix = "assets/"
 // Answering that with index.html and a 200 makes the browser parse HTML as
 // JavaScript and fail somewhere unrelated; a 404 says what actually happened.
 func (s *Server) serveWeb(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == chartlib.Path {
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.WriteHeader(http.StatusOK)
+		if r.Method == http.MethodGet {
+			_, _ = w.Write(chartlib.Bytes())
+		}
+		return
+	}
+	if strings.HasPrefix(r.URL.Path, "/vendor/") {
+		apierr.NotFound("no such vendor asset").Write(w)
+		return
+	}
 	if s.Web == nil {
 		apierr.NotFound("no such path").Write(w)
 		return

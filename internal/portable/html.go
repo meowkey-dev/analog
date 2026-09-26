@@ -17,6 +17,7 @@ import (
 	gmhtml "github.com/yuin/goldmark/renderer/html"
 
 	"github.com/meowkey-dev/analog/client"
+	"github.com/meowkey-dev/analog/internal/chartlib"
 )
 
 const pad = 48.0
@@ -69,7 +70,14 @@ func HTML(canvas client.Canvas, opt Options) (string, error) {
 	b.WriteString("<style>\n")
 	b.WriteString(exportCSS)
 	fmt.Fprintf(&b, "@page { size: %spx %spx; margin: 0; }\n", px(pageW), px(pageH))
-	b.WriteString("</style></head><body>")
+	b.WriteString("</style>")
+	for _, node := range nodes {
+		if kindOf(node) == "html" && chartlib.Uses(str(node, "text")) {
+			b.WriteString(chartlib.BootstrapScript())
+			break
+		}
+	}
+	b.WriteString("</head><body>")
 	fmt.Fprintf(&b, "<header class=\"export-head\"><span class=\"brand\">analog</span>"+
 		"<span class=\"title\">%s</span><span class=\"slug\">/%s</span></header>",
 		escape(title), escape(opt.Slug))
@@ -154,8 +162,13 @@ func renderBody(node client.Node, fetch FetchMedia) (string, error) {
 		// is routinely opened outside the iframe sandbox used for html cards.
 		return `<div class="card-body svg">` + sanitizeSVG(str(node, "text")) + `</div>`, nil
 	case "html":
+		attr := "srcdoc"
+		if chartlib.Uses(str(node, "text")) {
+			attr = "data-analog-srcdoc"
+		}
 		return fmt.Sprintf(
-			`<iframe class="card-body html" sandbox="allow-scripts" srcdoc="%s" title="%s"></iframe>`,
+			`<iframe class="card-body html" sandbox="allow-scripts" %s="%s" title="%s"></iframe>`,
+			attr,
 			escapeSrcdoc(str(node, "text")),
 			escape(str(node, "sp_title")),
 		), nil
