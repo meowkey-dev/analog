@@ -493,10 +493,12 @@ agent runtime.
   space and a dedicated one alike. `sp_meta` could carry a role, but the CLI
   does not expose it and a convention needs no code; a command that prints the
   set can come once the convention has settled.
-- **Replace in place, with `--if-match`, never branch.** The cards are the
-  current truth, so they are the one bounded exception to "Analog is not a
-  log". A branch would leave two cards with one title; a `409` is merged, not
-  overwritten, because the other writer may be the human.
+- **Replace in place, with `--if-match` and an explicit `--mode replace`.**
+  The cards are the current truth, so they are the one bounded exception to
+  "Analog is not a log". An omitted mode inherits the space's revision mode,
+  and in a branch-mode space that would leave two cards with one title and a
+  Brief pointing at the superseded one, so the mode is always spelled out. A
+  `409` is merged, not overwritten, because the other writer may be the human.
 - **Nothing about compaction.** The triggers are start, checkpoint and pick
   up, and none of them asks why the work was interrupted. Pick up folds in any
   newer notes the reader holds — a summary, a handoff someone else's tooling

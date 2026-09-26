@@ -144,11 +144,15 @@ point, without warning; whatever was only in the conversation is gone.
 Every write replaces the card in place, against the rev you read:
 
     analog cards <slug>                                        # ids and revs
-    analog update <slug> <card_id> --file state.md --if-match <rev>
+    analog update <slug> <card_id> --file state.md --mode replace --if-match <rev>
+
+Always pass `--mode replace` (`mode: "replace"` over MCP). Leaving it out does
+not mean replace: it takes the space's revision mode, and a space set to
+branch would supersede the card on every write, leaving two cards with the
+same title and a Brief that points at the old one.
 
 A `409` means someone else — the human, or another agent — wrote the card
-since you read it. Read it again, merge, and retry; never overwrite it. Never
-`--mode branch` a `⌂` card: a branch leaves two cards with the same title.
+since you read it. Read it again, merge, and retry; never overwrite it.
 
 These five cards are the one exception to SKILL.md's rule that Analog is not a
 log. They are the current truth, replaced in place and bounded in size. The
@@ -201,7 +205,8 @@ yourself pointed at a space with a `⌂ Brief` you do not remember writing.
 
 - Copy what the repo already holds: diffs, file contents, test output, logs.
 - Narrate. The context is five cards; there is no sixth.
-- Branch a `⌂` card, duplicate a `⌂` title, or use `⌂` for anything else.
+- Update a `⌂` card without `--mode replace`, duplicate a `⌂` title, or use
+  `⌂` for anything else.
 - Overwrite a card after a `409` without reading what changed.
 - Rewrite a card over open annotations you have not acted on.
 - Let **Resume here** describe the step before last.
