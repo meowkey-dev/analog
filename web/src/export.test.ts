@@ -142,6 +142,36 @@ describe("buildExportHTML", () => {
       new Promise<string>((resolve) => setTimeout(() => resolve("timeout"), 250)),
     ])).resolves.toBe("done");
   });
+
+  it("embeds a vendor script once for multiple sandboxed chart cards", async () => {
+    document.body.innerHTML = `<main class="canvas"><div class="viewport">
+      <article data-card-id="a" style="left:0px;top:0px;width:200px;height:100px">
+        <iframe sandbox="allow-scripts"></iframe></article>
+      <article data-card-id="b" style="left:210px;top:0px;width:200px;height:100px">
+        <iframe sandbox="allow-scripts"></iframe></article>
+    </div></main>`;
+    const source = `<script src="/vendor/plotly-basic-2.35.2.min.js"></script><div>chart</div>`;
+    document.querySelectorAll("iframe").forEach((frame) => frame.setAttribute("srcdoc", source));
+    document.querySelectorAll<HTMLElement>("[data-card-id]").forEach((card) => {
+      Object.defineProperty(card, "offsetWidth", { value: 200 });
+      Object.defineProperty(card, "offsetHeight", { value: 100 });
+    });
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => ({
+      ok: true,
+      arrayBuffer: async () => new TextEncoder().encode("window.Plotly = {};").buffer,
+    } as Response));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const html = await buildExportHTML({ title: "Charts", slug: "charts" });
+    const parsed = new DOMParser().parseFromString(html, "text/html");
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock.mock.calls[0]?.[0]).toContain("/vendor/plotly-basic-2.35.2.min.js");
+    expect(parsed.querySelectorAll("iframe[data-analog-srcdoc]")).toHaveLength(2);
+    expect(parsed.querySelector("iframe[srcdoc]")).toBeNull();
+    expect(html.match(/const encoded =/g)).toHaveLength(1);
+    expect(html).toContain(btoa("window.Plotly = {};"));
+    expect(html).toContain('sandbox="allow-scripts"');
+  });
 });
 
 describe("ExportMenu", () => {

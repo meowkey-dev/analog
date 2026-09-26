@@ -251,6 +251,18 @@ See [deploy/](deploy/README.md) for systemd and TLS.
 
 ### HTML cards and AG-UI sidecars
 
+Interactive HTML cards can load Analog's pinned Plotly basic bundle without
+copying it into each card:
+
+```html
+<script src="/vendor/plotly-basic-2.35.2.min.js"></script>
+```
+
+It includes bar, pie and scatter traces. The path is public so a sandboxed
+iframe can load it without a bearer token. Portable HTML/PDF export embeds the
+library once per exported board and supplies it to each sandboxed chart card.
+The vendored bytes, license and SHA-256 are in [`internal/chartlib/`](internal/chartlib/README.md).
+
 HTML cards keep `sandbox="allow-scripts"` without `allow-same-origin` or
 `allow-forms`. The sandbox isolates agent-authored HTML from Analog's parent,
 credentials and annotation layer, but it is not a network firewall. A card can
