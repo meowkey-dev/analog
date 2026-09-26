@@ -6,7 +6,7 @@ import (
 )
 
 func TestCanonicalSkillIsEmbedded(t *testing.T) {
-	for _, name := range []string{"SKILL.md", "STYLE.md", "EXPLAIN.md"} {
+	for _, name := range []string{"SKILL.md", "STYLE.md", "EXPLAIN.md", "CONTEXT.md"} {
 		body, err := fs.ReadFile(FS(), name)
 		if err != nil {
 			t.Fatalf("read embedded %s: %v", name, err)
