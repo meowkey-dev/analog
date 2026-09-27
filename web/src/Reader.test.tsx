@@ -105,6 +105,18 @@ describe("Reader", () => {
     expect(el.textContent).toContain("You're all caught up.");
   });
 
+  it("switching to an empty what's-new queue shows caught up, not the last card", () => {
+    const p = props();
+    const el = render(p);
+    expect(el.querySelector(".reader-title h1")?.textContent).toBe("C_A");
+    act(() => root!.render(<Reader {...p} order="changes" />));
+    expect(el.textContent).toContain("You're all caught up.");
+    expect(el.querySelector(".reader-title")).toBeNull();
+    // and back again, the board opens on its first card
+    act(() => root!.render(<Reader {...p} order="board" />));
+    expect(p.onNavigate).toHaveBeenLastCalledWith("c_a");
+  });
+
   it("edits title and text", () => {
     const p = props();
     const el = render(p);

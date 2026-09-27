@@ -198,12 +198,12 @@ export default function App() {
           api.getSpace(slug),
           api.getCanvas(slug, true),
           api.listAnnotations(slug),
-          api.listEvents(slug),
+          api.listAllEvents(slug),
         ]);
         setSpace(nextSpace);
         setCanvas(nextCanvas);
         setAnnotations(nextAnnotations);
-        setEvents(log.events);
+        setEvents(log);
         setLoadedSlug(slug);
       } catch (exc) {
         setError(exc instanceof ApiError ? `${exc.code}: ${exc.message}` : String(exc));

@@ -78,7 +78,11 @@ export function Reader(props: ReaderProps) {
     return queue.current.map((id) => live.get(id)!);
   }, [nodes, order, props.events, props.annotations, changed]);
 
-  const node = (props.currentId ? byId.get(props.currentId) : undefined) ?? sequence[0];
+  // An empty queue is "caught up", whatever card was showing before it was chosen.
+  const emptyQueue = order === "changes" && sequence.length === 0;
+  const node = emptyQueue
+    ? undefined
+    : (props.currentId ? byId.get(props.currentId) : undefined) ?? sequence[0];
   const index = node ? sequence.findIndex((n) => n.id === node.id) : -1;
   // Off the sequence (a revision reached by its link, a card outside the queue),
   // prev/next return to where the reader left it.
