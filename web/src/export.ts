@@ -252,6 +252,85 @@ function replaceEditors(root: ParentNode): void {
   });
 }
 
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+/**
+ * What an inline svg picks up from the card around it. A standalone file has no
+ * card, so `currentColor` or an unset font would resolve to something else unless
+ * the computed values travel with it (#105).
+ */
+const INHERITED = [
+  "color", "font-family", "font-size", "font-style", "font-weight", "font-variant",
+  "letter-spacing", "word-spacing", "fill", "fill-opacity", "stroke", "stroke-width",
+  "stroke-opacity", "stroke-linecap", "stroke-linejoin",
+];
+
+function withInherited(clone: Element, from: Element): void {
+  const computed = getComputedStyle(from);
+  const own = clone.getAttribute("style") ?? "";
+  const carried = INHERITED
+    .map((name) => [name, computed.getPropertyValue(name)] as const)
+    .filter(([, value]) => value !== "")
+    .map(([name, value]) => `${name}: ${value}`)
+    .join("; ");
+  // Own declarations last: they already won on the card and must keep winning.
+  if (carried) clone.setAttribute("style", own ? `${carried}; ${own}` : carried);
+}
+
+/**
+ * A standalone .svg file of what an svg card shows, read from its rendered body
+ * so it is the sanitized markup, never the raw text. Re-serialized as XML so
+ * HTML-isms like `&nbsp;` cannot make the file unopenable, which also writes out
+ * the SVG namespace a browser-inlined card never needed. The body is an HTML
+ * fragment and may hold several svg roots; those are laid out in one outer svg,
+ * sized to hold them all, where the card placed them, so none is silently dropped
+ * or clipped.
+ */
+export function svgFileText(body: Element): string | null {
+  const roots = Array.from(body.children).filter((el) => el.namespaceURI === SVG_NS && el.localName === "svg");
+  const [first] = roots;
+  if (!first) return null;
+  let out: Element;
+  if (roots.length === 1) {
+    out = first.cloneNode(true) as Element;
+    withInherited(out, first);
+  } else {
+    // Bounds are the union of the roots, not the body box: the body scrolls, so
+    // its box can clip roots, and a union is the same however far it is scrolled.
+    // Rects are in screen pixels under the canvas zoom; undo it for card pixels.
+    const box = body.getBoundingClientRect();
+    const unscaled = (body as HTMLElement).offsetWidth;
+    const scale = unscaled && box.width ? box.width / unscaled : 1;
+    const rects = roots.map((root) => root.getBoundingClientRect());
+    const left = Math.min(...rects.map((r) => r.left));
+    const top = Math.min(...rects.map((r) => r.top));
+    const width = Math.round((Math.max(...rects.map((r) => r.right)) - left) / scale);
+    const height = Math.round((Math.max(...rects.map((r) => r.bottom)) - top) / scale);
+    out = document.createElementNS(SVG_NS, "svg");
+    out.setAttribute("width", String(width));
+    out.setAttribute("height", String(height));
+    out.setAttribute("viewBox", `0 0 ${width} ${height}`);
+    withInherited(out, body);
+    roots.forEach((root, i) => {
+      const rect = rects[i]!;
+      const clone = root.cloneNode(true) as Element;
+      withInherited(clone, root);
+      clone.setAttribute("x", String(Math.round((rect.left - left) / scale)));
+      clone.setAttribute("y", String(Math.round((rect.top - top) / scale)));
+      clone.setAttribute("width", String(Math.round(rect.width / scale)));
+      clone.setAttribute("height", String(Math.round(rect.height / scale)));
+      out.append(clone);
+    });
+  }
+  return `<?xml version="1.0" encoding="UTF-8"?>\n${new XMLSerializer().serializeToString(out)}\n`;
+}
+
+/** A filesystem-safe name; falls back to the id when the title has nothing left. */
+export function fileStem(title: string | undefined, fallback: string): string {
+  const stem = (title ?? "").trim().replace(/[\\/:*?"<>|\u0000-\u001f]+/g, "-").replace(/\s+/g, " ").slice(0, 80);
+  return stem.replace(/^[-. ]+|[-. ]+$/g, "") || fallback;
+}
+
 export function downloadText(filename: string, text: string, type: string): void {
   const blob = new Blob([text], { type });
   const url = URL.createObjectURL(blob);

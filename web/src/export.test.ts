@@ -7,7 +7,9 @@ import { ExportMenu } from "./ExportMenu";
 import {
   buildExportHTML,
   escapeHtml,
+  fileStem,
   rewriteCssUrls,
+  svgFileText,
   waitForExportResources,
   wrapExportDocument,
 } from "./export";
@@ -184,5 +186,79 @@ describe("ExportMenu", () => {
     );
     expect(html).toContain("export");
     expect(html).toContain("Save the board as HTML or PDF");
+  });
+});
+
+describe("svgFileText", () => {
+  function body(markup: string, style = ""): HTMLElement {
+    const el = document.createElement("div");
+    el.setAttribute("style", style);
+    el.innerHTML = markup;
+    document.body.append(el);
+    return el;
+  }
+
+  afterEach(() => document.body.replaceChildren());
+
+  it("is a standalone XML file with the SVG namespace (#105)", () => {
+    const text = svgFileText(body('<svg viewBox="0 0 10 10"><circle cx="5" cy="5" r="4"/><text>a&nbsp;b</text></svg>'));
+    expect(text).toMatch(/^<\?xml /);
+    expect(text).toContain('xmlns="http://www.w3.org/2000/svg"');
+    expect(text).not.toContain("&nbsp;");
+    const doc = new DOMParser().parseFromString(text!, "image/svg+xml");
+    expect(doc.querySelector("parsererror")).toBeNull();
+    expect(doc.documentElement.localName).toBe("svg");
+  });
+
+  it("carries the colour the card gave currentColor, keeping its own style last", () => {
+    const text = svgFileText(body(
+      '<svg style="opacity: 0.5"><path fill="currentColor" d="M0 0h1v1z"/></svg>',
+      "color: rgb(1, 2, 3)",
+    ))!;
+    const svg = new DOMParser().parseFromString(text, "image/svg+xml").documentElement;
+    const style = svg.getAttribute("style")!;
+    expect(style).toContain("color: rgb(1, 2, 3)");
+    expect(style.endsWith("opacity: 0.5")).toBe(true);
+  });
+
+  it("keeps every svg root, not just the first", () => {
+    const text = svgFileText(body('<svg id="a"><rect width="1" height="1"/></svg><svg id="b"><circle r="1"/></svg>'))!;
+    const outer = new DOMParser().parseFromString(text, "image/svg+xml").documentElement;
+    expect(outer.localName).toBe("svg");
+    expect(Array.from(outer.children).map((c) => c.id)).toEqual(["a", "b"]);
+    for (const child of Array.from(outer.children)) {
+      expect(child.hasAttribute("x")).toBe(true);
+      expect(child.hasAttribute("width")).toBe(true);
+    }
+  });
+
+  it("sizes the outer svg to every root, past the scrolled body and under zoom", () => {
+    // A 320x180 body at 50% zoom, scrolled, holding two 200x140 roots stacked
+    // 300px tall: the body box would clip the second one.
+    const el = body('<svg id="a"></svg><svg id="b"></svg>');
+    const rect = (left: number, top: number, width: number, height: number) =>
+      ({ left, top, width, height, right: left + width, bottom: top + height, x: left, y: top }) as DOMRect;
+    Object.defineProperty(el, "offsetWidth", { value: 320 });
+    el.getBoundingClientRect = () => rect(0, 0, 160, 90);
+    el.children[0]!.getBoundingClientRect = () => rect(10, -35, 100, 70);
+    el.children[1]!.getBoundingClientRect = () => rect(10, 35, 100, 70);
+
+    const outer = new DOMParser().parseFromString(svgFileText(el)!, "image/svg+xml").documentElement;
+    expect(outer.getAttribute("viewBox")).toBe("0 0 200 280");
+    const [a, b] = Array.from(outer.children);
+    expect([a!.getAttribute("x"), a!.getAttribute("y"), a!.getAttribute("height")]).toEqual(["0", "0", "140"]);
+    expect([b!.getAttribute("x"), b!.getAttribute("y"), b!.getAttribute("height")]).toEqual(["0", "140", "140"]);
+  });
+
+  it("is null without an svg element", () => {
+    expect(svgFileText(body("<p>nope</p>"))).toBeNull();
+  });
+});
+
+describe("fileStem", () => {
+  it("strips characters a filesystem refuses", () => {
+    expect(fileStem(' a/b: "c" ', "c_x")).toBe("a-b- -c");
+    expect(fileStem("  ", "c_x")).toBe("c_x");
+    expect(fileStem(undefined, "c_x")).toBe("c_x");
   });
 });

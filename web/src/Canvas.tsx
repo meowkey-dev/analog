@@ -121,7 +121,20 @@ export function Canvas(props: CanvasProps) {
   useEffect(() => {
     const el = container.current;
     if (!el) return;
-    const read = () => setSize({ width: el.clientWidth, height: el.clientHeight });
+    let last = { width: el.clientWidth, height: el.clientHeight };
+    const read = () => {
+      const next = { width: el.clientWidth, height: el.clientHeight };
+      // The viewport is anchored top-left, so a side panel opening or closing
+      // would slide the board sideways; hold what sits at the centre still (#104).
+      // A first layout from zero is not a move.
+      if (last.width > 0 && last.height > 0) {
+        const dx = (next.width - last.width) / 2;
+        const dy = (next.height - last.height) / 2;
+        if (dx || dy) setViewport((v) => ({ ...v, x: v.x + dx, y: v.y + dy }));
+      }
+      last = next;
+      setSize(next);
+    };
     read();
     const ro = new ResizeObserver(read);
     ro.observe(el);

@@ -10,6 +10,7 @@ import type { Annotation, Node } from "./api";
 import { HTMLCardFrame } from "./html-card";
 import { mdRemarkPlugins, mdRehypePlugins } from "./markdown";
 import { clearTextRange, findTextRanges, selectTextRange } from "./card-search";
+import { downloadText, fileStem, svgFileText } from "./export";
 import "katex/dist/katex.min.css";
 
 /**
@@ -265,6 +266,11 @@ function CardView(props: CardProps) {
   // overlay measures it to anchor pins to the content (#23).
   const bodyRef = useRef<HTMLElement | null>(null);
   const setBody = useCallback((el: HTMLElement | null) => { bodyRef.current = el; }, []);
+  /** From the rendered body, so the file looks the way the card does (#105). */
+  const downloadSvg = () => {
+    const text = bodyRef.current && svgFileText(bodyRef.current);
+    if (text) downloadText(`${fileStem(node.sp_title, node.id)}.svg`, text, "image/svg+xml");
+  };
 
   const openSearch = useCallback(() => {
     setView("content");
@@ -421,6 +427,10 @@ function CardView(props: CardProps) {
         {node.type === "text" && !editing && (
           <button className={`icon${searchOpen ? " on" : ""}`} title="Search this card (⌘/Ctrl-F)"
                   onClick={(event) => { event.stopPropagation(); searchOpen ? closeSearch() : openSearch(); }}>⌕</button>
+        )}
+        {kind === "svg" && !editing && !(view === "diff" && diff) && (
+          <button className="icon" title="Download as .svg"
+                  onClick={(e) => { e.stopPropagation(); downloadSvg(); }}>⤓</button>
         )}
         {kind === "svg" && !superseded && !editing && (
           <button className="icon" title="Draw on this card"
