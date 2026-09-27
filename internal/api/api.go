@@ -9,12 +9,14 @@ import (
 	"io/fs"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/meowkey-dev/analog/internal/apierr"
 	"github.com/meowkey-dev/analog/internal/auth"
 	"github.com/meowkey-dev/analog/internal/config"
 	"github.com/meowkey-dev/analog/internal/sse"
 	"github.com/meowkey-dev/analog/internal/store"
+	"github.com/meowkey-dev/analog/internal/updater"
 )
 
 // Version is the API contract, matching contracts/openapi.json info.version.
@@ -29,9 +31,12 @@ const API = config.APIPrefix
 var publicPaths = map[string]bool{API + "/health": true}
 
 type Server struct {
-	Store  *store.Store
-	Tokens *auth.Store
-	Broker *sse.Broker
+	Store     *store.Store
+	Tokens    *auth.Store
+	Broker    *sse.Broker
+	Updater   *updater.Updater
+	Restart   func()
+	upgradeMu sync.Mutex
 
 	handler http.Handler
 	// patterns is the routing table, recorded as it is built.
