@@ -88,6 +88,8 @@ export function Activity(props: {
   events: AnalogEvent[];
   nodes: Node[];
   onFocus: (subjectId: string) => void;
+  /** Present when the panel is a dismissable sheet (narrow screens). */
+  onClose?: () => void;
 }) {
   const titles = useMemo(() => {
     const map = new Map<string, string>();
@@ -100,7 +102,12 @@ export function Activity(props: {
 
   return (
     <div className="panel activity-panel">
-      <header><h2>Activity</h2></header>
+      <header>
+        <h2>Activity</h2>
+        {props.onClose && (
+          <button className="icon" onClick={props.onClose} aria-label="Close">✕</button>
+        )}
+      </header>
       {groups.length === 0 && <p className="empty">Nothing has happened yet.</p>}
       <ul>
         {groups.map((group) => {

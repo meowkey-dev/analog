@@ -522,6 +522,49 @@ agent runtime.
   promoting durable learnings to the repo's docs is left to whoever owns them;
   a finding only carries a `(durable)` hint.
 
+## Phones, the reader and "what changed" (2026-09-27)
+
+- **A phone reads card by card; the canvas stays one tap away.** A free canvas
+  is the wrong shape for a small screen: cards are either too small to read or
+  too big to see around. Under 760px the UI opens on a reader that walks the
+  same cards in an order (board rows, recent first, open comments, what's new)
+  with swipe, arrow keys or a bottom bar. Links, revisions and comments that
+  the canvas shows spatially become chips and a sheet. `r` switches views on
+  any screen, since reading card by card is useful at a desk too.
+- **Board order is rows, then columns.** A card joins a row while its top sits in
+  the upper half of the row's first card, which tolerates the ragged tops of a
+  hand-arranged board. Cards have no stored order to use instead.
+- **"Changed since you last looked" is kept per browser, not on the server.** A
+  replace-mode edit overwrites the card and its event carries no text, so the
+  one place an old version survives is a browser that rendered it (SPEC §9 keeps
+  server-side version history as future work, and adding it is a contract
+  amendment). `seen.ts` stores a fingerprint of title, text and file per card
+  in localStorage, keyed by server and space, plus the text itself up to 60 KB.
+  Over the quota it keeps only fingerprints: the badge survives without a diff.
+  A different browser, or a cleared one, starts from a clean baseline. That is
+  acceptable for a convenience; it would not be for a record.
+- **A first visit takes everything as seen**, and your own edits, cards and
+  comments are never news. Otherwise the first page load would flag the whole
+  board, and every save would flag the card you just saved.
+- **Leaving a card acknowledges it.** In the reader, the diff stays available for
+  as long as the card is on screen, and the card is marked seen when you move on.
+  "What's new" is a queue that only grows while it is open, so acknowledging a
+  card never pulls the next one out from under the reader. On the canvas,
+  acknowledging is an explicit "✓ seen". After that, Δ still shows the last
+  change this browser saw.
+- **A link can name a card** (`/s/<slug>#c_…`). This lives entirely in the web
+  client and needs no route or contract change. An agent can hand a human the
+  exact card to look at.
+- **Touch on the canvas: two fingers zoom and pan, and a card moves only after a
+  hold.** A finger lands on card heads constantly while panning a phone, so a
+  drag that starts before 350 ms pans the board instead. Resize and link handles
+  appear only on the selected card, at finger size. A minimap (all screens,
+  toggleable) is the fast way across a board that is too large to pan.
+- **Phone editing is plain text.** Title and source in a full-screen textarea; no
+  toolbar, and svg drawings stay a desktop affair. Comments from the reader are
+  whole-card (`selector: null`); pinning a point or region stays on the canvas,
+  where there is room to aim.
+
 ## Toolchain
 
 - Go **1.23+**. `CGO_ENABLED=0` everywhere.

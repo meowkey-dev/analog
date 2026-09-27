@@ -368,6 +368,8 @@ export function AnnotationPanel(props: {
   onSelect: (id: string) => void;
   onResolve: (id: string, reply: string) => void;
   onReopen: (id: string) => void;
+  /** Present when the panel is a dismissable sheet (narrow screens). */
+  onClose?: () => void;
 }) {
   const [replies, setReplies] = useState<Record<string, string>>({});
   const shown = props.annotations.filter((a) => props.showResolved || !a.resolved);
@@ -376,10 +378,15 @@ export function AnnotationPanel(props: {
     <div className="panel comments-panel">
       <header>
         <h2>Comments</h2>
-        <label className="toggle">
-          <input type="checkbox" checked={props.showResolved} onChange={props.onToggleResolved} />
-          resolved
-        </label>
+        <span className="panel-actions">
+          <label className="toggle">
+            <input type="checkbox" checked={props.showResolved} onChange={props.onToggleResolved} />
+            resolved
+          </label>
+          {props.onClose && (
+            <button className="icon" onClick={props.onClose} aria-label="Close">✕</button>
+          )}
+        </span>
       </header>
       {shown.length === 0 && <p className="empty">No comments yet. Turn on comment mode and click a card.</p>}
       <ul>

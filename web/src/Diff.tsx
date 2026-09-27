@@ -8,7 +8,7 @@ import { useMemo } from "react";
 
 type Row = { kind: "same" | "add" | "del"; text: string };
 
-function diffLines(before: string, after: string): Row[] {
+export function diffLines(before: string, after: string): Row[] {
   const a = before.split("\n");
   const b = after.split("\n");
   const n = a.length;
@@ -42,11 +42,48 @@ function diffLines(before: string, after: string): Row[] {
 
 const CONTEXT = 2;
 
-export function DiffView({ before, after }: { before: string; after: string }) {
+export interface DiffSource {
+  before: string;
+  after: string;
+  /** What the two sides are, for the toggle's tooltip and the banner. */
+  label: string;
+  /** Shown when the text matches — the change was the title or file. */
+  same: string;
+}
+
+/**
+ * What a card can be diffed against, best first: the revision that replaced it
+ * (branch mode, #6), the text this browser last saw (replace mode keeps no
+ * history server-side, see seen.ts), or the last change this browser saw.
+ */
+export function diffFor(
+  node: { text?: string },
+  successor: { text?: string } | undefined,
+  seenBefore: string | undefined,
+  lastBefore: string | undefined,
+): DiffSource | null {
+  if (successor) {
+    if (successor.text === undefined || node.text === undefined) return null;
+    return { before: node.text, after: successor.text,
+             label: "what the next revision changed", same: "Text is identical to the next revision." };
+  }
+  const after = node.text ?? "";
+  if (seenBefore !== undefined) {
+    return { before: seenBefore, after,
+             label: "changes since you last looked", same: "The text is unchanged; the title or file changed." };
+  }
+  if (lastBefore !== undefined) {
+    return { before: lastBefore, after,
+             label: "the last change this browser saw", same: "The text is unchanged; the title or file changed." };
+  }
+  return null;
+}
+
+export function DiffView({ before, after, same }: { before: string; after: string; same?: string }) {
   const rows = useMemo(() => diffLines(before, after), [before, after]);
   const changed = rows.some((row) => row.kind !== "same");
   if (!changed) {
-    return <div className="diff empty">Text is identical to the next revision.</div>;
+    return <div className="diff empty">{same ?? "Text is identical to the next revision."}</div>;
   }
 
   // Collapse long unchanged runs to a couple of lines of context.
