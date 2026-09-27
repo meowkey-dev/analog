@@ -282,8 +282,9 @@ function withInherited(clone: Element, from: Element): void {
  * so it is the sanitized markup, never the raw text. Re-serialized as XML so
  * HTML-isms like `&nbsp;` cannot make the file unopenable, which also writes out
  * the SVG namespace a browser-inlined card never needed. The body is an HTML
- * fragment and may hold several svg roots; those are laid out in one outer svg
- * where the card placed them, so none is silently dropped.
+ * fragment and may hold several svg roots; those are laid out in one outer svg,
+ * sized to hold them all, where the card placed them, so none is silently dropped
+ * or clipped.
  */
 export function svgFileText(body: Element): string | null {
   const roots = Array.from(body.children).filter((el) => el.namespaceURI === SVG_NS && el.localName === "svg");
@@ -294,26 +295,32 @@ export function svgFileText(body: Element): string | null {
     out = first.cloneNode(true) as Element;
     withInherited(out, first);
   } else {
+    // Bounds are the union of the roots, not the body box: the body scrolls, so
+    // its box can clip roots, and a union is the same however far it is scrolled.
     // Rects are in screen pixels under the canvas zoom; undo it for card pixels.
     const box = body.getBoundingClientRect();
-    const width = (body as HTMLElement).offsetWidth || box.width;
-    const height = (body as HTMLElement).offsetHeight || box.height;
-    const scale = width && box.width ? box.width / width : 1;
+    const unscaled = (body as HTMLElement).offsetWidth;
+    const scale = unscaled && box.width ? box.width / unscaled : 1;
+    const rects = roots.map((root) => root.getBoundingClientRect());
+    const left = Math.min(...rects.map((r) => r.left));
+    const top = Math.min(...rects.map((r) => r.top));
+    const width = Math.round((Math.max(...rects.map((r) => r.right)) - left) / scale);
+    const height = Math.round((Math.max(...rects.map((r) => r.bottom)) - top) / scale);
     out = document.createElementNS(SVG_NS, "svg");
-    out.setAttribute("width", String(Math.round(width)));
-    out.setAttribute("height", String(Math.round(height)));
-    out.setAttribute("viewBox", `0 0 ${Math.round(width)} ${Math.round(height)}`);
+    out.setAttribute("width", String(width));
+    out.setAttribute("height", String(height));
+    out.setAttribute("viewBox", `0 0 ${width} ${height}`);
     withInherited(out, body);
-    for (const root of roots) {
-      const rect = root.getBoundingClientRect();
+    roots.forEach((root, i) => {
+      const rect = rects[i]!;
       const clone = root.cloneNode(true) as Element;
       withInherited(clone, root);
-      clone.setAttribute("x", String(Math.round((rect.left - box.left) / scale)));
-      clone.setAttribute("y", String(Math.round((rect.top - box.top) / scale)));
+      clone.setAttribute("x", String(Math.round((rect.left - left) / scale)));
+      clone.setAttribute("y", String(Math.round((rect.top - top) / scale)));
       clone.setAttribute("width", String(Math.round(rect.width / scale)));
       clone.setAttribute("height", String(Math.round(rect.height / scale)));
       out.append(clone);
-    }
+    });
   }
   return `<?xml version="1.0" encoding="UTF-8"?>\n${new XMLSerializer().serializeToString(out)}\n`;
 }

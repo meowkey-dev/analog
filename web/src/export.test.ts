@@ -232,6 +232,24 @@ describe("svgFileText", () => {
     }
   });
 
+  it("sizes the outer svg to every root, past the scrolled body and under zoom", () => {
+    // A 320x180 body at 50% zoom, scrolled, holding two 200x140 roots stacked
+    // 300px tall: the body box would clip the second one.
+    const el = body('<svg id="a"></svg><svg id="b"></svg>');
+    const rect = (left: number, top: number, width: number, height: number) =>
+      ({ left, top, width, height, right: left + width, bottom: top + height, x: left, y: top }) as DOMRect;
+    Object.defineProperty(el, "offsetWidth", { value: 320 });
+    el.getBoundingClientRect = () => rect(0, 0, 160, 90);
+    el.children[0]!.getBoundingClientRect = () => rect(10, -35, 100, 70);
+    el.children[1]!.getBoundingClientRect = () => rect(10, 35, 100, 70);
+
+    const outer = new DOMParser().parseFromString(svgFileText(el)!, "image/svg+xml").documentElement;
+    expect(outer.getAttribute("viewBox")).toBe("0 0 200 280");
+    const [a, b] = Array.from(outer.children);
+    expect([a!.getAttribute("x"), a!.getAttribute("y"), a!.getAttribute("height")]).toEqual(["0", "0", "140"]);
+    expect([b!.getAttribute("x"), b!.getAttribute("y"), b!.getAttribute("height")]).toEqual(["0", "140", "140"]);
+  });
+
   it("is null without an svg element", () => {
     expect(svgFileText(body("<p>nope</p>"))).toBeNull();
   });
