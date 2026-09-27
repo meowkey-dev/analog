@@ -1,7 +1,8 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import DOMPurify from "dompurify";
-import { DiffView } from "./Diff";
+import { DiffView, diffFor } from "./Diff";
+import { describeChange, type CardChange } from "./seen";
 import { DrawEditor } from "./DrawEditor";
 import { AnnotationOverlay, type DraftAnnotation } from "./Annotations";
 import { api, getConnection, resolveUrl } from "./api";
@@ -62,7 +63,7 @@ export type MdTheme = (typeof MD_THEMES)[number]["id"];
 
 const mdThemeKey = (id: string) => `analog.mdtheme.${id}`;
 
-function loadMdTheme(id: string): MdTheme {
+export function loadMdTheme(id: string): MdTheme {
   const stored = localStorage.getItem(mdThemeKey(id));
   return MD_THEMES.some((t) => t.id === stored) ? (stored as MdTheme) : "default";
 }
@@ -86,7 +87,7 @@ const RESIZE_DIRS: ResizeDir[] = ["n", "s", "e", "w", "ne", "nw", "se", "sw"];
  *            only displaces its own pins.
  *   file  -> <img>, because binary content is a JSON Canvas file node (§2.1).
  */
-function Body({ node, mdTheme, bodyRef, onHTMLLoad }: {
+export function Body({ node, mdTheme, bodyRef, onHTMLLoad }: {
   node: Node;
   mdTheme: MdTheme;
   bodyRef: (el: HTMLElement | null) => void;
@@ -234,14 +235,23 @@ export interface CardProps {
   onCancelEdit: () => void;
   onDelete: (id: string) => void;
   onPopOut: (node: Node) => void;
+  /** How the card differs from what this browser last saw (seen.ts). */
+  change?: CardChange;
+  /** The text before the last change this browser acknowledged, if kept. */
+  lastChangeBefore?: string;
+  onMarkSeen?: (id: string) => void;
 }
 
 function CardView(props: CardProps) {
   const { node, selected, editing, collapsed, revisions, openCount } = props;
   const superseded = Boolean(node.sp_superseded_by);
   const kind = node.type === "file" ? "file" : (node.sp_kind ?? "plain");
-  // Superseded cards can show what the revision changed (#6).
+  // Superseded cards can show what the revision changed (#6); current ones what
+  // changed since this browser last saw them.
   const [view, setView] = useState<"content" | "diff">("content");
+  const change = props.change;
+  const diff = diffFor(node, superseded ? props.successor ?? {} : undefined,
+    change?.kind === "edited" ? change.before : undefined, props.lastChangeBefore);
   const [mdTheme, setMdTheme] = useState<MdTheme>(() => loadMdTheme(node.id));
   const [themeOpen, setThemeOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -404,6 +414,10 @@ function CardView(props: CardProps) {
         {kind === "html" && (
           <button className="icon" title="Open full window" onClick={() => props.onPopOut(node)}>⤢</button>
         )}
+        {!superseded && !change && diff && (
+          <button className={`icon${view === "diff" ? " on" : ""}`} title={`Show ${diff.label}`}
+                  onClick={() => setView((v) => (v === "diff" ? "content" : "diff"))}>Δ</button>
+        )}
         {node.type === "text" && !editing && (
           <button className={`icon${searchOpen ? " on" : ""}`} title="Search this card (⌘/Ctrl-F)"
                   onClick={(event) => { event.stopPropagation(); searchOpen ? closeSearch() : openSearch(); }}>⌕</button>
@@ -462,10 +476,28 @@ function CardView(props: CardProps) {
         </div>
       )}
 
+      {!superseded && change && (
+        <div className={`change-note ${change.kind}`} onPointerDown={(e) => e.stopPropagation()}>
+          <span className="what" title={describeChange(change)}>{describeChange(change)}</span>
+          {diff && (
+            <span className="diff-toggle">
+              <button className={view === "content" ? "on" : ""} onClick={() => setView("content")}
+                      title="Show the card as it is now">content</button>
+              <button className={view === "diff" ? "on" : ""} onClick={() => setView("diff")}
+                      title={`Show ${diff.label}`}>diff</button>
+            </span>
+          )}
+          {props.onMarkSeen && (
+            <button className="seen" title="Mark as seen"
+                    onClick={() => { setView("content"); props.onMarkSeen!(node.id); }}>✓ seen</button>
+          )}
+        </div>
+      )}
+
       {superseded && (
         <div className="superseded-note">
           <span>superseded — read only</span>
-          {props.successor && props.successor.text !== undefined && node.text !== undefined && (
+          {diff && (
             <span className="diff-toggle">
               <button className={view === "content" ? "on" : ""} onClick={() => setView("content")}
                       title="Show this revision's content">content</button>
@@ -479,8 +511,8 @@ function CardView(props: CardProps) {
       {/* The zone the overlay shares with the content: pins are positioned and
           clipped against the scrollable body, not the whole card (#23). */}
       <div className="body-zone">
-        {superseded && view === "diff" && props.successor && props.successor.text !== undefined ? (
-          <DiffView before={node.text ?? ""} after={props.successor.text ?? ""} />
+        {view === "diff" && diff && !editing ? (
+          <DiffView before={diff.before} after={diff.after} same={diff.same} />
         ) : editing && kind === "svg" ? (
           <DrawEditor
             text={node.text ?? ""}

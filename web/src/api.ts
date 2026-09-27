@@ -348,7 +348,33 @@ export const api = {
 
   listEvents: (slug: string, since = 0, limit = 500) =>
     request<{ events: AnalogEvent[]; cursor: number }>("GET", `/spaces/${slug}/events`, { since, limit }),
+
+  /** The whole log from `since`: "what changed" and recent order need every event, not a first page. */
+  listAllEvents: (slug: string, since = 0) =>
+    pageEvents((from) => api.listEvents(slug, from, EVENT_PAGE), since),
 };
+
+/** The server's largest page (openapi `limit` maximum). */
+export const EVENT_PAGE = 1000;
+
+/**
+ * Follow the cursor until a short page. The stream picks up from the space's
+ * seq, so anything written while paging arrives twice at worst, never not at all.
+ */
+export async function pageEvents(
+  fetchPage: (since: number) => Promise<{ events: AnalogEvent[]; cursor: number }>,
+  since = 0,
+): Promise<AnalogEvent[]> {
+  const all: AnalogEvent[] = [];
+  let cursor = since;
+  for (;;) {
+    const page = await fetchPage(cursor);
+    all.push(...page.events);
+    // A cursor that does not advance would loop forever; stop instead.
+    if (page.events.length < EVENT_PAGE || page.cursor <= cursor) return all;
+    cursor = page.cursor;
+  }
+}
 
 /**
  * Subscribe to the event stream, falling back to 2s polling if it drops (SPEC §5).

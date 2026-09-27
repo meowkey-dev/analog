@@ -4,6 +4,9 @@ import { Links } from "./Links";
 import type { DraftAnnotation } from "./Annotations";
 import type { Annotation, Edge, Node } from "./api";
 import { filesFromDataTransfer, isFileDrag } from "./upload";
+import { Minimap } from "./Minimap";
+import { NARROW } from "./media";
+import type { CardChange } from "./seen";
 
 /** Pan/zoom via a CSS transform; cards absolutely positioned; raw pointer events. */
 
@@ -17,6 +20,10 @@ const MIN_SCALE = 0.15;
 const MAX_SCALE = 3;
 const MIN_W = 140;
 const MIN_H = 90;
+/** A touch on a card head moves the card only after a hold this long; before it, it pans. */
+const HOLD_MS = 350;
+/** Finger travel that turns a pending hold into a pan. */
+const SLOP = 8;
 
 /** Palette offered when creating a link (#3). A color marks what the link means. */
 const LINK_COLORS = [
@@ -68,11 +75,31 @@ export interface CanvasProps {
   /** a just-created drawing card the canvas should open the pen on. */
   pendingEdit?: string | null;
   onConsumedPendingEdit?: () => void;
+  /** Cards that differ from what this browser last saw (seen.ts). */
+  changes?: Map<string, CardChange>;
+  /** Per card, the text before the last change this browser acknowledged. */
+  lastChanges?: Map<string, string>;
+  onMarkSeen?: (id: string) => void;
+}
+
+const NO_CHANGES = new Map<string, CardChange>();
+const NO_LAST = new Map<string, string>();
+
+function loadMinimap(): boolean {
+  try {
+    return localStorage.getItem("analog.minimap") !== "off";
+  } catch {
+    return true;
+  }
 }
 
 export function Canvas(props: CanvasProps) {
   const container = useRef<HTMLDivElement>(null);
-  const [viewport, setViewport] = useState<Viewport>({ x: 80, y: 80, scale: 1 });
+  // A phone shows more of the board at a smaller scale; pinch to read.
+  const [viewport, setViewport] = useState<Viewport>(() => ({
+    x: 80, y: 80,
+    scale: typeof window.matchMedia === "function" && window.matchMedia(NARROW).matches ? 0.6 : 1,
+  }));
   const [drag, setDrag] = useState<DragState | null>(null);
   const [ghost, setGhost] = useState<Record<string, Partial<Node>>>({});
   const [linkTo, setLinkTo] = useState<[number, number] | null>(null);
@@ -83,6 +110,32 @@ export function Canvas(props: CanvasProps) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [threadOpen, setThreadOpen] = useState<Record<string, boolean>>({});
   const [dropping, setDropping] = useState(false);
+  const [size, setSize] = useState({ width: 0, height: 0 });
+  const [minimap, setMinimap] = useState(loadMinimap);
+  const viewportRef = useRef(viewport);
+  viewportRef.current = viewport;
+  const changes = props.changes ?? NO_CHANGES;
+  const lastChanges = props.lastChanges ?? NO_LAST;
+  const changedIds = useMemo(() => new Set(changes.keys()), [changes]);
+
+  useEffect(() => {
+    const el = container.current;
+    if (!el) return;
+    const read = () => setSize({ width: el.clientWidth, height: el.clientHeight });
+    read();
+    const ro = new ResizeObserver(read);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const toggleMinimap = () => setMinimap((on) => {
+    try {
+      localStorage.setItem("analog.minimap", on ? "off" : "on");
+    } catch {
+      // a preference, not state worth failing over
+    }
+    return !on;
+  });
 
   // Only the dragged card gets a fresh object identity here. Cloning untouched
   // nodes too would re-render every card — re-parsing every markdown body — on
@@ -211,7 +264,7 @@ export function Canvas(props: CanvasProps) {
     if (!(target instanceof Element)) return;
     // Card content and canvas chrome keep their native selection/focus behavior;
     // only an empty board surface begins a pan.
-    if (target.closest("[data-card-id], .zoom, .composer, .draw-editor")) return;
+    if (target.closest("[data-card-id], .zoom, .composer, .draw-editor, .minimap")) return;
     // CSS only sees the dragging class after React renders it. Cancel the native
     // gesture at pointerdown too, before the browser can begin a selection (#79).
     event.preventDefault();
@@ -225,12 +278,52 @@ export function Canvas(props: CanvasProps) {
     });
   };
 
+  // A pending touch hold on a card head; cleared by a second finger, a pan or a lift.
+  const hold = useRef<(() => void) | null>(null);
+
   const startCardDrag = (event: React.PointerEvent, node: Node) => {
     if (event.button !== 0 || props.annotateMode) return;
     const target = event.target;
     if (target instanceof Element && target.closest("button, input, textarea, select, a")) return;
     event.preventDefault();
     event.stopPropagation();
+    if (event.pointerType === "touch") {
+      // A finger on a phone lands on card heads constantly while panning. Moving
+      // a card needs a deliberate hold; moving before the hold pans the board.
+      hold.current?.();
+      // Handles show only on the selected card, so a tap on the head selects it.
+      props.onSelectCard(node.id);
+      const start: [number, number] = [event.clientX, event.clientY];
+      const pointerId = event.pointerId;
+      const cleanup = () => {
+        window.clearTimeout(timer);
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", cleanup);
+        window.removeEventListener("pointercancel", cleanup);
+        if (hold.current === cleanup) hold.current = null;
+      };
+      const move = (e: PointerEvent) => {
+        if (e.pointerId !== pointerId) return;
+        if (Math.hypot(e.clientX - start[0], e.clientY - start[1]) < SLOP) return;
+        cleanup();
+        const v = viewportRef.current;
+        setDrag({ kind: "pan", startPointer: start, startValue: [v.x, v.y] });
+      };
+      const timer = window.setTimeout(() => {
+        cleanup();
+        navigator.vibrate?.(10);
+        setDrag({
+          kind: "card", id: node.id, node,
+          startPointer: start,
+          startValue: [node.x, node.y],
+        });
+      }, HOLD_MS);
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", cleanup);
+      window.addEventListener("pointercancel", cleanup);
+      hold.current = cleanup;
+      return;
+    }
     setDrag({
       kind: "card", id: node.id, node,
       startPointer: [event.clientX, event.clientY],
@@ -339,13 +432,84 @@ export function Canvas(props: CanvasProps) {
       setDrag(null);
     };
 
+    // The browser took the gesture (or a second finger did): drop it, commit nothing.
+    const cancel = () => {
+      if (drag.id) {
+        setGhost((g) => {
+          const { [drag.id!]: _, ...rest } = g;
+          return rest;
+        });
+      }
+      setLinkTo(null);
+      setDrag(null);
+    };
+
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", cancel);
     return () => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", cancel);
     };
   }, [drag, ghost, viewport.scale, toWorld, props]);
+
+  // --- pinch (touch) ---------------------------------------------------------
+  // Two fingers zoom about their midpoint and pan with it. The canvas is
+  // touch-action: none, so the browser leaves both gestures to us.
+
+  const touches = useRef(new Map<number, [number, number]>());
+  const pinch = useRef<{ dist: number; mid: [number, number]; start: Viewport } | null>(null);
+
+  const onPointerDownCapture = (event: React.PointerEvent) => {
+    if (event.pointerType !== "touch") return;
+    touches.current.set(event.pointerId, [event.clientX, event.clientY]);
+    if (touches.current.size !== 2) return;
+    // The second finger turns whatever the first one began into a pinch.
+    event.preventDefault();
+    event.stopPropagation();
+    hold.current?.();
+    setDrag(null);
+    setGhost({});
+    setLinkTo(null);
+    const [a, b] = [...touches.current.values()] as [[number, number], [number, number]];
+    const box = container.current!.getBoundingClientRect();
+    pinch.current = {
+      dist: Math.max(1, Math.hypot(a[0] - b[0], a[1] - b[1])),
+      mid: [(a[0] + b[0]) / 2 - box.left, (a[1] + b[1]) / 2 - box.top],
+      start: viewportRef.current,
+    };
+  };
+
+  useEffect(() => {
+    const move = (event: PointerEvent) => {
+      if (!touches.current.has(event.pointerId)) return;
+      touches.current.set(event.pointerId, [event.clientX, event.clientY]);
+      const p = pinch.current;
+      if (!p || touches.current.size < 2 || !container.current) return;
+      const [a, b] = [...touches.current.values()] as [[number, number], [number, number]];
+      const box = container.current.getBoundingClientRect();
+      const mid: [number, number] = [(a[0] + b[0]) / 2 - box.left, (a[1] + b[1]) / 2 - box.top];
+      const dist = Math.max(1, Math.hypot(a[0] - b[0], a[1] - b[1]));
+      const scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, p.start.scale * (dist / p.dist)));
+      // The world point that was under the fingers' midpoint stays under it.
+      const wx = (p.mid[0] - p.start.x) / p.start.scale;
+      const wy = (p.mid[1] - p.start.y) / p.start.scale;
+      setViewport({ scale, x: mid[0] - wx * scale, y: mid[1] - wy * scale });
+    };
+    const end = (event: PointerEvent) => {
+      touches.current.delete(event.pointerId);
+      if (touches.current.size < 2) pinch.current = null;
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", end);
+    window.addEventListener("pointercancel", end);
+    return () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", end);
+      window.removeEventListener("pointercancel", end);
+    };
+  }, []);
 
   /**
    * Whether some element between `start` and the canvas can absorb this wheel
@@ -472,6 +636,7 @@ export function Canvas(props: CanvasProps) {
       ref={container}
       className={`canvas${props.annotateMode ? " annotating" : ""}${drag?.kind === "pan" ? " panning" : ""}${drag ? " dragging" : ""}${dropping ? " drop-target" : ""}`}
       onPointerDown={startPan}
+      onPointerDownCapture={onPointerDownCapture}
       onWheel={onWheel}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
@@ -482,7 +647,7 @@ export function Canvas(props: CanvasProps) {
         // empty space; cards stopPropagation on their own double-click.
         const el = event.target;
         if (!(el instanceof Element)) return;
-        if (el.closest("[data-card-id], .zoom, .composer, .draw-editor")) return;
+        if (el.closest("[data-card-id], .zoom, .composer, .draw-editor, .minimap")) return;
         const [x, y] = toWorld(event.clientX, event.clientY);
         props.onCreateCardAt(Math.round(x), Math.round(y), event.shiftKey ? "draw" : "md");
       }}
@@ -530,6 +695,9 @@ export function Canvas(props: CanvasProps) {
             onCancelEdit={() => setEditing(null)}
             onDelete={props.onDeleteCard}
             onPopOut={props.onPopOut}
+            change={changes.get(node.id)}
+            lastChangeBefore={lastChanges.get(node.id)}
+            onMarkSeen={props.onMarkSeen}
           />
         ))}
       </div>
@@ -583,7 +751,24 @@ export function Canvas(props: CanvasProps) {
         </form>
       )}
 
+      {minimap && size.width > 0 && (
+        <Minimap
+          nodes={nodes}
+          viewport={viewport}
+          size={size}
+          changed={changedIds}
+          selected={props.selectedCard}
+          onCenter={(x, y) => setViewport((v) => ({
+            ...v,
+            x: size.width / 2 - x * v.scale,
+            y: size.height / 2 - y * v.scale,
+          }))}
+        />
+      )}
+
       <div className="zoom">
+        <button className={minimap ? "on-soft" : ""} onClick={toggleMinimap}
+                title={minimap ? "Hide the overview map" : "Show the overview map"}>▦</button>
         <button onClick={() => zoomBy(1.2)} title="Zoom in">+</button>
         <button onClick={() => zoomBy(1 / 1.2)} title="Zoom out">−</button>
         <button onClick={fit} title="Fit to content">⤢</button>
