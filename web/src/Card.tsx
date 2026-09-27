@@ -10,7 +10,18 @@ import type { Annotation, Node } from "./api";
 import { HTMLCardFrame } from "./html-card";
 import { mdRemarkPlugins, mdRehypePlugins } from "./markdown";
 import { clearTextRange, findTextRanges, selectTextRange } from "./card-search";
+import { downloadText, fileStem, svgFileText } from "./export";
 import "katex/dist/katex.min.css";
+
+function sanitizeSvg(text: string): string {
+  return DOMPurify.sanitize(text, { USE_PROFILES: { svg: true, svgFilters: true }, ADD_ATTR: ["data-analog-stroke"] });
+}
+
+/** The file matches what the card shows: the sanitized markup, never the raw text. */
+function downloadSvg(node: Node): void {
+  const text = svgFileText(sanitizeSvg(node.text ?? ""));
+  if (text) downloadText(`${fileStem(node.sp_title, node.id)}.svg`, text, "image/svg+xml");
+}
 
 /**
  * A file node's URL cannot go straight into <img src>: an image request carries no
@@ -96,7 +107,7 @@ export function Body({ node, mdTheme, bodyRef, onHTMLLoad }: {
   const kind = node.type === "file" ? "file" : (node.sp_kind ?? "plain");
 
   const svg = useMemo(
-    () => (kind === "svg" ? DOMPurify.sanitize(node.text ?? "", { USE_PROFILES: { svg: true, svgFilters: true }, ADD_ATTR: ["data-analog-stroke"] }) : ""),
+    () => (kind === "svg" ? sanitizeSvg(node.text ?? "") : ""),
     [kind, node.text],
   );
   // Injecting at render time, never into the stored text: the card stays verbatim
@@ -421,6 +432,10 @@ function CardView(props: CardProps) {
         {node.type === "text" && !editing && (
           <button className={`icon${searchOpen ? " on" : ""}`} title="Search this card (⌘/Ctrl-F)"
                   onClick={(event) => { event.stopPropagation(); searchOpen ? closeSearch() : openSearch(); }}>⌕</button>
+        )}
+        {kind === "svg" && !editing && (
+          <button className="icon" title="Download as .svg"
+                  onClick={(e) => { e.stopPropagation(); downloadSvg(node); }}>⤓</button>
         )}
         {kind === "svg" && !superseded && !editing && (
           <button className="icon" title="Draw on this card"

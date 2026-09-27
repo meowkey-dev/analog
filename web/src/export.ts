@@ -252,6 +252,25 @@ function replaceEditors(root: ParentNode): void {
   });
 }
 
+/**
+ * A standalone .svg file from a card's sanitized markup (#105). Re-serialized as
+ * XML so HTML-isms like `&nbsp;` or unclosed tags cannot make the file unopenable,
+ * which also writes out the SVG namespace a browser-inlined card never needed.
+ */
+export function svgFileText(markup: string): string | null {
+  const template = document.createElement("template");
+  template.innerHTML = markup;
+  const svg = template.content.querySelector("svg");
+  if (!svg) return null;
+  return `<?xml version="1.0" encoding="UTF-8"?>\n${new XMLSerializer().serializeToString(svg)}\n`;
+}
+
+/** A filesystem-safe name; falls back to the id when the title has nothing left. */
+export function fileStem(title: string | undefined, fallback: string): string {
+  const stem = (title ?? "").trim().replace(/[\\/:*?"<>|\u0000-\u001f]+/g, "-").replace(/\s+/g, " ").slice(0, 80);
+  return stem.replace(/^[-. ]+|[-. ]+$/g, "") || fallback;
+}
+
 export function downloadText(filename: string, text: string, type: string): void {
   const blob = new Blob([text], { type });
   const url = URL.createObjectURL(blob);

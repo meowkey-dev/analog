@@ -5,7 +5,12 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { Canvas } from "./Canvas";
 
+let resized: (() => void) | null = null;
+
 class ResizeObserverStub {
+  constructor(callback: () => void) {
+    resized = callback;
+  }
   observe() {}
   unobserve() {}
   disconnect() {}
@@ -152,5 +157,31 @@ describe("in-card search", () => {
 
     expect(event.defaultPrevented).toBe(true);
     expect(container.querySelector('.card-search input')).not.toBeNull();
+  });
+});
+
+describe("canvas resize", () => {
+  function setSize(element: HTMLElement, width: number, height: number) {
+    Object.defineProperty(element, "clientWidth", { configurable: true, value: width });
+    Object.defineProperty(element, "clientHeight", { configurable: true, value: height });
+  }
+
+  it("keeps the board centred when a side panel opens and closes (#104)", () => {
+    const container = renderCanvas();
+    const canvas = container.querySelector<HTMLElement>(".canvas")!;
+    const world = container.querySelector<HTMLElement>(".viewport")!;
+    const initial = world.style.transform;
+
+    setSize(canvas, 1000, 600);
+    act(() => resized!());
+    expect(world.style.transform).toBe(initial);
+
+    setSize(canvas, 660, 600);
+    act(() => resized!());
+    expect(world.style.transform).toBe("translate(-90px, 80px) scale(1)");
+
+    setSize(canvas, 1000, 600);
+    act(() => resized!());
+    expect(world.style.transform).toBe(initial);
   });
 });

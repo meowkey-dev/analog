@@ -7,7 +7,9 @@ import { ExportMenu } from "./ExportMenu";
 import {
   buildExportHTML,
   escapeHtml,
+  fileStem,
   rewriteCssUrls,
+  svgFileText,
   waitForExportResources,
   wrapExportDocument,
 } from "./export";
@@ -184,5 +186,29 @@ describe("ExportMenu", () => {
     );
     expect(html).toContain("export");
     expect(html).toContain("Save the board as HTML or PDF");
+  });
+});
+
+describe("svgFileText", () => {
+  it("is a standalone XML file with the SVG namespace (#105)", () => {
+    const text = svgFileText('<svg viewBox="0 0 10 10"><circle cx="5" cy="5" r="4"/><text>a&nbsp;b</text></svg>');
+    expect(text).toMatch(/^<\?xml /);
+    expect(text).toContain('xmlns="http://www.w3.org/2000/svg"');
+    expect(text).not.toContain("&nbsp;");
+    const doc = new DOMParser().parseFromString(text!, "image/svg+xml");
+    expect(doc.querySelector("parsererror")).toBeNull();
+    expect(doc.documentElement.localName).toBe("svg");
+  });
+
+  it("is null without an svg element", () => {
+    expect(svgFileText("<p>nope</p>")).toBeNull();
+  });
+});
+
+describe("fileStem", () => {
+  it("strips characters a filesystem refuses", () => {
+    expect(fileStem(' a/b: "c" ', "c_x")).toBe("a-b- -c");
+    expect(fileStem("  ", "c_x")).toBe("c_x");
+    expect(fileStem(undefined, "c_x")).toBe("c_x");
   });
 });
