@@ -94,3 +94,5 @@ CREATE TABLE actor_cursor (
 --    survive: event is keyed by space_id and ON DELETE CASCADE takes it with the
 --    space. A per-space log cannot outlive its space. Retaining it would need
 --    soft-deleted spaces or a global log; neither is in v1.
+-- 6. The operator /upgrade operation changes the server executable, not space
+--    state. It writes no row here and emits no canvas event.

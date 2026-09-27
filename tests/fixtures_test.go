@@ -65,6 +65,10 @@ func TestFixtures_FeedbackMatchesSchema(t *testing.T) {
 	assertValid(t, fixture(t, "feedback.human.json"), "Feedback", false)
 }
 
+func TestFixtures_UpgradeStatusMatchesSchema(t *testing.T) {
+	assertValid(t, fixture(t, "upgrade.unavailable.json"), "UpgradeStatus", false)
+}
+
 // --- the counts contracts/README.md advertises -------------------------------
 
 func TestFixtures_FixtureInventory(t *testing.T) {

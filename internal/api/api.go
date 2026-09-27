@@ -19,7 +19,7 @@ import (
 
 // Version is the API contract, matching contracts/openapi.json info.version.
 // /health reports it as `version`; the binary's version is `release`.
-const Version = "0.6.0"
+const Version = "0.7.0"
 
 // API is the prefix every documented operation sits behind.
 const API = config.APIPrefix
