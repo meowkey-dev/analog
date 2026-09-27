@@ -252,17 +252,70 @@ function replaceEditors(root: ParentNode): void {
   });
 }
 
+const SVG_NS = "http://www.w3.org/2000/svg";
+
 /**
- * A standalone .svg file from a card's sanitized markup (#105). Re-serialized as
- * XML so HTML-isms like `&nbsp;` or unclosed tags cannot make the file unopenable,
- * which also writes out the SVG namespace a browser-inlined card never needed.
+ * What an inline svg picks up from the card around it. A standalone file has no
+ * card, so `currentColor` or an unset font would resolve to something else unless
+ * the computed values travel with it (#105).
  */
-export function svgFileText(markup: string): string | null {
-  const template = document.createElement("template");
-  template.innerHTML = markup;
-  const svg = template.content.querySelector("svg");
-  if (!svg) return null;
-  return `<?xml version="1.0" encoding="UTF-8"?>\n${new XMLSerializer().serializeToString(svg)}\n`;
+const INHERITED = [
+  "color", "font-family", "font-size", "font-style", "font-weight", "font-variant",
+  "letter-spacing", "word-spacing", "fill", "fill-opacity", "stroke", "stroke-width",
+  "stroke-opacity", "stroke-linecap", "stroke-linejoin",
+];
+
+function withInherited(clone: Element, from: Element): void {
+  const computed = getComputedStyle(from);
+  const own = clone.getAttribute("style") ?? "";
+  const carried = INHERITED
+    .map((name) => [name, computed.getPropertyValue(name)] as const)
+    .filter(([, value]) => value !== "")
+    .map(([name, value]) => `${name}: ${value}`)
+    .join("; ");
+  // Own declarations last: they already won on the card and must keep winning.
+  if (carried) clone.setAttribute("style", own ? `${carried}; ${own}` : carried);
+}
+
+/**
+ * A standalone .svg file of what an svg card shows, read from its rendered body
+ * so it is the sanitized markup, never the raw text. Re-serialized as XML so
+ * HTML-isms like `&nbsp;` cannot make the file unopenable, which also writes out
+ * the SVG namespace a browser-inlined card never needed. The body is an HTML
+ * fragment and may hold several svg roots; those are laid out in one outer svg
+ * where the card placed them, so none is silently dropped.
+ */
+export function svgFileText(body: Element): string | null {
+  const roots = Array.from(body.children).filter((el) => el.namespaceURI === SVG_NS && el.localName === "svg");
+  const [first] = roots;
+  if (!first) return null;
+  let out: Element;
+  if (roots.length === 1) {
+    out = first.cloneNode(true) as Element;
+    withInherited(out, first);
+  } else {
+    // Rects are in screen pixels under the canvas zoom; undo it for card pixels.
+    const box = body.getBoundingClientRect();
+    const width = (body as HTMLElement).offsetWidth || box.width;
+    const height = (body as HTMLElement).offsetHeight || box.height;
+    const scale = width && box.width ? box.width / width : 1;
+    out = document.createElementNS(SVG_NS, "svg");
+    out.setAttribute("width", String(Math.round(width)));
+    out.setAttribute("height", String(Math.round(height)));
+    out.setAttribute("viewBox", `0 0 ${Math.round(width)} ${Math.round(height)}`);
+    withInherited(out, body);
+    for (const root of roots) {
+      const rect = root.getBoundingClientRect();
+      const clone = root.cloneNode(true) as Element;
+      withInherited(clone, root);
+      clone.setAttribute("x", String(Math.round((rect.left - box.left) / scale)));
+      clone.setAttribute("y", String(Math.round((rect.top - box.top) / scale)));
+      clone.setAttribute("width", String(Math.round(rect.width / scale)));
+      clone.setAttribute("height", String(Math.round(rect.height / scale)));
+      out.append(clone);
+    }
+  }
+  return `<?xml version="1.0" encoding="UTF-8"?>\n${new XMLSerializer().serializeToString(out)}\n`;
 }
 
 /** A filesystem-safe name; falls back to the id when the title has nothing left. */

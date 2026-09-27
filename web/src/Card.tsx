@@ -13,16 +13,6 @@ import { clearTextRange, findTextRanges, selectTextRange } from "./card-search";
 import { downloadText, fileStem, svgFileText } from "./export";
 import "katex/dist/katex.min.css";
 
-function sanitizeSvg(text: string): string {
-  return DOMPurify.sanitize(text, { USE_PROFILES: { svg: true, svgFilters: true }, ADD_ATTR: ["data-analog-stroke"] });
-}
-
-/** The file matches what the card shows: the sanitized markup, never the raw text. */
-function downloadSvg(node: Node): void {
-  const text = svgFileText(sanitizeSvg(node.text ?? ""));
-  if (text) downloadText(`${fileStem(node.sp_title, node.id)}.svg`, text, "image/svg+xml");
-}
-
 /**
  * A file node's URL cannot go straight into <img src>: an image request carries no
  * Authorization header, so on a server with tokens it would 401. Fetch it and hand
@@ -107,7 +97,7 @@ export function Body({ node, mdTheme, bodyRef, onHTMLLoad }: {
   const kind = node.type === "file" ? "file" : (node.sp_kind ?? "plain");
 
   const svg = useMemo(
-    () => (kind === "svg" ? sanitizeSvg(node.text ?? "") : ""),
+    () => (kind === "svg" ? DOMPurify.sanitize(node.text ?? "", { USE_PROFILES: { svg: true, svgFilters: true }, ADD_ATTR: ["data-analog-stroke"] }) : ""),
     [kind, node.text],
   );
   // Injecting at render time, never into the stored text: the card stays verbatim
@@ -276,6 +266,11 @@ function CardView(props: CardProps) {
   // overlay measures it to anchor pins to the content (#23).
   const bodyRef = useRef<HTMLElement | null>(null);
   const setBody = useCallback((el: HTMLElement | null) => { bodyRef.current = el; }, []);
+  /** From the rendered body, so the file looks the way the card does (#105). */
+  const downloadSvg = () => {
+    const text = bodyRef.current && svgFileText(bodyRef.current);
+    if (text) downloadText(`${fileStem(node.sp_title, node.id)}.svg`, text, "image/svg+xml");
+  };
 
   const openSearch = useCallback(() => {
     setView("content");
@@ -433,9 +428,9 @@ function CardView(props: CardProps) {
           <button className={`icon${searchOpen ? " on" : ""}`} title="Search this card (⌘/Ctrl-F)"
                   onClick={(event) => { event.stopPropagation(); searchOpen ? closeSearch() : openSearch(); }}>⌕</button>
         )}
-        {kind === "svg" && !editing && (
+        {kind === "svg" && !editing && !(view === "diff" && diff) && (
           <button className="icon" title="Download as .svg"
-                  onClick={(e) => { e.stopPropagation(); downloadSvg(node); }}>⤓</button>
+                  onClick={(e) => { e.stopPropagation(); downloadSvg(); }}>⤓</button>
         )}
         {kind === "svg" && !superseded && !editing && (
           <button className="icon" title="Draw on this card"
