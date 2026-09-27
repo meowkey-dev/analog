@@ -31,18 +31,24 @@ const API = config.APIPrefix
 var publicPaths = map[string]bool{API + "/health": true}
 
 type Server struct {
-	Store     *store.Store
-	Tokens    *auth.Store
-	Broker    *sse.Broker
-	Updater   *updater.Updater
-	Restart   func()
-	upgradeMu sync.Mutex
+	Store          *store.Store
+	Tokens         *auth.Store
+	Broker         *sse.Broker
+	Updater        UpgradeService
+	Restart        func()
+	upgradeMu      sync.Mutex
+	upgradePending bool
 
 	handler http.Handler
 	// patterns is the routing table, recorded as it is built.
 	patterns []string
 	// Web is the built SPA to serve, or nil for an API-only server.
 	Web fs.FS
+}
+
+type UpgradeService interface {
+	Status(context.Context) (updater.Status, error)
+	Install(context.Context) (updater.Status, error)
 }
 
 // New wires a server. The store's publisher is pointed at the broker, so events

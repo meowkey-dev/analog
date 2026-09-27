@@ -77,7 +77,7 @@ The home page checks for newer releases and offers **Update** when a standalone
 release `analog-server` can replace its own executable. It verifies the release
 archive against `SHA256SUMS`, restarts the server, and reloads the page when the
 new version answers. The button updates `analog-server` only; update the `analog`
-and `analog-mcp` binaries with the installer. Homebrew, Nix, and systemd installs
+and `analog-mcp` binaries with the installer. Homebrew, Nix, systemd, and desktop app installs
 remain managed by their usual upgrade commands. Set `ANALOG_UPGRADE_DISABLED=1`
 on the server to disable the web upgrade control.
 

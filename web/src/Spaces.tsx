@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { api, ApiError, getIdentity } from "./api";
+import { api, ApiError, getConnection, getIdentity } from "./api";
 import type { Space, UpgradeStatus } from "./api";
 
 /**
@@ -52,16 +52,23 @@ export function SpaceIndex({ onOpen, release }: { onOpen: (slug: string) => void
   const [upgrade, setUpgrade] = useState<UpgradeStatus | null>(null);
   const [upgradeProblem, setUpgradeProblem] = useState<string | null>(null);
   const [upgrading, setUpgrading] = useState(false);
+  const connection = getConnection();
+  const tokenlessRemote = !connection.token && !!connection.baseUrl &&
+    new URL(connection.baseUrl).origin !== window.location.origin;
 
   useEffect(() => {
     let cancelled = false;
     api.upgradeStatus().then((status) => {
       if (!cancelled) setUpgrade(status);
     }).catch((exc) => {
-      if (!cancelled) setUpgradeProblem(exc instanceof Error ? exc.message : String(exc));
+      if (!cancelled) {
+        setUpgrade({ current: release ?? "", available: false, supported: false,
+          reason: "Could not check for updates." });
+        setUpgradeProblem(exc instanceof Error ? exc.message : String(exc));
+      }
     });
     return () => { cancelled = true; };
-  }, []);
+  }, [release]);
 
   const doUpgrade = async () => {
     setUpgrading(true);
@@ -120,12 +127,13 @@ export function SpaceIndex({ onOpen, release }: { onOpen: (slug: string) => void
       </header>
 
       <div className="upgrade-box">
-        <span>{upgrade?.latest && upgrade.available
+        <span>{upgrade?.reason ?? (tokenlessRemote ? "Open the server's own home page to update." :
+          upgrade?.latest && upgrade.available
           ? `Analog ${upgrade.latest} is available.`
           : upgrade?.supported ? "Analog is up to date."
-            : upgrade?.reason ?? "Checking for updates…"}</span>
+            : "Checking for updates…")}</span>
         <button type="button" onClick={doUpgrade}
-                disabled={!upgrade?.supported || !upgrade.available || upgrading || getIdentity().actor_kind !== "human"}>
+                disabled={!upgrade?.supported || !upgrade.available || !!upgrade.reason || tokenlessRemote || upgrading || getIdentity().actor_kind !== "human"}>
           {upgrading ? "Updating…" : "Update"}
         </button>
       </div>

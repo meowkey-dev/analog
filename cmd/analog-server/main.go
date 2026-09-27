@@ -134,6 +134,9 @@ func serve(host string, port int) error {
 		if err := st.Close(); err != nil {
 			return err
 		}
-		return reexec(exe)
+		if err := reexec(exe); err != nil {
+			return fmt.Errorf("binary replaced at %s, but restart failed: %w; start analog-server again", exe, err)
+		}
+		return nil
 	}
 }

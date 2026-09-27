@@ -31,6 +31,9 @@ const latestAPI = "https://api.github.com/repos/meowkey-dev/analog/releases/late
 
 var releaseTag = regexp.MustCompile(`^v[0-9]+\.[0-9]+\.[0-9]+$`)
 
+var ErrRelease = errors.New("release lookup, download or verification failed")
+var ErrInstall = errors.New("server executable replacement failed")
+
 type Status struct {
 	Current   string `json:"current"`
 	Latest    string `json:"latest,omitempty"`
@@ -46,6 +49,7 @@ type Updater struct {
 	latestURL string
 	mu        sync.Mutex
 	cachedTag string
+	cachedErr error
 	cachedAt  time.Time
 }
 
@@ -88,9 +92,18 @@ func (u *Updater) support() (string, string) {
 	if strings.Contains(resolved, "/Cellar/") || strings.Contains(resolved, "/homebrew/") {
 		return "", "This server is managed by Homebrew; run brew upgrade analog."
 	}
-	if filepath.Base(resolved) != "analog-server" && u.exe == "" {
+	if strings.Contains(resolved, ".app/Contents/") || os.Getenv("APPIMAGE") != "" {
+		return "", "This server is part of a desktop app; upgrade the app itself."
+	}
+	if filepath.Base(resolved) != "analog-server" {
 		return "", "The running executable is not a standalone analog-server release."
 	}
+	probe, err := os.CreateTemp(filepath.Dir(resolved), ".analog-upgrade-probe-*")
+	if err != nil {
+		return "", "The install directory is not writable; upgrade Analog on the server host."
+	}
+	_ = probe.Close()
+	_ = os.Remove(probe.Name())
 	return resolved, ""
 }
 
@@ -104,7 +117,8 @@ func (u *Updater) Status(ctx context.Context) (Status, error) {
 	status.Supported = true
 	tag, err := u.latest(ctx)
 	if err != nil {
-		return status, err
+		status.Reason = "Could not reach the release host."
+		return status, nil
 	}
 	status.Latest = strings.TrimPrefix(tag, "v")
 	status.Available = newer(status.Latest, status.Current)
@@ -129,6 +143,22 @@ func (u *Updater) latest(ctx context.Context) (string, error) {
 	if u.cachedTag != "" && time.Since(u.cachedAt) < 5*time.Minute {
 		return u.cachedTag, nil
 	}
+	if u.cachedErr != nil && time.Since(u.cachedAt) < time.Minute {
+		return "", u.cachedErr
+	}
+	tag, err := u.fetchLatest(ctx)
+	u.cachedAt = time.Now()
+	if err != nil {
+		u.cachedTag = ""
+		u.cachedErr = err
+		return "", err
+	}
+	u.cachedTag = tag
+	u.cachedErr = nil
+	return tag, nil
+}
+
+func (u *Updater) fetchLatest(ctx context.Context) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.latestURL, nil)
@@ -153,7 +183,6 @@ func (u *Updater) latest(ctx context.Context) (string, error) {
 	if !releaseTag.MatchString(body.TagName) {
 		return "", fmt.Errorf("unexpected release tag %q", body.TagName)
 	}
-	u.cachedTag, u.cachedAt = body.TagName, time.Now()
 	return body.TagName, nil
 }
 
@@ -162,8 +191,14 @@ func (u *Updater) latest(ctx context.Context) (string, error) {
 // running the old inode until then.
 func (u *Updater) Install(ctx context.Context) (Status, error) {
 	status, err := u.Status(ctx)
-	if err != nil || !status.Supported || !status.Available {
+	if err != nil || !status.Supported {
 		return status, err
+	}
+	if status.Reason != "" {
+		return status, fmt.Errorf("%w: %s", ErrRelease, status.Reason)
+	}
+	if !status.Available {
+		return status, nil
 	}
 	exe, reason := u.support()
 	if reason != "" {
@@ -175,26 +210,26 @@ func (u *Updater) Install(ctx context.Context) (Status, error) {
 	tag := "v" + status.Latest
 	archive, err := u.fetch(ctx, u.base+"/download/"+tag+"/"+asset, 100<<20)
 	if err != nil {
-		return status, err
+		return status, fmt.Errorf("%w: %v", ErrRelease, err)
 	}
 	checksums, err := u.fetch(ctx, u.base+"/download/"+tag+"/SHA256SUMS", 1<<20)
 	if err != nil {
-		return status, err
+		return status, fmt.Errorf("%w: %v", ErrRelease, err)
 	}
 	want, err := checksumFor(checksums, asset)
 	if err != nil {
-		return status, err
+		return status, fmt.Errorf("%w: %v", ErrRelease, err)
 	}
 	have := sha256.Sum256(archive)
 	if hex.EncodeToString(have[:]) != want {
-		return status, errors.New("release archive checksum mismatch")
+		return status, fmt.Errorf("%w: archive checksum mismatch", ErrRelease)
 	}
 	binary, err := serverFromArchive(archive)
 	if err != nil {
-		return status, err
+		return status, fmt.Errorf("%w: %v", ErrRelease, err)
 	}
 	if err := replace(exe, binary); err != nil {
-		return status, err
+		return status, fmt.Errorf("%w: %v", ErrInstall, err)
 	}
 	return status, nil
 }

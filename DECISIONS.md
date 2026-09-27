@@ -414,16 +414,21 @@ agent runtime.
 - **The control lives on the space index.** A running canvas is for editing work;
   upgrading the server is an operator action, and the home page already shows the
   release number.
-- **Only standalone release binaries self-upgrade.** A package manager or systemd
-  owns its executable and restart policy. The UI explains that boundary. An
-  operator can turn the control off with `ANALOG_UPGRADE_DISABLED=1`.
+- **Only standalone release binaries self-upgrade.** A package manager, systemd or
+  a desktop app owns its executable and restart policy. The UI explains that
+  boundary; an unwritable install directory is detected before offering Update.
+  An operator can turn the control off with `ANALOG_UPGRADE_DISABLED=1`.
 - **The archive is checked before replacement.** Download the matching release
   archive and `SHA256SUMS`, verify SHA-256, then atomically rename the new server
   binary over the old one. The server replies before shutting down and reexecing
   itself, so the browser can wait for the new `/health` release.
 - **Only a human token can request an upgrade.** On tokenless loopback, the
-  required custom header and JSON body rule force browser preflight instead of
-  allowing a cross-site form to start an upgrade.
+  server requires a loopback Host and an exact same-origin browser request. The
+  custom header also excludes plain cross-site forms, but loopback CORS allows
+  other ports to request it, so Origin is the actual browser boundary. Desktop
+  sidecar pages on another port cannot upgrade a tokenless server.
+- **Offline is a normal state.** A failed release lookup returns a status reason
+  and is cached briefly rather than making the home page fail on every visit.
 
 ## User-global server state (2026-09-17, #84)
 

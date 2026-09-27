@@ -12,6 +12,8 @@ func TestUpgrade_OperatorCanDisableIt(t *testing.T) {
 	}
 	want := fixture(t, "upgrade.unavailable.json")
 	got := r.obj()
+	// `current` in the fixture is a valid schema example. Release builds inject a
+	// different version, so only the stable fields round-trip here.
 	for _, key := range []string{"available", "supported", "reason"} {
 		if got[key] != asMap(want)[key] {
 			t.Errorf("%s = %v, want %v", key, got[key], asMap(want)[key])
