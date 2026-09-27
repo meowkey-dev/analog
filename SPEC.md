@@ -210,7 +210,7 @@ can tell those apart.
 Base: `/api`. No auth in v1 — bind to `127.0.0.1`. Add a single shared bearer token
 from an env var when you first expose it beyond localhost (one middleware, ten lines).
 
-Every mutating call **requires** `actor` and `actor_kind` (query params or headers);
+Every Space mutation **requires** `actor` and `actor_kind` (query params or headers);
 `400` without them. Each appends exactly one row to `event`.
 
 `PATCH` accepts an optional `If-Match: <sp_rev>` header. On mismatch it returns `409`
@@ -242,7 +242,14 @@ GET    /spaces/:slug/events           ?since=<seq>&limit=      → {events:[], c
 GET    /spaces/:slug/events/stream                             → SSE
 
 POST   /spaces/:slug/media            multipart                → {url}
+
+GET    /upgrade                       → standalone server upgrade status
+POST   /upgrade              {}       → verified binary replacement, then restart
 ```
+
+`/upgrade` is an operator action, not a Space mutation. It changes no canvas row
+and emits no canvas event. On an authenticated server, only a human token can start
+it. Managed installations keep their package manager or service in charge.
 
 **`GET /events?since=` is the load-bearing endpoint.** It returns events in seq order
 plus a `cursor`. Everything else is convenience.

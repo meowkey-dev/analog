@@ -161,6 +161,8 @@ Only human tokens can start an upgrade when auth is enabled. Managed installs
 This operator action does not mutate a Space, so `schema.sql` gains only a note and
 the fixture pins the operator-disabled status without a build-dependent release number.
 The frontend keeps the control on the home page.
+Offline checks return a status with a reason; download and local replacement
+failures are explicit 502 and 500 errors.
 
 ## One correction to the spec
 
