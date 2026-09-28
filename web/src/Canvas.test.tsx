@@ -233,3 +233,48 @@ describe("re-render cost (#110)", () => {
     expect(markdown.renders).toBe(before + 1);
   });
 });
+
+describe("revision depth", () => {
+  const rev = (id: string, next?: string) => ({
+    ...node, id, sp_superseded_by: next, x: 0,
+  });
+
+  function badges(nodes: ReturnType<typeof rev>[]) {
+    const container = renderCanvas({ nodes, allNodes: nodes });
+    return Object.fromEntries(nodes.map((n) => [
+      n.id,
+      container.querySelector(`[data-card-id="${n.id}"] .badge`)?.textContent ?? null,
+    ]));
+  }
+
+  it("counts the revisions a superseded card has been through, whatever order they load in", () => {
+    // Out of order, so a later card's depth is reused from one computed earlier.
+    const chain = [rev("c_b", "c_c"), rev("c_a", "c_b"), rev("c_c", "c_d"), rev("c_d")];
+    expect(badges(chain)).toEqual({ c_a: "rev 4", c_b: "rev 3", c_c: "rev 2", c_d: null });
+  });
+
+  it("counts a successor that is off the board, and ends on a cycle", () => {
+    expect(badges([rev("c_a", "c_gone")])).toEqual({ c_a: "rev 2" });
+    const cycle = badges([rev("c_a", "c_b"), rev("c_b", "c_a")]);
+    expect(cycle.c_a).toMatch(/^rev \d+$/);
+    expect(cycle.c_b).toMatch(/^rev \d+$/);
+  });
+
+  it("is linear in the length of a chain", () => {
+    const long = Array.from({ length: 3000 }, (_, i) => rev(`c_${i}`, i < 2999 ? `c_${i + 1}` : undefined));
+    const byId = new Map(long.map((n) => [n.id, n]));
+    let lookups = 0;
+    const get = Map.prototype.get;
+    const spy = vi.spyOn(Map.prototype, "get").mockImplementation(function (this: Map<unknown, unknown>, key) {
+      if (this.size === byId.size && typeof key === "string" && key.startsWith("c_")) lookups += 1;
+      return get.call(this, key);
+    });
+    try {
+      renderCanvas({ nodes: long, allNodes: long });
+    } finally {
+      spy.mockRestore();
+    }
+    // Quadratic would be ~4.5M successor lookups; a few per card is linear.
+    expect(lookups).toBeLessThan(long.length * 20);
+  });
+});

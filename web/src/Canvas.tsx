@@ -212,19 +212,28 @@ export function Canvas(props: CanvasProps) {
 
   const revisionCount = useMemo(() => {
     // How many cards a superseded card has been revised into, following the chain.
-    // Looked up by id: a linear find per link was quadratic on a large board.
+    // Each depth is computed once and reused by every card further up its chain;
+    // walking the whole remainder per card was quadratic in the chain length.
     const byId = new Map(props.nodes.map((n) => [n.id, n]));
     const counts = new Map<string, number>();
     for (const node of props.nodes) {
-      let depth = 1;
+      const path: Node[] = [];
+      const onPath = new Set<string>();
+      let base = 0;
       let current: Node | undefined = node;
-      const seen = new Set<string>();
-      while (current?.sp_superseded_by && !seen.has(current.id)) {
-        seen.add(current.id);
+      while (current) {
+        const known = counts.get(current.id);
+        if (known !== undefined) { base = known; break; }
+        // A cycle is corrupt data, but the walk must still end.
+        if (onPath.has(current.id)) break;
+        path.push(current);
+        onPath.add(current.id);
+        if (!current.sp_superseded_by) break;
         current = byId.get(current.sp_superseded_by);
-        depth += 1;
+        // A successor that is off the board still counts as one revision.
+        if (!current) base = 1;
       }
-      counts.set(node.id, depth);
+      for (const n of path.reverse()) counts.set(n.id, ++base);
     }
     return counts;
   }, [props.nodes]);
