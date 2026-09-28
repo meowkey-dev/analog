@@ -5,6 +5,15 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { Canvas } from "./Canvas";
 
+// Counts markdown parses: the cost a needless card re-render pays (#110).
+const markdown = vi.hoisted(() => ({ renders: 0 }));
+vi.mock("react-markdown", () => ({
+  default: ({ children }: { children: string }) => {
+    markdown.renders += 1;
+    return <div>{children}</div>;
+  },
+}));
+
 let resized: (() => void) | null = null;
 
 class ResizeObserverStub {
@@ -183,5 +192,44 @@ describe("canvas resize", () => {
     setSize(canvas, 1000, 600);
     act(() => resized!());
     expect(world.style.transform).toBe(initial);
+  });
+});
+
+describe("re-render cost (#110)", () => {
+  const cards = Array.from({ length: 20 }, (_, i) => ({
+    ...node, id: `c_${i}`, x: i * 400, sp_kind: "md" as const, text: `card ${i}`,
+  }));
+
+  it("does not re-render cards while the board pans", () => {
+    const container = renderCanvas({ nodes: cards, allNodes: cards });
+    const canvas = container.querySelector<HTMLElement>(".canvas")!;
+    const before = markdown.renders;
+
+    for (let i = 0; i < 5; i++) {
+      act(() => canvas.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaX: 10, deltaY: 10 })));
+    }
+
+    expect(container.querySelector<HTMLElement>(".viewport")!.style.transform)
+      .toBe("translate(30px, 30px) scale(1)");
+    expect(markdown.renders).toBe(before);
+  });
+
+  it("re-renders only the cards a selection touches", () => {
+    const container = renderCanvas({ nodes: cards, allNodes: cards });
+    const before = markdown.renders;
+
+    act(() => root!.render(<Canvas {...props} nodes={cards} allNodes={cards} selectedCard="c_3" />));
+    // Selecting changes the card chrome, not its body: nothing is re-parsed.
+    expect(markdown.renders).toBe(before);
+    expect(container.querySelector('[data-card-id="c_3"]')!.classList).toContain("selected");
+  });
+
+  it("re-parses only the card whose text changed", () => {
+    renderCanvas({ nodes: cards, allNodes: cards });
+    const before = markdown.renders;
+    const edited = cards.map((c) => (c.id === "c_5" ? { ...c, text: "edited" } : c));
+
+    act(() => root!.render(<Canvas {...props} nodes={edited} allNodes={edited} />));
+    expect(markdown.renders).toBe(before + 1);
   });
 });

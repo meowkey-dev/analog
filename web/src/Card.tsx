@@ -88,7 +88,7 @@ const RESIZE_DIRS: ResizeDir[] = ["n", "s", "e", "w", "ne", "nw", "se", "sw"];
  *            only displaces its own pins.
  *   file  -> <img>, because binary content is a JSON Canvas file node (§2.1).
  */
-export function Body({ node, mdTheme, bodyRef, onHTMLLoad }: {
+export const Body = memo(function Body({ node, mdTheme, bodyRef, onHTMLLoad }: {
   node: Node;
   mdTheme: MdTheme;
   bodyRef: (el: HTMLElement | null) => void;
@@ -131,7 +131,7 @@ export function Body({ node, mdTheme, bodyRef, onHTMLLoad }: {
     default:
       return <pre ref={bodyRef} className="card-body plain">{node.text ?? ""}</pre>;
   }
-}
+});
 
 /**
  * Prepended into html card content at render time (issue #23). Reports the
@@ -266,6 +266,9 @@ function CardView(props: CardProps) {
   // overlay measures it to anchor pins to the content (#23).
   const bodyRef = useRef<HTMLElement | null>(null);
   const setBody = useCallback((el: HTMLElement | null) => { bodyRef.current = el; }, []);
+  // Body is memo'd apart from the chrome, so selecting a card or opening its
+  // thread does not re-parse its markdown; this must keep one identity for that.
+  const onHTMLLoad = useCallback(() => setHTMLLoad((value) => value + 1), []);
   /** From the rendered body, so the file looks the way the card does (#105). */
   const downloadSvg = () => {
     const text = bodyRef.current && svgFileText(bodyRef.current);
@@ -544,8 +547,7 @@ function CardView(props: CardProps) {
             }}
           />
         ) : (
-          <Body node={node} mdTheme={mdTheme} bodyRef={setBody}
-                onHTMLLoad={() => setHTMLLoad((value) => value + 1)} />
+          <Body node={node} mdTheme={mdTheme} bodyRef={setBody} onHTMLLoad={onHTMLLoad} />
         )}
 
         <AnnotationOverlay

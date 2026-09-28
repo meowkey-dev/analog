@@ -85,6 +85,18 @@ export interface CanvasProps {
 const NO_CHANGES = new Map<string, CardChange>();
 const NO_LAST = new Map<string, string>();
 
+/** The box around every card. A loop, not Math.min(...spread): one pass, and no argument-count ceiling. */
+function extent(nodes: Node[]) {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const n of nodes) {
+    minX = Math.min(minX, n.x);
+    minY = Math.min(minY, n.y);
+    maxX = Math.max(maxX, n.x + n.width);
+    maxY = Math.max(maxY, n.y + n.height);
+  }
+  return { minX, minY, maxX, maxY };
+}
+
 function loadMinimap(): boolean {
   try {
     return localStorage.getItem("analog.minimap") !== "off";
@@ -192,8 +204,16 @@ export function Canvas(props: CanvasProps) {
     return map;
   }, [props.annotations]);
 
+  // Which card a comment sits on, so only that card sees the selection change.
+  const annotationCard = useMemo(
+    () => new Map(props.annotations.map((a) => [a.id, a.card_id])),
+    [props.annotations],
+  );
+
   const revisionCount = useMemo(() => {
     // How many cards a superseded card has been revised into, following the chain.
+    // Looked up by id: a linear find per link was quadratic on a large board.
+    const byId = new Map(props.nodes.map((n) => [n.id, n]));
     const counts = new Map<string, number>();
     for (const node of props.nodes) {
       let depth = 1;
@@ -201,7 +221,7 @@ export function Canvas(props: CanvasProps) {
       const seen = new Set<string>();
       while (current?.sp_superseded_by && !seen.has(current.id)) {
         seen.add(current.id);
-        current = props.nodes.find((n) => n.id === current!.sp_superseded_by);
+        current = byId.get(current.sp_superseded_by);
         depth += 1;
       }
       counts.set(node.id, depth);
@@ -247,11 +267,8 @@ export function Canvas(props: CanvasProps) {
   const bounds = useMemo(() => {
     if (nodes.length === 0) return { minX: -500, minY: -500, width: 2000, height: 1500 };
     const pad = 600;
-    const minX = Math.min(...nodes.map((n) => n.x)) - pad;
-    const minY = Math.min(...nodes.map((n) => n.y)) - pad;
-    const maxX = Math.max(...nodes.map((n) => n.x + n.width)) + pad;
-    const maxY = Math.max(...nodes.map((n) => n.y + n.height)) + pad;
-    return { minX, minY, width: maxX - minX, height: maxY - minY };
+    const { minX, minY, maxX, maxY } = extent(nodes);
+    return { minX: minX - pad, minY: minY - pad, width: maxX - minX + 2 * pad, height: maxY - minY + 2 * pad };
   }, [nodes]);
 
   // Clicking an activity row pans the canvas to its subject.
@@ -366,6 +383,34 @@ export function Canvas(props: CanvasProps) {
       startValue: [node.x, node.y],
     });
   };
+
+  // Card is memo'd, so every callback it gets must keep one identity for the
+  // canvas's lifetime: an inline arrow here re-rendered — and re-parsed — every
+  // card on every pan frame (#45, #110). These trampolines are made once and call
+  // whatever the latest render bound.
+  const latest = useRef({ props, nodeMap, startCardDrag, startResize, startLink });
+  latest.current = { props, nodeMap, startCardDrag, startResize, startLink };
+  const cardHandlers = useMemo(() => ({
+    onToggleThread: (id: string) => setThreadOpen((t) => ({ ...t, [id]: !t[id] })),
+    onToggleCollapsed: (id: string) => setCollapsed((c) => ({ ...c, [id]: !c[id] })),
+    onPointerDownHeader: (event: React.PointerEvent, node: Node) => latest.current.startCardDrag(event, node),
+    onPointerDownResize: (event: React.PointerEvent, node: Node, dir: ResizeDir) =>
+      latest.current.startResize(event, node, dir),
+    onPointerDownLink: (event: React.PointerEvent, node: Node) => latest.current.startLink(event, node),
+    onSelect: (id: string) => latest.current.props.onSelectCard(id),
+    onSelectAnnotation: (id: string) => latest.current.props.onSelectAnnotation(id),
+    onDraft: (draft: DraftAnnotation) => latest.current.props.onDraft(draft),
+    onStartEdit: (id: string) => setEditing(id),
+    onCommitEdit: (id: string, text: string) => {
+      setEditing(null);
+      const { props, nodeMap } = latest.current;
+      if (text !== (nodeMap.get(id)?.text ?? "")) props.onEditCard(id, text);
+    },
+    onCancelEdit: () => setEditing(null),
+    onDelete: (id: string) => latest.current.props.onDeleteCard(id),
+    onPopOut: (node: Node) => latest.current.props.onPopOut(node),
+    onMarkSeen: (id: string) => latest.current.props.onMarkSeen?.(id),
+  }), []);
 
   useEffect(() => {
     if (!drag) return;
@@ -631,10 +676,7 @@ export function Canvas(props: CanvasProps) {
   const fit = () => {
     if (!container.current || nodes.length === 0) return;
     const box = container.current.getBoundingClientRect();
-    const minX = Math.min(...nodes.map((n) => n.x));
-    const minY = Math.min(...nodes.map((n) => n.y));
-    const maxX = Math.max(...nodes.map((n) => n.x + n.width));
-    const maxY = Math.max(...nodes.map((n) => n.y + n.height));
+    const { minX, minY, maxX, maxY } = extent(nodes);
     const scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE,
       Math.min((box.width - 120) / (maxX - minX), (box.height - 120) / (maxY - minY))));
     setViewport({
@@ -690,27 +732,16 @@ export function Canvas(props: CanvasProps) {
             overlayAnnotations={openAnnotations.get(node.id) ?? NO_ANNOTATIONS}
             threadOpen={threadOpen[node.id] ?? false}
             annotateMode={props.annotateMode}
-            draft={props.draft}
-            selectedAnnotation={props.selectedAnnotation}
-            onToggleThread={(id) => setThreadOpen((t) => ({ ...t, [id]: !t[id] }))}
-            onSelectAnnotation={props.onSelectAnnotation}
-            onDraft={props.onDraft}
-            onToggleCollapsed={(id) => setCollapsed((c) => ({ ...c, [id]: !c[id] }))}
-            onPointerDownHeader={startCardDrag}
-            onPointerDownResize={startResize}
-            onPointerDownLink={startLink}
-            onSelect={props.onSelectCard}
-            onStartEdit={setEditing}
-            onCommitEdit={(id, text) => {
-              setEditing(null);
-              if (text !== (nodeMap.get(id)?.text ?? "")) props.onEditCard(id, text);
-            }}
-            onCancelEdit={() => setEditing(null)}
-            onDelete={props.onDeleteCard}
-            onPopOut={props.onPopOut}
+            // Only the card a draft or selection is on sees it, so drafting a pin
+            // or picking a comment re-renders one card, not the board.
+            draft={props.draft?.cardId === node.id ? props.draft : null}
+            selectedAnnotation={
+              props.selectedAnnotation && annotationCard.get(props.selectedAnnotation) === node.id
+                ? props.selectedAnnotation : null}
+            {...cardHandlers}
+            onMarkSeen={props.onMarkSeen ? cardHandlers.onMarkSeen : undefined}
             change={changes.get(node.id)}
             lastChangeBefore={lastChanges.get(node.id)}
-            onMarkSeen={props.onMarkSeen}
           />
         ))}
       </div>

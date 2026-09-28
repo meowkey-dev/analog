@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { memo, useRef } from "react";
 import type { Node } from "./api";
 import type { Viewport } from "./Canvas";
 
@@ -77,15 +77,39 @@ export function Minimap(props: {
     <svg ref={box} className="minimap" viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
          role="img" aria-label="Board overview; drag to move the view"
          onPointerDown={onPointerDown}>
-      {nodes.map((n) => (
-        <rect key={n.id}
-              className={`mini-card${props.changed.has(n.id) ? " changed" : ""}${props.selected === n.id ? " selected" : ""}${n.sp_superseded_by ? " superseded" : ""}`}
-              x={mx(n.x)} y={my(n.y)}
-              width={Math.max(1.5, n.width * scale)} height={Math.max(1.5, n.height * scale)}
-              rx={1.5} />
-      ))}
+      <MiniCards nodes={nodes} changed={props.changed} selected={props.selected}
+                 minX={minX} minY={minY} scale={scale} offX={offX} offY={offY} />
       <rect className="mini-view" x={mx(view.x)} y={my(view.y)}
             width={view.w * scale} height={view.h * scale} rx={2} />
     </svg>
   );
 }
+
+/**
+ * One rect per card, apart from the view outline: a pan moves the outline every
+ * frame, but while the view stays inside the cards' box the map's own scale does
+ * not change, and a large board must not redraw every rect to follow it (#110).
+ */
+const MiniCards = memo(function MiniCards(props: {
+  nodes: Node[];
+  changed: ReadonlySet<string>;
+  selected: string | null;
+  minX: number;
+  minY: number;
+  scale: number;
+  offX: number;
+  offY: number;
+}) {
+  const { minX, minY, scale, offX, offY } = props;
+  return (
+    <>
+      {props.nodes.map((n) => (
+        <rect key={n.id}
+              className={`mini-card${props.changed.has(n.id) ? " changed" : ""}${props.selected === n.id ? " selected" : ""}${n.sp_superseded_by ? " superseded" : ""}`}
+              x={offX + (n.x - minX) * scale} y={offY + (n.y - minY) * scale}
+              width={Math.max(1.5, n.width * scale)} height={Math.max(1.5, n.height * scale)}
+              rx={1.5} />
+      ))}
+    </>
+  );
+});
