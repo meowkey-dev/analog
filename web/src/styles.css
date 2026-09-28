@@ -215,6 +215,11 @@ input, textarea, select {
 /* The scrollable content and the annotation overlay share this box (#23): pins
    are positioned — and clipped — against the content region, not the whole card. */
 .body-zone { position: relative; flex: 1; min-height: 0; display: flex; overflow: hidden; }
+/* The heavy part of a card. Off screen, the browser skips its layout and paint
+   but keeps the DOM, so an html card's iframe keeps its state and in-card search
+   still finds it (#110). Its size comes from the card's flex column, not its
+   content, so the size containment this implies moves nothing. */
+.canvas .body-zone { content-visibility: auto; }
 .card-body.plain { margin: 0; white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .card-body.svg { display: grid; place-items: center; }
 .card-body.svg svg { max-width: 100%; max-height: 100%; }

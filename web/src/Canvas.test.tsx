@@ -5,6 +5,15 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { Canvas } from "./Canvas";
 
+// Counts markdown parses: the cost a needless card re-render pays (#110).
+const markdown = vi.hoisted(() => ({ renders: 0 }));
+vi.mock("react-markdown", () => ({
+  default: ({ children }: { children: string }) => {
+    markdown.renders += 1;
+    return <div>{children}</div>;
+  },
+}));
+
 let resized: (() => void) | null = null;
 
 class ResizeObserverStub {
@@ -183,5 +192,89 @@ describe("canvas resize", () => {
     setSize(canvas, 1000, 600);
     act(() => resized!());
     expect(world.style.transform).toBe(initial);
+  });
+});
+
+describe("re-render cost (#110)", () => {
+  const cards = Array.from({ length: 20 }, (_, i) => ({
+    ...node, id: `c_${i}`, x: i * 400, sp_kind: "md" as const, text: `card ${i}`,
+  }));
+
+  it("does not re-render cards while the board pans", () => {
+    const container = renderCanvas({ nodes: cards, allNodes: cards });
+    const canvas = container.querySelector<HTMLElement>(".canvas")!;
+    const before = markdown.renders;
+
+    for (let i = 0; i < 5; i++) {
+      act(() => canvas.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaX: 10, deltaY: 10 })));
+    }
+
+    expect(container.querySelector<HTMLElement>(".viewport")!.style.transform)
+      .toBe("translate(30px, 30px) scale(1)");
+    expect(markdown.renders).toBe(before);
+  });
+
+  it("re-renders only the cards a selection touches", () => {
+    const container = renderCanvas({ nodes: cards, allNodes: cards });
+    const before = markdown.renders;
+
+    act(() => root!.render(<Canvas {...props} nodes={cards} allNodes={cards} selectedCard="c_3" />));
+    // Selecting changes the card chrome, not its body: nothing is re-parsed.
+    expect(markdown.renders).toBe(before);
+    expect(container.querySelector('[data-card-id="c_3"]')!.classList).toContain("selected");
+  });
+
+  it("re-parses only the card whose text changed", () => {
+    renderCanvas({ nodes: cards, allNodes: cards });
+    const before = markdown.renders;
+    const edited = cards.map((c) => (c.id === "c_5" ? { ...c, text: "edited" } : c));
+
+    act(() => root!.render(<Canvas {...props} nodes={edited} allNodes={edited} />));
+    expect(markdown.renders).toBe(before + 1);
+  });
+});
+
+describe("revision depth", () => {
+  const rev = (id: string, next?: string) => ({
+    ...node, id, sp_superseded_by: next, x: 0,
+  });
+
+  function badges(nodes: ReturnType<typeof rev>[]) {
+    const container = renderCanvas({ nodes, allNodes: nodes });
+    return Object.fromEntries(nodes.map((n) => [
+      n.id,
+      container.querySelector(`[data-card-id="${n.id}"] .badge`)?.textContent ?? null,
+    ]));
+  }
+
+  it("counts the revisions a superseded card has been through, whatever order they load in", () => {
+    // Out of order, so a later card's depth is reused from one computed earlier.
+    const chain = [rev("c_b", "c_c"), rev("c_a", "c_b"), rev("c_c", "c_d"), rev("c_d")];
+    expect(badges(chain)).toEqual({ c_a: "rev 4", c_b: "rev 3", c_c: "rev 2", c_d: null });
+  });
+
+  it("counts a successor that is off the board, and ends on a cycle", () => {
+    expect(badges([rev("c_a", "c_gone")])).toEqual({ c_a: "rev 2" });
+    const cycle = badges([rev("c_a", "c_b"), rev("c_b", "c_a")]);
+    expect(cycle.c_a).toMatch(/^rev \d+$/);
+    expect(cycle.c_b).toMatch(/^rev \d+$/);
+  });
+
+  it("is linear in the length of a chain", () => {
+    const long = Array.from({ length: 3000 }, (_, i) => rev(`c_${i}`, i < 2999 ? `c_${i + 1}` : undefined));
+    const byId = new Map(long.map((n) => [n.id, n]));
+    let lookups = 0;
+    const get = Map.prototype.get;
+    const spy = vi.spyOn(Map.prototype, "get").mockImplementation(function (this: Map<unknown, unknown>, key) {
+      if (this.size === byId.size && typeof key === "string" && key.startsWith("c_")) lookups += 1;
+      return get.call(this, key);
+    });
+    try {
+      renderCanvas({ nodes: long, allNodes: long });
+    } finally {
+      spy.mockRestore();
+    }
+    // Quadratic would be ~4.5M successor lookups; a few per card is linear.
+    expect(lookups).toBeLessThan(long.length * 20);
   });
 });
