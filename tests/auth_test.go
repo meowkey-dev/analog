@@ -30,7 +30,7 @@ func TestAuth_HealthOnAnOpenServer(t *testing.T) {
 	// `version` is the frozen contract. `release` is the binary and moves every
 	// tag, so it is checked for presence rather than a pinned string.
 	assertJSONEq(t, "health",
-		jlit(t, `{"ok": true, "service": "analog", "version": "0.6.0", "auth_required": false}`),
+		jlit(t, `{"ok": true, "service": "analog", "version": "0.7.0", "auth_required": false}`),
 		map[string]any{
 			"ok": got["ok"], "service": got["service"],
 			"version": got["version"], "auth_required": got["auth_required"],

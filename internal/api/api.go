@@ -9,17 +9,19 @@ import (
 	"io/fs"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/meowkey-dev/analog/internal/apierr"
 	"github.com/meowkey-dev/analog/internal/auth"
 	"github.com/meowkey-dev/analog/internal/config"
 	"github.com/meowkey-dev/analog/internal/sse"
 	"github.com/meowkey-dev/analog/internal/store"
+	"github.com/meowkey-dev/analog/internal/updater"
 )
 
 // Version is the API contract, matching contracts/openapi.json info.version.
 // /health reports it as `version`; the binary's version is `release`.
-const Version = "0.6.0"
+const Version = "0.7.0"
 
 // API is the prefix every documented operation sits behind.
 const API = config.APIPrefix
@@ -29,15 +31,24 @@ const API = config.APIPrefix
 var publicPaths = map[string]bool{API + "/health": true}
 
 type Server struct {
-	Store  *store.Store
-	Tokens *auth.Store
-	Broker *sse.Broker
+	Store          *store.Store
+	Tokens         *auth.Store
+	Broker         *sse.Broker
+	Updater        UpgradeService
+	Restart        func()
+	upgradeMu      sync.Mutex
+	upgradePending bool
 
 	handler http.Handler
 	// patterns is the routing table, recorded as it is built.
 	patterns []string
 	// Web is the built SPA to serve, or nil for an API-only server.
 	Web fs.FS
+}
+
+type UpgradeService interface {
+	Status(context.Context) (updater.Status, error)
+	Install(context.Context) (updater.Status, error)
 }
 
 // New wires a server. The store's publisher is pointed at the broker, so events

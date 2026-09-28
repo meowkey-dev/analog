@@ -20,6 +20,7 @@ another is the exact failure this directory exists to prevent.
 | `fixtures/events.json` | 19 events, contiguous seq. |
 | `fixtures/feedback.claude-code.since-12.json` | Expected `GET /feedback` for actor `claude-code`. |
 | `fixtures/feedback.human.json` | Expected `GET /feedback` for actor `human`, who has no stored cursor and so starts at zero. |
+| `fixtures/upgrade.unavailable.json` | Expected status fields when the operator disables upgrade. `current` varies by build. |
 
 ## What the fixtures deliberately exercise
 
@@ -150,6 +151,18 @@ No fixture changed: the wire JSON is untouched; only what a fraction *means*.
 Text-quote selectors (W3C `TextQuoteSelector`) were considered and declined — the
 content-relative rect covers "this part", and quote anchoring adds a staleness
 problem (reflow) that `card_rev` cannot express. Issue #23 tracks the anchoring fix.
+
+### 0.7.0 — 2026-09-27 · standalone server upgrades (#77)
+
+`GET /upgrade` reports the installed and latest release, and `POST /upgrade`
+verifies a release archive before replacing and restarting a standalone server.
+Only human tokens can start an upgrade when auth is enabled. Managed installs
+(Homebrew, Nix, systemd) report a reason and keep their package manager in charge.
+This operator action does not mutate a Space, so `schema.sql` gains only a note and
+the fixture pins the operator-disabled status without a build-dependent release number.
+The frontend keeps the control on the home page.
+Offline checks return a status with a reason; download and local replacement
+failures are explicit 502 and 500 errors.
 
 ## One correction to the spec
 

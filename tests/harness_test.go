@@ -208,7 +208,10 @@ type serverOpt func(*serverConfig)
 type serverConfig struct {
 	seeded bool
 	tokens [][2]string
+	env    []string
 }
+
+func withEnv(value string) serverOpt { return func(c *serverConfig) { c.env = append(c.env, value) } }
 
 // withSeed loads contracts/fixtures/ by the binary's own seed command before start.
 func withSeed() serverOpt { return func(c *serverConfig) { c.seeded = true } }
@@ -247,6 +250,7 @@ func startServer(t *testing.T, opts ...serverOpt) *server {
 		secrets: map[string]string{},
 		http:    &http.Client{Timeout: 30 * time.Second},
 	}
+	s.env = append(s.env, cfg.env...)
 	bin := serverBin(t)
 
 	if cfg.seeded {

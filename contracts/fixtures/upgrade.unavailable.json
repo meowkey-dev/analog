@@ -1,0 +1,6 @@
+{
+  "current": "dev",
+  "available": false,
+  "supported": false,
+  "reason": "Upgrade is disabled by the server operator."
+}

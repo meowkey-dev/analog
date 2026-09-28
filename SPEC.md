@@ -242,6 +242,7 @@ GET    /spaces/:slug/events           ?since=<seq>&limit=      → {events:[], c
 GET    /spaces/:slug/events/stream                             → SSE
 
 POST   /spaces/:slug/media            multipart                → {url}
+
 ```
 
 **`GET /events?since=` is the load-bearing endpoint.** It returns events in seq order

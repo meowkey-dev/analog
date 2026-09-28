@@ -26,6 +26,8 @@ func (s *Server) routes(mux *http.ServeMux) {
 	// --- connection ----------------------------------------------------------
 	s.handle(mux, "GET "+API+"/health", s.health)
 	s.handle(mux, "GET "+API+"/whoami", s.whoami)
+	s.handle(mux, "GET "+API+"/upgrade", s.upgradeStatus)
+	s.handle(mux, "POST "+API+"/upgrade", s.upgrade)
 
 	// --- spaces --------------------------------------------------------------
 	s.handle(mux, "GET "+API+"/spaces", s.listSpaces)

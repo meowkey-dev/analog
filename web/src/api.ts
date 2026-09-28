@@ -104,6 +104,14 @@ export interface Health {
   auth_required: boolean;
 }
 
+export interface UpgradeStatus {
+  current: string;
+  latest?: string;
+  available: boolean;
+  supported: boolean;
+  reason?: string;
+}
+
 export interface Whoami {
   authenticated: boolean;
   actor: string | null;
@@ -248,6 +256,10 @@ export const api = {
   },
 
   health: () => request<Health>("GET", "/health"),
+
+  upgradeStatus: () => request<UpgradeStatus>("GET", "/upgrade"),
+
+  upgrade: () => request<UpgradeStatus>("POST", "/upgrade", {}, {}, { "X-Analog-Upgrade": "1" }),
 
   whoami: () => request<Whoami>("GET", "/whoami"),
 

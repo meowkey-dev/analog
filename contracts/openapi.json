@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Analog API",
-    "version": "0.6.0",
-    "description": "Shared canvas for a human and their agents. FROZEN CONTRACT — amendments go through WP0 only. Every mutating operation requires actor and actor_kind and emits an event for each object it creates or changes."
+    "version": "0.7.0",
+    "description": "Shared canvas for a human and their agents. FROZEN CONTRACT — amendments go through WP0 only. Canvas mutations require actor and actor_kind and emit events. The operator upgrade operation changes only the server executable and emits no canvas event."
   },
   "servers": [{ "url": "http://127.0.0.1:8787/api" }],
   "components": {
@@ -29,13 +29,24 @@
       }
     },
     "schemas": {
+      "UpgradeStatus": {
+        "type": "object",
+        "required": ["current", "available", "supported"],
+        "properties": {
+          "current": { "type": "string" },
+          "latest": { "type": "string" },
+          "available": { "type": "boolean" },
+          "supported": { "type": "boolean" },
+          "reason": { "type": "string", "description": "Why self-upgrade is unsupported, or why the latest release could not be checked. A failed lookup returns 200 with supported=true, available=false and this field set." }
+        }
+      },
       "Error": {
         "type": "object",
         "required": ["error", "message"],
         "properties": {
           "error": { "type": "string", "enum": [
             "not_found", "conflict", "validation_failed", "actor_required",
-            "unsupported_kind", "unauthorized", "forbidden"
+            "unsupported_kind", "unauthorized", "forbidden", "upgrade_failed"
           ]},
           "message": { "type": "string" },
           "detail": { "type": "object", "additionalProperties": true }
@@ -258,13 +269,25 @@
         "description": "actor or actor_kind missing.",
         "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
       },
+      "ValidationFailed": {
+        "description": "The request did not match the operation schema.",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+      },
+      "Conflict": {
+        "description": "The current state prevents the requested operation.",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+      },
       "Unauthorized": {
         "description": "Tokens are configured and the request had no valid one.",
         "headers": { "WWW-Authenticate": { "schema": { "type": "string" } } },
         "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
       },
       "Forbidden": {
-        "description": "The declared actor is not the one this token writes as.",
+        "description": "The caller is not permitted to perform this operation.",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+      },
+      "UpgradeFailed": {
+        "description": "The server could not complete an upgrade. The error code is upgrade_failed.",
         "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
       }
     }
@@ -305,6 +328,34 @@
             }
           } } } },
           "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/upgrade": {
+      "get": {
+        "operationId": "getUpgrade",
+        "description": "Check whether a newer standalone analog-server release is available. Package-manager and service-managed installs report why self-upgrade is unavailable. A release-host lookup failure returns 200 with a reason so an offline home page remains usable.",
+        "responses": {
+          "200": { "description": "Upgrade status", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UpgradeStatus" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      },
+      "post": {
+        "operationId": "upgradeServer",
+        "description": "Download the latest release, verify SHA256SUMS, atomically replace a standalone server binary, and restart the process. Requires a human bearer token when authentication is enabled. Only the server executable changes; canvas data is untouched. A custom header and JSON content type prevent cross-site form submissions on tokenless loopback servers.",
+        "parameters": [
+          { "name": "X-Analog-Upgrade", "in": "header", "required": true, "schema": { "const": "1" } }
+        ],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "maxProperties": 0 } } } },
+        "responses": {
+          "200": { "description": "Already current", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UpgradeStatus" } } } },
+          "202": { "description": "Binary replaced; server is restarting", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UpgradeStatus" } } } },
+          "400": { "$ref": "#/components/responses/ValidationFailed" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "500": { "$ref": "#/components/responses/UpgradeFailed" },
+          "502": { "$ref": "#/components/responses/UpgradeFailed" }
         }
       }
     },

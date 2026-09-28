@@ -24,6 +24,7 @@ import (
 	"github.com/meowkey-dev/analog/internal/config"
 	"github.com/meowkey-dev/analog/internal/store"
 	"github.com/meowkey-dev/analog/internal/tokencli"
+	"github.com/meowkey-dev/analog/internal/updater"
 	"github.com/meowkey-dev/analog/internal/version"
 	"github.com/meowkey-dev/analog/internal/web"
 )
@@ -71,6 +72,18 @@ func serve(host string, port int) error {
 	defer st.Close()
 
 	server := api.New(st, tokens, web.Dist())
+	exe, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	restart := make(chan struct{}, 1)
+	server.Updater = updater.New()
+	server.Restart = func() {
+		select {
+		case restart <- struct{}{}:
+		default:
+		}
+	}
 	addr := net.JoinHostPort(host, strconv.Itoa(port))
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -111,6 +124,19 @@ func serve(host string, port int) error {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		_ = httpServer.Shutdown(ctx)
+		return nil
+	case <-restart:
+		// SSE responses can remain open indefinitely, so an upgrade closes them
+		// before reexec. Browsers reconnect to the new process.
+		if err := httpServer.Close(); err != nil {
+			return err
+		}
+		if err := st.Close(); err != nil {
+			return err
+		}
+		if err := reexec(exe); err != nil {
+			return fmt.Errorf("binary replaced at %s, but restart failed: %w; start analog-server again", exe, err)
+		}
 		return nil
 	}
 }

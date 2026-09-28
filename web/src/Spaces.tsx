@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { api, ApiError } from "./api";
-import type { Space } from "./api";
+import { api, ApiError, getConnection, getIdentity } from "./api";
+import type { Space, UpgradeStatus } from "./api";
 
 /**
  * Space selection. A Space is the unit of work (SPEC §1: one space = one
@@ -49,6 +49,55 @@ export function SpaceIndex({ onOpen, release }: { onOpen: (slug: string) => void
   const [mode, setMode] = useState<"replace" | "branch">("replace");
   const [creating, setCreating] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
+  const [upgrade, setUpgrade] = useState<UpgradeStatus | null>(null);
+  const [upgradeProblem, setUpgradeProblem] = useState<string | null>(null);
+  const [upgrading, setUpgrading] = useState(false);
+  const connection = getConnection();
+  const tokenlessRemote = !connection.token && !!connection.baseUrl &&
+    new URL(connection.baseUrl).origin !== window.location.origin;
+
+  useEffect(() => {
+    let cancelled = false;
+    api.upgradeStatus().then((status) => {
+      if (!cancelled) setUpgrade(status);
+    }).catch((exc) => {
+      if (!cancelled) {
+        setUpgrade({ current: "", available: false, supported: false,
+          reason: "Could not check for updates." });
+        setUpgradeProblem(exc instanceof Error ? exc.message : String(exc));
+      }
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  const doUpgrade = async () => {
+    setUpgrading(true);
+    setUpgradeProblem(null);
+    try {
+      const status = await api.upgrade();
+      if (!status.available) {
+        setUpgrade(status);
+        setUpgrading(false);
+        return;
+      }
+      const deadline = Date.now() + 30_000;
+      while (Date.now() < deadline) {
+        await new Promise((resolve) => window.setTimeout(resolve, 1000));
+        try {
+          const health = await api.health();
+          if (health.release === status.latest) {
+            window.location.reload();
+            return;
+          }
+        } catch { /* the server is restarting */ }
+      }
+      setUpgradeProblem("The server has not returned yet. Reload this page after it restarts.");
+    } catch (exc) {
+      setUpgradeProblem(exc instanceof Error ? exc.message : String(exc));
+    } finally {
+      setUpgrading(false);
+    }
+  };
 
   const effectiveSlug = slug || slugify(title);
 
@@ -76,6 +125,19 @@ export function SpaceIndex({ onOpen, release }: { onOpen: (slug: string) => void
         <h1>analog{release ? <span className="release" title="analog-server --version">{release}</span> : null}</h1>
         <p>A shared canvas for you and your agents. One space per workstream.</p>
       </header>
+
+      <div className="upgrade-box">
+        <span>{upgrade?.reason ?? (tokenlessRemote ? "Open the server's own home page to update." :
+          upgrade?.latest && upgrade.available
+          ? `Analog ${upgrade.latest} is available.`
+          : upgrade?.supported ? "Analog is up to date."
+            : "Checking for updates…")}</span>
+        <button type="button" onClick={doUpgrade}
+                disabled={!upgrade?.supported || !upgrade.available || !!upgrade.reason || tokenlessRemote || upgrading || getIdentity().actor_kind !== "human"}>
+          {upgrading ? "Updating…" : "Update"}
+        </button>
+      </div>
+      {upgradeProblem && <p className="problem">Update check: {upgradeProblem}</p>}
 
       {error && (
         <div className="index-error">

@@ -85,6 +85,10 @@ func UnsupportedKind(message string, detail ...Detail) *Error {
 	return mk(http.StatusBadRequest, "unsupported_kind", message, first(detail))
 }
 
+func UpgradeFailed(status int, message string, detail ...Detail) *Error {
+	return mk(status, "upgrade_failed", message, first(detail))
+}
+
 func first(d []Detail) Detail {
 	if len(d) == 0 || len(d[0]) == 0 {
 		return nil
