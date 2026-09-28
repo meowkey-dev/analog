@@ -278,7 +278,7 @@ happened is no longer a record of anything.
 
 ---
 
-### 13. A web upgrade needs an operator API — PROPOSED in 0.7.0 (issue #77)
+### 13. A web upgrade needs an operator API — APPLIED in 0.7.0 (issue #77)
 
 The home page can show the installed release from `/health`, but it cannot ask the
 running server to download, verify, replace and restart itself through any frozen
@@ -286,7 +286,7 @@ operation. A canvas mutation is the wrong channel: upgrading changes no Space an
 must not emit a canvas event. The API also needs to tell managed installations why
 self-upgrade is unavailable.
 
-**Proposed amendment:** `GET /upgrade` returns the current and latest releases,
+**Applied amendment:** `GET /upgrade` returns the current and latest releases,
 availability, support status and a reason when unavailable. An offline lookup
 returns 200 with a reason. `POST /upgrade` requires a human token when auth is on,
 verifies the latest release, replaces only a standalone `analog-server`, and

@@ -62,13 +62,13 @@ export function SpaceIndex({ onOpen, release }: { onOpen: (slug: string) => void
       if (!cancelled) setUpgrade(status);
     }).catch((exc) => {
       if (!cancelled) {
-        setUpgrade({ current: release ?? "", available: false, supported: false,
+        setUpgrade({ current: "", available: false, supported: false,
           reason: "Could not check for updates." });
         setUpgradeProblem(exc instanceof Error ? exc.message : String(exc));
       }
     });
     return () => { cancelled = true; };
-  }, [release]);
+  }, []);
 
   const doUpgrade = async () => {
     setUpgrading(true);

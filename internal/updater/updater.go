@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -151,6 +152,7 @@ func (u *Updater) latest(ctx context.Context) (string, error) {
 	if err != nil {
 		u.cachedTag = ""
 		u.cachedErr = err
+		log.Printf("analog upgrade: release lookup failed: %v", err)
 		return "", err
 	}
 	u.cachedTag = tag
