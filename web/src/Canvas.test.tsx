@@ -175,10 +175,11 @@ describe("canvas resize", () => {
     Object.defineProperty(element, "clientHeight", { configurable: true, value: height });
   }
 
-  it("keeps the board centred when a side panel opens and closes (#104)", () => {
+  it("ignores the side panel but follows a page resize", () => {
     const container = renderCanvas();
     const canvas = container.querySelector<HTMLElement>(".canvas")!;
     const world = container.querySelector<HTMLElement>(".viewport")!;
+    setSize(container, 1000, 600);
     const initial = world.style.transform;
 
     setSize(canvas, 1000, 600);
@@ -187,11 +188,46 @@ describe("canvas resize", () => {
 
     setSize(canvas, 660, 600);
     act(() => resized!());
-    expect(world.style.transform).toBe("translate(-90px, 80px) scale(1)");
+    expect(world.style.transform).toBe(initial);
 
     setSize(canvas, 1000, 600);
     act(() => resized!());
     expect(world.style.transform).toBe(initial);
+
+    setSize(container, 1200, 600);
+    setSize(canvas, 1200, 600);
+    act(() => resized!());
+    expect(world.style.transform).toBe("translate(180px, 80px) scale(1)");
+  });
+
+  it("centres a focused card in the page while the panel is open", () => {
+    const container = renderCanvas();
+    const canvas = container.querySelector<HTMLElement>(".canvas")!;
+    setSize(container, 1000, 600);
+    setSize(canvas, 660, 600);
+    Object.defineProperty(canvas, "getBoundingClientRect", {
+      value: () => ({ width: 660, height: 600 }),
+    });
+
+    act(() => root!.render(<Canvas {...props} focus={{ id: node.id, nonce: 1 }} />));
+
+    expect(container.querySelector<HTMLElement>(".viewport")!.style.transform)
+      .toBe("translate(340px, 200px) scale(1)");
+  });
+
+  it("fits content against the full page width", () => {
+    const container = renderCanvas();
+    const canvas = container.querySelector<HTMLElement>(".canvas")!;
+    setSize(container, 1000, 600);
+    setSize(canvas, 660, 600);
+    Object.defineProperty(canvas, "getBoundingClientRect", {
+      value: () => ({ width: 660, height: 600 }),
+    });
+
+    act(() => container.querySelector<HTMLButtonElement>('button[title="Fit to content"]')!.click());
+
+    expect(container.querySelector<HTMLElement>(".viewport")!.style.transform)
+      .toBe("translate(116px, 60px) scale(2.4)");
   });
 });
 
