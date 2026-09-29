@@ -133,23 +133,24 @@ export function Canvas(props: CanvasProps) {
   useEffect(() => {
     const el = container.current;
     if (!el) return;
-    let last = { width: el.clientWidth, height: el.clientHeight };
+    const body = el.parentElement;
+    let last = { width: body?.clientWidth ?? el.clientWidth, height: el.clientHeight };
     const read = () => {
-      const next = { width: el.clientWidth, height: el.clientHeight };
-      // The viewport is anchored top-left, so a side panel opening or closing
-      // would slide the board sideways; hold what sits at the centre still (#104).
-      // A first layout from zero is not a move.
+      const next = { width: body?.clientWidth ?? el.clientWidth, height: el.clientHeight };
+      // The sidebar changes the canvas width, not the page centre. Only a change
+      // to the whole body should move the board's centre.
       if (last.width > 0 && last.height > 0) {
         const dx = (next.width - last.width) / 2;
         const dy = (next.height - last.height) / 2;
         if (dx || dy) setViewport((v) => ({ ...v, x: v.x + dx, y: v.y + dy }));
       }
       last = next;
-      setSize(next);
+      setSize({ width: el.clientWidth, height: el.clientHeight });
     };
     read();
     const ro = new ResizeObserver(read);
     ro.observe(el);
+    if (body) ro.observe(body);
     return () => ro.disconnect();
   }, []);
 
@@ -286,9 +287,10 @@ export function Canvas(props: CanvasProps) {
     const node = nodeMap.get(props.focus.id);
     if (!node) return;
     const box = container.current.getBoundingClientRect();
+    const width = container.current.parentElement?.clientWidth || box.width;
     setViewport((v) => ({
       ...v,
-      x: box.width / 2 - (node.x + node.width / 2) * v.scale,
+      x: width / 2 - (node.x + node.width / 2) * v.scale,
       y: box.height / 2 - (node.y + node.height / 2) * v.scale,
     }));
     props.onSelectCard(node.id);
@@ -615,7 +617,7 @@ export function Canvas(props: CanvasProps) {
   const zoomBy = (factor: number) =>
     setViewport((v) => {
       const box = container.current!.getBoundingClientRect();
-      const px = box.width / 2;
+      const px = (container.current!.parentElement?.clientWidth || box.width) / 2;
       const py = box.height / 2;
       const scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, v.scale * factor));
       const ratio = scale / v.scale;
@@ -626,7 +628,8 @@ export function Canvas(props: CanvasProps) {
     const element = container.current;
     if (!element) return [0, 0];
     const box = element.getBoundingClientRect();
-    return toWorld(box.left + box.width / 2, box.top + box.height / 2);
+    const width = element.parentElement?.clientWidth || box.width;
+    return toWorld(box.left + width / 2, box.top + box.height / 2);
   };
 
   // paste an image onto the board at the viewport centre. skipped inside inputs
@@ -676,7 +679,7 @@ export function Canvas(props: CanvasProps) {
   const resetZoom = () =>
     setViewport((v) => {
       const box = container.current!.getBoundingClientRect();
-      const px = box.width / 2;
+      const px = (container.current!.parentElement?.clientWidth || box.width) / 2;
       const py = box.height / 2;
       const ratio = 1 / v.scale;
       return { scale: 1, x: px - (px - v.x) * ratio, y: py - (py - v.y) * ratio };
@@ -685,12 +688,13 @@ export function Canvas(props: CanvasProps) {
   const fit = () => {
     if (!container.current || nodes.length === 0) return;
     const box = container.current.getBoundingClientRect();
+    const width = container.current.parentElement?.clientWidth || box.width;
     const { minX, minY, maxX, maxY } = extent(nodes);
     const scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE,
-      Math.min((box.width - 120) / (maxX - minX), (box.height - 120) / (maxY - minY))));
+      Math.min((width - 120) / (maxX - minX), (box.height - 120) / (maxY - minY))));
     setViewport({
       scale,
-      x: box.width / 2 - ((minX + maxX) / 2) * scale,
+      x: width / 2 - ((minX + maxX) / 2) * scale,
       y: box.height / 2 - ((minY + maxY) / 2) * scale,
     });
   };
@@ -813,7 +817,7 @@ export function Canvas(props: CanvasProps) {
           selected={props.selectedCard}
           onCenter={(x, y) => setViewport((v) => ({
             ...v,
-            x: size.width / 2 - x * v.scale,
+            x: (container.current?.parentElement?.clientWidth || size.width) / 2 - x * v.scale,
             y: size.height / 2 - y * v.scale,
           }))}
         />
