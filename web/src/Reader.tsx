@@ -63,13 +63,18 @@ export interface TopbarScroll { anchor: number; last: number; settleUntil: numbe
  * never hides it, or the bar would flap as the body grows and shrinks.
  */
 export function topbarAfterScroll(s: TopbarScroll, y: number, room: number, now: number): boolean | null {
+  // The top always brings the bar back, settling or not: nothing later would.
+  if (y <= TOPBAR_TRAVEL) {
+    s.anchor = 0;
+    s.last = y;
+    return false;
+  }
   if (now < s.settleUntil) {
     s.anchor = s.last = y;
     return null;
   }
   if ((y - s.last) * (s.last - s.anchor) < 0) s.anchor = s.last;
   s.last = y;
-  if (y <= TOPBAR_TRAVEL) return false;
   if (y - s.anchor > TOPBAR_TRAVEL) return room > 4 * TOPBAR_TRAVEL ? true : null;
   if (s.anchor - y > TOPBAR_TRAVEL) return false;
   return null;
@@ -173,28 +178,51 @@ export function Reader(props: ReaderProps) {
   // events while an upward one still scrolls the card natively.
 
   const stage = useRef<HTMLDivElement>(null);
-  const topbar = useRef<TopbarScroll & { hidden: boolean }>({ anchor: 0, last: 0, settleUntil: 0, hidden: false });
-  const { onTopbar } = props;
+  // An html card scrolls inside its sandboxed frame, so the frame's own scroll
+  // reports (Card.tsx) drive the bar too. Each source keeps its own direction.
+  const frame = useRef<HTMLElement | null>(null);
+  const bindFrame = useCallback((el: HTMLElement | null) => { frame.current = el; }, []);
+  const bodyScroll = useRef<TopbarScroll>({ anchor: 0, last: 0, settleUntil: 0 });
+  const frameScroll = useRef<TopbarScroll>({ anchor: 0, last: 0, settleUntil: 0 });
+  const topbarHidden = useRef(false);
+  // Read through a ref so a new callback (crossing the narrow breakpoint) is not
+  // mistaken for a new card below.
+  const onTopbar = useRef(props.onTopbar);
+  onTopbar.current = props.onTopbar;
   const setTopbar = useCallback((hidden: boolean) => {
-    const t = topbar.current;
-    if (t.hidden === hidden) return;
-    t.hidden = hidden;
-    t.settleUntil = performance.now() + TOPBAR_SETTLE_MS;
-    onTopbar?.(hidden);
-  }, [onTopbar]);
-  const onScroll = (event: React.UIEvent<HTMLDivElement>) => {
-    if (!onTopbar) return;
-    const el = event.currentTarget;
-    const want = topbarAfterScroll(topbar.current, el.scrollTop, el.scrollHeight - el.clientHeight, performance.now());
+    if (topbarHidden.current === hidden) return;
+    topbarHidden.current = hidden;
+    const until = performance.now() + TOPBAR_SETTLE_MS;
+    bodyScroll.current.settleUntil = frameScroll.current.settleUntil = until;
+    onTopbar.current?.(hidden);
+  }, []);
+  const followScroll = useCallback((s: TopbarScroll, y: number, room: number) => {
+    if (!onTopbar.current) return;
+    const want = topbarAfterScroll(s, y, room, performance.now());
     if (want !== null) setTopbar(want);
+  }, [setTopbar]);
+  const onScroll = (event: React.UIEvent<HTMLDivElement>) => {
+    const el = event.currentTarget;
+    followScroll(bodyScroll.current, el.scrollTop, el.scrollHeight - el.clientHeight);
   };
+  useEffect(() => {
+    const onMessage = (event: MessageEvent) => {
+      const el = frame.current;
+      if (!(el instanceof HTMLIFrameElement) || event.source !== el.contentWindow) return;
+      const d = event.data;
+      if (d?.type !== "analog-scroll" || typeof d.sy !== "number") return;
+      followScroll(frameScroll.current, d.sy, Number(d.ch) - Number(d.vh));
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [followScroll]);
   // Every card starts at its top, with the bar back.
   useEffect(() => {
     stage.current?.scrollTo?.(0, 0);
-    topbar.current.anchor = topbar.current.last = 0;
+    for (const s of [bodyScroll.current, frameScroll.current]) s.anchor = s.last = 0;
     setTopbar(false);
   }, [node?.id, setTopbar]);
-  useEffect(() => () => onTopbar?.(false), [onTopbar]);
+  useEffect(() => () => onTopbar.current?.(false), []);
   const swipe = useRef<{ id: number; x: number; y: number } | null>(null);
 
   const onPointerDown = (event: React.PointerEvent) => {
@@ -355,7 +383,7 @@ export function Reader(props: ReaderProps) {
 
         {view === "diff" && diff
           ? <DiffView before={diff.before} after={diff.after} same={diff.same} />
-          : <Body key={node.id} node={node} mdTheme={loadMdTheme(node.id)} bodyRef={NOOP} onHTMLLoad={NOOP} />}
+          : <Body key={node.id} node={node} mdTheme={loadMdTheme(node.id)} bodyRef={bindFrame} onHTMLLoad={NOOP} />}
 
         {links.length > 0 && (
           <nav className="reader-links" aria-label="Linked cards">

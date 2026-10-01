@@ -148,6 +148,11 @@ describe("topbarAfterScroll", () => {
     expect(topbarAfterScroll(s, 270, 1000, 0)).toBe(false);
   });
 
+  it("brings the bar back at the top even while settling", () => {
+    const s = { anchor: 200, last: 200, settleUntil: 100 };
+    expect(topbarAfterScroll(s, 0, 1000, 50)).toBe(false);
+  });
+
   it("keeps the bar for a card that barely overflows", () => {
     const s = fresh();
     expect(topbarAfterScroll(s, 60, 70, 0)).toBeNull();
@@ -158,5 +163,44 @@ describe("topbarAfterScroll", () => {
     expect(topbarAfterScroll(s, 150, 1000, 50)).toBeNull();
     // after settling, direction is measured from where the body came to rest
     expect(topbarAfterScroll(s, 140, 1000, 200)).toBeNull();
+  });
+});
+
+describe("Reader top bar", () => {
+  it("resets the scroll for a new card, not for a new callback", () => {
+    const scrollTo = vi.fn();
+    const original = HTMLElement.prototype.scrollTo;
+    HTMLElement.prototype.scrollTo = scrollTo as typeof original;
+    try {
+      const p = props({ onTopbar: vi.fn() });
+      render(p);
+      scrollTo.mockClear();
+      // crossing the narrow breakpoint swaps the callback
+      act(() => root!.render(<Reader {...p} onTopbar={undefined} />));
+      expect(scrollTo).not.toHaveBeenCalled();
+      act(() => root!.render(<Reader {...p} onTopbar={undefined} currentId="c_b" />));
+      expect(scrollTo).toHaveBeenCalledWith(0, 0);
+    } finally {
+      HTMLElement.prototype.scrollTo = original;
+    }
+  });
+
+  it("follows an html card scrolling inside its frame", () => {
+    const onTopbar = vi.fn();
+    const el = render(props({
+      nodes: [card("c_h", 0, "<p>hi</p>", { sp_kind: "html" })],
+      edges: [],
+      currentId: "c_h",
+      onTopbar,
+    }));
+    const frame = el.querySelector("iframe")!;
+    const report = (sy: number) => act(() => {
+      window.dispatchEvent(new MessageEvent("message", {
+        data: { type: "analog-scroll", sy, ch: 2000, vh: 600 },
+        source: frame.contentWindow,
+      }));
+    });
+    report(300);
+    expect(onTopbar).toHaveBeenLastCalledWith(true);
   });
 });
