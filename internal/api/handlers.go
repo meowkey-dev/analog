@@ -18,7 +18,18 @@ import (
 // check the routing table against contracts/openapi.json rather than trusting it.
 func (s *Server) handle(mux *http.ServeMux, pattern string, h http.HandlerFunc) {
 	s.patterns = append(s.patterns, pattern)
+	if s.UIOnly && !uiOnlyServes[pattern] {
+		h = uiOnly
+	}
 	mux.HandleFunc(pattern, h)
+}
+
+// uiOnlyServes is what a --ui-only server still answers: discovery, and the SPA.
+var uiOnlyServes = map[string]bool{"GET " + API + "/health": true, "/": true}
+
+func uiOnly(w http.ResponseWriter, r *http.Request) {
+	apierr.UIOnly("this server only serves the web UI; connect to an Analog server " +
+		"for data").Write(w)
 }
 
 func (s *Server) routes(mux *http.ServeMux) {
@@ -72,14 +83,17 @@ func (s *Server) routes(mux *http.ServeMux) {
 // health is unauthenticated on purpose: a client has to be able to find out whether
 // this server exists and whether it wants a token before it has one.
 //
-// `version` is the frozen contract (openapi info.version). `release` is the binary,
-// same string `--version` prints, so the UI can show which analog-server this is
-// without an amendment for a field the contract never named.
+// `version` is the frozen contract (openapi info.version) and `min_client` the
+// oldest one a client may speak to it, so a UI built against another contract can
+// refuse up front. `release` is the binary, same string `--version` prints, for
+// display only.
 func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok": true, "service": "analog", "version": Version,
 		"release":       version.Version,
-		"auth_required": s.Tokens.Enabled(),
+		"min_client":    MinClient,
+		"ui_only":       s.UIOnly,
+		"auth_required": s.Tokens != nil && s.Tokens.Enabled(),
 	})
 }
 

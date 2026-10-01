@@ -101,6 +101,10 @@ export interface Health {
   version: string;
   // binary version (`analog-server --version`); absent on servers before it existed.
   release?: string;
+  // the oldest contract a client may speak; absent before 0.8.0, meaning no minimum.
+  min_client?: string;
+  // started with --ui-only: serves this bundle, holds no data.
+  ui_only?: boolean;
   auth_required: boolean;
 }
 

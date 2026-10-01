@@ -209,9 +209,15 @@ type serverConfig struct {
 	seeded bool
 	tokens [][2]string
 	env    []string
+	args   []string
 }
 
 func withEnv(value string) serverOpt { return func(c *serverConfig) { c.env = append(c.env, value) } }
+
+// withArgs passes extra flags to the serve command, after --host and --port.
+func withArgs(args ...string) serverOpt {
+	return func(c *serverConfig) { c.args = append(c.args, args...) }
+}
 
 // withSeed loads contracts/fixtures/ by the binary's own seed command before start.
 func withSeed() serverOpt { return func(c *serverConfig) { c.seeded = true } }
@@ -267,7 +273,7 @@ func startServer(t *testing.T, opts ...serverOpt) *server {
 	s.base = fmt.Sprintf("http://127.0.0.1:%d", freePort())
 	port := s.base[strings.LastIndex(s.base, ":")+1:]
 	cmd := exec.Command(bin[0], append(bin[1:],
-		"--host", "127.0.0.1", "--port", port)...)
+		append([]string{"--host", "127.0.0.1", "--port", port}, cfg.args...)...)...)
 	// The checkout's working directory, like any human-run server: fixture-relative
 	// paths in the seed command resolve from here.
 	cmd.Dir = repoRoot

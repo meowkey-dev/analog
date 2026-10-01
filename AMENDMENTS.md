@@ -8,6 +8,7 @@ are applied: `openapi.json` is at **0.2.0**, `schema.sql` gained the two `space.
 event types, and the server matches. **#3 was approved and applied on the same space (0.2.1).** **#8 is open.**
 **#9 was approved and applied in 0.4.0** (issue #22).
 **#10 and #11 came out of going remote and are applied in 0.3.0.**
+**#14 is applied in 0.8.0** (issue #115).
 
 ---
 
@@ -293,3 +294,29 @@ verifies the latest release, replaces only a standalone `analog-server`, and
 returns 202 before restart. It reports release-host and local-install failures as
 502 and 500 respectively. `schema.sql` gets a no-state note and the fixture pins
 the operator-disabled status. The version becomes 0.7.0.
+
+---
+
+### 14. A UI and a server of different builds cannot tell whether they agree — APPLIED in 0.8.0 (issue #115)
+
+The desktop app shows the bundle its own sidecar embeds and sends the data
+requests to whichever server the user connected to. Those are two releases that
+move independently. `/health` already said which contract the server speaks
+(`version`), but nothing said which clients it still accepts, so a mismatch
+surfaced as a 404 or a missing field on whichever operation had changed, long
+after connecting looked fine. `/health` also returned `release`, which the
+contract never named (drift since 0.3.0).
+
+The sidecar is also more server than the app needs once it is connected
+elsewhere: it opens a database only to serve static files, and if it fails to
+start, the remote is unreachable too.
+
+**Applied amendment:** `/health` documents `release` and gains `min_client` (the
+oldest contract a client may speak to this server) and `ui_only`. A server started
+with `--ui-only` holds no data: it serves `/health` and the web bundle, and every
+other operation answers 503 with the new error code `ui_only` (the `UIOnly`
+response). Both new fields are optional on the wire, because servers before 0.8.0
+do not send them; a client reads their absence as no minimum and a full server.
+`min_client` starts at 0.8.0, the first contract that has it, and is raised only
+by an amendment that breaks older clients. No fixture or `schema.sql` change. The
+version becomes 0.8.0.

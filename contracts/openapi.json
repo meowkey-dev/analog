@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Analog API",
-    "version": "0.7.0",
-    "description": "Shared canvas for a human and their agents. FROZEN CONTRACT — amendments go through WP0 only. Canvas mutations require actor and actor_kind and emit events. The operator upgrade operation changes only the server executable and emits no canvas event."
+    "version": "0.8.0",
+    "description": "Shared canvas for a human and their agents. FROZEN CONTRACT — amendments go through WP0 only. Canvas mutations require actor and actor_kind and emit events. The operator upgrade operation changes only the server executable and emits no canvas event. A server started with --ui-only holds no data: it serves /health and the web bundle, and every other operation answers 503 with error ui_only (the UIOnly response)."
   },
   "servers": [{ "url": "http://127.0.0.1:8787/api" }],
   "components": {
@@ -46,7 +46,8 @@
         "properties": {
           "error": { "type": "string", "enum": [
             "not_found", "conflict", "validation_failed", "actor_required",
-            "unsupported_kind", "unauthorized", "forbidden", "upgrade_failed"
+            "unsupported_kind", "unauthorized", "forbidden", "upgrade_failed",
+            "ui_only"
           ]},
           "message": { "type": "string" },
           "detail": { "type": "object", "additionalProperties": true }
@@ -289,6 +290,10 @@
       "UpgradeFailed": {
         "description": "The server could not complete an upgrade. The error code is upgrade_failed.",
         "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+      },
+      "UIOnly": {
+        "description": "This server was started with --ui-only and holds no data; it serves the web bundle for a client that talks to another server. Any operation except health may answer this. The error code is ui_only.",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
       }
     }
   },
@@ -298,7 +303,7 @@
       "get": {
         "operationId": "health",
         "security": [{}],
-        "description": "Liveness, and whether this server wants a token. Reachable without one on purpose: a client cannot be asked to authenticate before it can discover that authentication exists.",
+        "description": "Liveness, and whether this server wants a token. Reachable without one on purpose: a client cannot be asked to authenticate before it can discover that authentication exists. It is also where a client and a server of different builds find out whether they can talk: `version` is the contract this server speaks and `min_client` the oldest contract a client may speak to it, so either side can refuse before a mismatch surfaces as a broken operation. Servers before 0.8.0 send neither `min_client` nor `ui_only`; a client treats their absence as no minimum and a full server.",
         "responses": {
           "200": { "description": "OK", "content": { "application/json": { "schema": {
             "type": "object",
@@ -306,7 +311,10 @@
             "properties": {
               "ok": { "const": true },
               "service": { "const": "analog" },
-              "version": { "type": "string" },
+              "version": { "type": "string", "description": "The contract version, info.version of this document." },
+              "release": { "type": "string", "description": "The analog-server binary version, for display. Not a compatibility signal." },
+              "min_client": { "type": "string", "description": "The oldest contract version a client may speak to this server. Raised only when a change breaks clients built against an older contract." },
+              "ui_only": { "type": "boolean", "description": "True when the server was started with --ui-only; see the UIOnly response." },
               "auth_required": { "type": "boolean" }
             }
           } } } }

@@ -39,18 +39,24 @@ func main() {
 func root() *cobra.Command {
 	var host string
 	var port int
+	var uiOnly bool
 
 	cmd := &cobra.Command{
 		Use:          "analog-server",
 		Short:        "Run the Analog API",
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if uiOnly {
+				return serveUIOnly(host, port)
+			}
 			return serve(host, port)
 		},
 	}
 	cmd.Flags().StringVar(&host, "host", config.Host(),
 		"0.0.0.0 to accept connections from other machines")
 	cmd.Flags().IntVar(&port, "port", config.Port(), "TCP port to listen on")
+	cmd.Flags().BoolVar(&uiOnly, "ui-only", false,
+		"serve only the web UI, for a client that connects to another server; opens no data")
 	cmd.AddCommand(seedCmd(), tokencli.Command())
 	version.Attach(cmd)
 	return cmd
@@ -137,6 +143,40 @@ func serve(host string, port int) error {
 		if err := reexec(exe); err != nil {
 			return fmt.Errorf("binary replaced at %s, but restart failed: %w; start analog-server again", exe, err)
 		}
+		return nil
+	}
+}
+
+// serveUIOnly is serve without the data: no store, no tokens, no updater. It needs
+// no auth check before binding, because there is nothing behind it to protect —
+// the data lives on whichever server the page connects to, and that one checks.
+func serveUIOnly(host string, port int) error {
+	addr := net.JoinHostPort(host, strconv.Itoa(port))
+	listener, err := net.Listen("tcp", addr)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("analog on http://%s  (ui only — serves the web UI, holds no data)\n", addr)
+
+	httpServer := &http.Server{
+		Handler:           api.NewUIOnly(web.Dist()),
+		ReadHeaderTimeout: 10 * time.Second,
+	}
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+	done := make(chan error, 1)
+	go func() { done <- httpServer.Serve(listener) }()
+
+	select {
+	case err := <-done:
+		if errors.Is(err, http.ErrServerClosed) {
+			return nil
+		}
+		return err
+	case <-stop:
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = httpServer.Shutdown(ctx)
 		return nil
 	}
 }

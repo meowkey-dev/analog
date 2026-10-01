@@ -11,7 +11,7 @@ Contract-derived values are marked; the rest are reversible defaults.
 | Bind address | `127.0.0.1` | SPEC §3: no auth in v1. `ANALOG_HOST` overrides. |
 | API prefix | `/api` | Contract, same source. |
 | Web dev server | `5173` (Vite default, `strictPort`) | Proxies `/api` → 8787, so the app is same-origin in dev exactly as in prod. This matters: SPEC §5's iframe-sandbox reasoning assumes the annotation overlay and the artifact iframe are not same-origin with each other, and a cross-origin dev setup would have hidden a mistake there. |
-| CORS | allowlist `http://localhost:5173`, `http://127.0.0.1:5173`; `ANALOG_CORS_ORIGINS` overrides | Only needed if someone runs the web app without the proxy. Not `*` — cheap to keep narrow. |
+| CORS | allowlist `http://localhost:5173`, `http://127.0.0.1:5173`; `ANALOG_CORS_ORIGINS` overrides (a leading `+` adds instead) | Only needed if someone runs the web app without the proxy. Not `*` — cheap to keep narrow. |
 | Data directory | `~/.analog`, or `ANALOG_DATA_DIR` | Server state is user-global, not relative to whichever directory launched the binary (#84). |
 
 ## Identifiers
@@ -591,6 +591,29 @@ agent runtime.
   until you scroll back up, open a card, or reach the top; the reader's own nav
   stays, since position and order are what you reach for mid-read. Auto-hiding
   rather than a toggle button: a button would itself be one more thing in the bar.
+
+## Remote compatibility and the UI-only sidecar (2026-10-01, #115)
+
+- **Both sides state what they accept; neither predicts the other.** The server
+  reports `version` and `min_client` on `/health`. The bundle carries `CONTRACT`
+  and `MIN_SERVER` (`web/src/compat.ts`) and refuses at connect time, on the
+  Connect screen, when either bound is crossed. A server cannot know which
+  operations an old UI depends on, and an old UI cannot know what a future
+  server will break, so each judges only its own side.
+- **`min_client` moves only on a breaking amendment.** Additions do not raise it,
+  so a newer server keeps accepting the UI an older desktop app embeds.
+  `MIN_SERVER` moves when the UI starts relying on something an older server
+  lacks. It starts at 0.7.0, the contract before negotiation existed. A pre-0.8.0
+  server sends no `min_client`, and that reads as no minimum.
+- **`--ui-only` serves the bundle and `/health`, and nothing else.** It opens no
+  database and checks no token, since nothing is behind it, and so it may bind
+  any address. Every documented operation stays routed and answers 503
+  `ui_only`, so the contract check still holds and a misdirected client gets
+  a reason instead of `index.html` with a 200.
+- **`ANALOG_CORS_ORIGINS=+a,b` adds to the defaults** (dev, tauri and loopback)
+  instead of replacing them. A plain list still replaces them wholesale, as the
+  Loopback CORS entry above decided. The `+` form exists because "allow one more
+  origin" was quietly also "cut off every desktop app".
 
 ## Toolchain
 

@@ -21,7 +21,13 @@ import (
 
 // Version is the API contract, matching contracts/openapi.json info.version.
 // /health reports it as `version`; the binary's version is `release`.
-const Version = "0.7.0"
+const Version = "0.8.0"
+
+// MinClient is the oldest contract a client may speak to this server, reported by
+// /health as `min_client`. Most amendments only add, so it stays put; raise it with
+// the amendment that breaks clients built against an older contract, so they refuse
+// at connect time instead of failing on whichever operation changed.
+const MinClient = "0.8.0"
 
 // API is the prefix every documented operation sits behind.
 const API = config.APIPrefix
@@ -44,6 +50,8 @@ type Server struct {
 	patterns []string
 	// Web is the built SPA to serve, or nil for an API-only server.
 	Web fs.FS
+	// UIOnly serves the bundle and /health and nothing else; see NewUIOnly.
+	UIOnly bool
 }
 
 type UpgradeService interface {
@@ -61,6 +69,19 @@ func New(st *store.Store, tokens *auth.Store, web fs.FS) *Server {
 	s.routes(mux)
 	// CORS is the outermost layer: a 401 still needs CORS headers, or the browser
 	// reports an opaque network error instead of the real reason.
+	s.handler = s.cors(s.authenticate(mux))
+	return s
+}
+
+// NewUIOnly wires a server that holds no data: it serves the web bundle for a
+// client that talks to some other server, which is what the desktop app's sidecar
+// needs once the user connects to a remote. Every documented operation is still
+// routed, so the contract check holds and a misdirected client gets the contract's
+// `ui_only` error rather than the SPA's index.html.
+func NewUIOnly(web fs.FS) *Server {
+	s := &Server{Web: web, UIOnly: true}
+	mux := http.NewServeMux()
+	s.routes(mux)
 	s.handler = s.cors(s.authenticate(mux))
 	return s
 }
@@ -86,7 +107,7 @@ func (s *Server) authenticate(next http.Handler) http.Handler {
 		path := r.URL.Path
 		gated := strings.HasPrefix(path, API) && !publicPaths[path] &&
 			r.Method != http.MethodOptions && // never gate a CORS preflight
-			s.Tokens.Enabled()
+			s.Tokens != nil && s.Tokens.Enabled()
 		if !gated {
 			next.ServeHTTP(w, r)
 			return
