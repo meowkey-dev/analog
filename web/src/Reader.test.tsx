@@ -3,7 +3,7 @@
 import { act, type ComponentProps } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { Reader } from "./Reader";
+import { Reader, topbarAfterScroll } from "./Reader";
 import type { Node } from "./api";
 
 beforeAll(() => {
@@ -132,5 +132,31 @@ describe("Reader", () => {
       el.querySelector<HTMLFormElement>(".reader-editor")!.requestSubmit();
     });
     expect(p.onEdit).toHaveBeenCalledWith("c_a", "first, revised", "C_A");
+  });
+});
+
+describe("topbarAfterScroll", () => {
+  const fresh = () => ({ anchor: 0, last: 0, settleUntil: 0 });
+
+  it("hides on a sustained scroll down and shows on the way back up", () => {
+    const s = fresh();
+    const seen = [10, 20, 40].map((y) => topbarAfterScroll(s, y, 1000, 0));
+    expect(seen).toEqual([false, false, true]);
+    expect(topbarAfterScroll(s, 300, 1000, 0)).toBe(true);
+    // turning back measures from the turn, not from the top
+    expect(topbarAfterScroll(s, 290, 1000, 0)).toBeNull();
+    expect(topbarAfterScroll(s, 270, 1000, 0)).toBe(false);
+  });
+
+  it("keeps the bar for a card that barely overflows", () => {
+    const s = fresh();
+    expect(topbarAfterScroll(s, 60, 70, 0)).toBeNull();
+  });
+
+  it("ignores the scroll the bar itself causes while it moves", () => {
+    const s = { anchor: 200, last: 200, settleUntil: 100 };
+    expect(topbarAfterScroll(s, 150, 1000, 50)).toBeNull();
+    // after settling, direction is measured from where the body came to rest
+    expect(topbarAfterScroll(s, 140, 1000, 200)).toBeNull();
   });
 });

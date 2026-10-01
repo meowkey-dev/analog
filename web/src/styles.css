@@ -868,6 +868,13 @@ a.brand { text-decoration: none; }
   .topbar > button, .overflow-wrap > button { min-height: 36px; padding: 4px 10px; }
   .topbar .conn { font-size: 0; width: 10px; height: 10px; padding: 0; background: var(--dim); border: none; }
   .topbar .conn.live { background: var(--ok); }
+  /* Scrolling a card down folds the bar away (App.tsx); the notch inset stays padded. */
+  .topbar { max-height: 120px; transition: max-height .2s ease, padding .2s ease, border-color .2s ease; }
+  .app.top-hidden .topbar {
+    max-height: env(safe-area-inset-top); padding-block: env(safe-area-inset-top) 0;
+    border-bottom-color: transparent; overflow: hidden;
+  }
+  .app.top-hidden .topbar > * { visibility: hidden; }
   .switcher-menu { min-width: min(280px, calc(100vw - 16px)); }
 
   /* Side panels become bottom sheets over the view. */
