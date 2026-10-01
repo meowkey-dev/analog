@@ -16,8 +16,13 @@ export const CONTRACT = "0.8.0";
 /**
  * The oldest server contract this bundle still works with. Raise it when the UI
  * starts relying on an operation or field an older server does not have.
+ *
+ * 0.3.0 brought /health and /whoami, which connecting needs. Nothing since is
+ * load-bearing for the UI: 0.4.0 changed only what agents read from feedback,
+ * 0.6.0 only what a selector fraction means, and the /upgrade check 0.7.0 added
+ * is allowed to fail (Spaces.tsx).
  */
-export const MIN_SERVER = "0.7.0";
+export const MIN_SERVER = "0.3.0";
 
 /** Compare two `major.minor.patch` versions; anything unparsable sorts as 0. */
 export function compareVersions(a: string, b: string): number {

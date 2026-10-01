@@ -603,8 +603,9 @@ agent runtime.
 - **`min_client` moves only on a breaking amendment.** Additions do not raise it,
   so a newer server keeps accepting the UI an older desktop app embeds.
   `MIN_SERVER` moves when the UI starts relying on something an older server
-  lacks. It starts at 0.7.0, the contract before negotiation existed. A pre-0.8.0
-  server sends no `min_client`, and that reads as no minimum.
+  lacks. It starts at 0.3.0, the contract that added `/health` and `/whoami`:
+  nothing the UI depends on came later (`/upgrade` is allowed to fail). A
+  pre-0.8.0 server sends no `min_client`, and that reads as no minimum.
 - **`--ui-only` serves the bundle and `/health`, and nothing else.** It opens no
   database and checks no token, since nothing is behind it, and so it may bind
   any address. Every documented operation stays routed and answers 503

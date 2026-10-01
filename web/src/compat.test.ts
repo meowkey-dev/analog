@@ -32,7 +32,7 @@ describe("contract compatibility", () => {
   });
 
   it("refuses a server older than MIN_SERVER", () => {
-    expect(incompatibility(health({ version: "0.6.0" }), "srv")).toMatch(/srv is too old/);
+    expect(incompatibility(health({ version: "0.2.1" }), "srv")).toMatch(/srv is too old/);
   });
 
   it("refuses when the server demands a newer client", () => {
