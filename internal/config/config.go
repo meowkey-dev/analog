@@ -53,12 +53,20 @@ var tauriOrigins = []string{"tauri://localhost", "http://tauri.localhost"}
 
 // CORSOrigins returns the allowlist. `*` is honoured but never the default: an open
 // canvas should be a choice.
+//
+// A leading `+` (`ANALOG_CORS_ORIGINS=+https://canvas.example`) adds to the defaults
+// instead of replacing them. Without it, an operator who allows one extra origin
+// also cuts off every desktop app, which then fails with an opaque network error.
 func CORSOrigins() []string {
 	raw, ok := os.LookupEnv("ANALOG_CORS_ORIGINS")
 	if !ok {
 		return append(append([]string{}, defaultCORSOrigins...), tauriOrigins...)
 	}
 	var out []string
+	if rest, additive := strings.CutPrefix(strings.TrimSpace(raw), "+"); additive {
+		out = append(append(out, defaultCORSOrigins...), tauriOrigins...)
+		raw = rest
+	}
 	for _, part := range strings.Split(raw, ",") {
 		if trimmed := strings.TrimSpace(part); trimmed != "" {
 			out = append(out, trimmed)
@@ -75,10 +83,10 @@ func CORSOrigins() []string {
 // loopback origin can only come from a page actually served on this machine: the
 // same trust class the tauri schemes were, generalized over the port. An explicit
 // ANALOG_CORS_ORIGINS replaces the defaults, loopback matching included, the way it
-// already replaces the tauri origins.
+// already replaces the tauri origins; a `+` list keeps them.
 func LoopbackOriginsAllowed() bool {
-	_, ok := os.LookupEnv("ANALOG_CORS_ORIGINS")
-	return !ok
+	raw, ok := os.LookupEnv("ANALOG_CORS_ORIGINS")
+	return !ok || strings.HasPrefix(strings.TrimSpace(raw), "+")
 }
 
 // --- storage -----------------------------------------------------------------

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, ApiError, setConnection, setIdentity } from "./api";
 import type { Health } from "./api";
+import { incompatibility } from "./compat";
 import {
   describe, forgetRecent, loadRecent, normalizeBase, saveConnection, servedOverHttp,
   type Connection,
@@ -34,6 +35,13 @@ export async function attempt(connection: Connection): Promise<Connected> {
         : `Could not reach ${describe(connection) || "the server"}. Is it running?`,
     );
   }
+
+  if (health.ui_only) {
+    throw new Error(`${describe(connection)} only serves this page and holds no `
+      + `canvases. Choose the server to connect to.`);
+  }
+  const mismatch = incompatibility(health, describe(connection));
+  if (mismatch) throw new Error(mismatch);
 
   if (!health.auth_required) {
     return { connection, health, actor: "human", actorKind: "human" };

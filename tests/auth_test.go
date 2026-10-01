@@ -30,10 +30,12 @@ func TestAuth_HealthOnAnOpenServer(t *testing.T) {
 	// `version` is the frozen contract. `release` is the binary and moves every
 	// tag, so it is checked for presence rather than a pinned string.
 	assertJSONEq(t, "health",
-		jlit(t, `{"ok": true, "service": "analog", "version": "0.7.0", "auth_required": false}`),
+		jlit(t, `{"ok": true, "service": "analog", "version": "0.8.0", "min_client": "0.8.0",
+			"ui_only": false, "auth_required": false}`),
 		map[string]any{
 			"ok": got["ok"], "service": got["service"],
-			"version": got["version"], "auth_required": got["auth_required"],
+			"version": got["version"], "min_client": got["min_client"],
+			"ui_only": got["ui_only"], "auth_required": got["auth_required"],
 		})
 	if asStr(got["release"]) == "" {
 		t.Error("health.release is empty; it is the analog-server version the UI shows")
@@ -372,5 +374,24 @@ func TestAuth_TheErrorEnumCoversTheNewCodes(t *testing.T) {
 	}
 	if !codes["unauthorized"] || !codes["forbidden"] {
 		t.Errorf("error enum = %v", enum)
+	}
+}
+
+// --ui-only
+
+func TestAuth_AUIOnlyServerAnswersHealthAndNothingElse(t *testing.T) {
+	// What the desktop app runs once its user connects to a remote: it serves the
+	// page, and the page talks to the other server. Tokens on disk change nothing,
+	// because there is no data here for them to guard.
+	s := startServer(t, withArgs("--ui-only"), withTokens([2]string{"kai", "human"}))
+	got := s.get(t, "/api/health", nil).obj()
+	if got["ui_only"] != true || got["auth_required"] != false {
+		t.Errorf("health = %v, want ui_only true and auth_required false", canonical(got))
+	}
+	for _, path := range []string{"/api/spaces", "/api/whoami", "/api/spaces/demo/canvas"} {
+		r := s.get(t, path, nil)
+		if r.status != 503 || r.obj()["error"] != "ui_only" {
+			t.Errorf("%s: %d %v, want 503 ui_only", path, r.status, canonical(r.obj()))
+		}
 	}
 }

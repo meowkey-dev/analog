@@ -66,7 +66,8 @@ Tokens live in `$ANALOG_DATA_DIR/auth.json` as SHA-256 digests, mode 600. Back u
 than the API. The `tauri://` origins a desktop shell uses are already allowed, and
 so are loopback origins (`http://localhost:*`, `http://127.0.0.1:*`) for a
 shell that serves its UI from a local sidecar. Setting the variable replaces all
-of that with exactly the origins you list.
+of that with exactly the origins you list; start the list with `+`
+(`ANALOG_CORS_ORIGINS=+https://canvas.example.com`) to add to the defaults instead.
 
 ## Upgrading
 

@@ -164,6 +164,22 @@ The frontend keeps the control on the home page.
 Offline checks return a status with a reason; download and local replacement
 failures are explicit 502 and 500 errors.
 
+### 0.8.0 — 2026-10-01 · a UI and a server of different builds (#115)
+
+Requested in `../AMENDMENTS.md` #14. The desktop app shows the bundle its own
+sidecar embeds and sends data requests to whichever server the user connected
+to, so the two drift independently, and a mismatch only showed up on whichever
+operation had changed.
+
+| Change |
+|---|
+| `GET /health` documents `release` (returned since 0.3.0, never named) and gains `min_client`, the oldest contract a client may speak to this server, and `ui_only`. Both new fields are optional: a pre-0.8.0 server omits them, which a client reads as no minimum and a full server. |
+| `Error.error` gains `ui_only`, and a `UIOnly` response (503). A server started with `--ui-only` holds no data and answers every operation except `health` with it. Like `401`, it is a rule over all operations, stated in `info.description`, not repeated on each. |
+
+No fixture changed: none of them is a `/health` body or an error a ui-only
+server gives. `schema.sql` did not change either, because a ui-only server opens
+no database and the new fields are computed per request, never stored.
+
 ## One correction to the spec
 
 `GET /spaces/{slug}/feedback` is in `openapi.json` but was not in §3 of the build

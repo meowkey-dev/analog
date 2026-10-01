@@ -89,6 +89,11 @@ func UpgradeFailed(status int, message string, detail ...Detail) *Error {
 	return mk(status, "upgrade_failed", message, first(detail))
 }
 
+// UIOnly is the 503 a --ui-only server gives every operation but health.
+func UIOnly(message string, detail ...Detail) *Error {
+	return mk(http.StatusServiceUnavailable, "ui_only", message, first(detail))
+}
+
 func first(d []Detail) Detail {
 	if len(d) == 0 || len(d[0]) == 0 {
 		return nil

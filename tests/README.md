@@ -39,6 +39,7 @@ ANALOG_SERVER_BIN=/path/to/analog-server go test ./...
 
 ```
 <bin> [--host H] [--port P]                     serve; /api/health answers when ready
+<bin> --ui-only [--host H] [--port P]           serve the web UI and /api/health only; no data
 <bin> seed --db D --media-dir M --reset         load contracts/fixtures/ into a fresh database
 <bin> token add ACTOR --kind human|agent        mint a token, print it on a line of its own
 ```

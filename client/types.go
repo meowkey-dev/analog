@@ -113,6 +113,8 @@ type Health struct {
 	Service      string `json:"service"`
 	Version      string `json:"version"`
 	Release      string `json:"release"`
+	MinClient    string `json:"min_client,omitempty"`
+	UIOnly       bool   `json:"ui_only,omitempty"`
 	AuthRequired bool   `json:"auth_required"`
 }
 

@@ -106,3 +106,31 @@ func TestCustomCORSListDropsLoopback(t *testing.T) {
 		t.Errorf("listed origin: echoed %q, want the origin", got)
 	}
 }
+
+// A `+` list adds to the defaults rather than replacing them, so allowing one more
+// origin does not silently cut off the desktop app.
+func TestAdditiveCORSListKeepsTheDefaults(t *testing.T) {
+	t.Setenv("ANALOG_CORS_ORIGINS", "+https://canvas.example.org, https://other.example.org")
+	server := newTestServer(t)
+
+	for _, origin := range []string{
+		"https://canvas.example.org", "https://other.example.org",
+		"http://127.0.0.1:51468", "tauri://localhost", "http://localhost:5173",
+	} {
+		request := httptest.NewRequest(http.MethodGet, API+"/health", nil)
+		request.Header.Set("Origin", origin)
+		recorder := httptest.NewRecorder()
+		server.ServeHTTP(recorder, request)
+		if got := recorder.Header().Get("Access-Control-Allow-Origin"); got != origin {
+			t.Errorf("origin %q: echoed %q, want the origin", origin, got)
+		}
+	}
+
+	request := httptest.NewRequest(http.MethodGet, API+"/health", nil)
+	request.Header.Set("Origin", "https://evil.example")
+	recorder := httptest.NewRecorder()
+	server.ServeHTTP(recorder, request)
+	if got := recorder.Header().Get("Access-Control-Allow-Origin"); got != "" {
+		t.Errorf("unlisted origin under a + list: echoed %q, want denied", got)
+	}
+}
