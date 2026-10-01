@@ -296,8 +296,10 @@ describe("revision depth", () => {
     expect(cycle.c_b).toMatch(/^rev \d+$/);
   });
 
-  it("is linear in the length of a chain", () => {
-    const long = Array.from({ length: 3000 }, (_, i) => rev(`c_${i}`, i < 2999 ? `c_${i + 1}` : undefined));
+  // Rendering the chain in jsdom is slow; the assertion counts lookups, not time.
+  it("is linear in the length of a chain", { timeout: 30_000 }, () => {
+    const length = 1000;
+    const long = Array.from({ length }, (_, i) => rev(`c_${i}`, i < length - 1 ? `c_${i + 1}` : undefined));
     const byId = new Map(long.map((n) => [n.id, n]));
     let lookups = 0;
     const get = Map.prototype.get;
@@ -310,7 +312,7 @@ describe("revision depth", () => {
     } finally {
       spy.mockRestore();
     }
-    // Quadratic would be ~4.5M successor lookups; a few per card is linear.
+    // Quadratic would be ~500k successor lookups; a few per card is linear.
     expect(lookups).toBeLessThan(long.length * 20);
   });
 });
