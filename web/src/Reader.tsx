@@ -222,6 +222,11 @@ export function Reader(props: ReaderProps) {
     for (const s of [bodyScroll.current, frameScroll.current]) s.anchor = s.last = 0;
     setTopbar(false);
   }, [node?.id, setTopbar]);
+  // A callback that comes back (narrow again) may still hold a state this reader
+  // has since dropped, say a card changed while wide; tell it the current one.
+  useEffect(() => {
+    props.onTopbar?.(topbarHidden.current);
+  }, [props.onTopbar]);
   useEffect(() => () => onTopbar.current?.(false), []);
   const swipe = useRef<{ id: number; x: number; y: number } | null>(null);
 

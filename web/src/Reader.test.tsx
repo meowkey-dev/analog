@@ -203,4 +203,28 @@ describe("Reader top bar", () => {
     report(300);
     expect(onTopbar).toHaveBeenLastCalledWith(true);
   });
+
+  it("syncs the bar when the narrow callback returns after a card change", () => {
+    const onTopbar = vi.fn();
+    const p = props({
+      nodes: [card("c_h", 0, "<p>hi</p>", { sp_kind: "html" }), card("c_b", 400, "second")],
+      edges: [],
+      currentId: "c_h",
+      onTopbar,
+    });
+    const el = render(p);
+    const frame = el.querySelector("iframe")!;
+    act(() => {
+      window.dispatchEvent(new MessageEvent("message", {
+        data: { type: "analog-scroll", sy: 300, ch: 2000, vh: 600 },
+        source: frame.contentWindow,
+      }));
+    });
+    expect(onTopbar).toHaveBeenLastCalledWith(true);
+    // widen, move on to the next card, narrow again
+    act(() => root!.render(<Reader {...p} onTopbar={undefined} />));
+    act(() => root!.render(<Reader {...p} onTopbar={undefined} currentId="c_b" />));
+    act(() => root!.render(<Reader {...p} onTopbar={onTopbar} currentId="c_b" />));
+    expect(onTopbar).toHaveBeenLastCalledWith(false);
+  });
 });
