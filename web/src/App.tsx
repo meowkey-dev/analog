@@ -102,6 +102,8 @@ export default function App() {
   const [readerOrder, setReaderOrder] = useState<ReadingOrder>("board");
   const [editRequest, setEditRequest] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
+  // On a phone the top bar gives way while a card is read, and returns on the way back up.
+  const [topbarAway, setTopbarAway] = useState(false);
   const [quickOpen, setQuickOpen] = useState(false);
   const quickPhoto = useRef<HTMLInputElement>(null);
   const [loadedSlug, setLoadedSlug] = useState<string | null>(null);
@@ -805,10 +807,11 @@ export default function App() {
   );
 
   const panelClose = narrow ? () => setRightPanel(null) : undefined;
+  const topHidden = narrow && view === "reader" && topbarAway && !menuOpen && !rightPanel;
 
   return (
-    <div className={`app view-${view}${narrow ? " narrow" : ""}`}>
-      <header className="topbar">
+    <div className={`app view-${view}${narrow ? " narrow" : ""}${topHidden ? " top-hidden" : ""}`}>
+      <header className="topbar" aria-hidden={topHidden || undefined}>
         {!narrow && (
           <a className="brand" href="/"
              onClick={(event) => { event.preventDefault(); go(""); }}>analog</a>
@@ -939,6 +942,7 @@ export default function App() {
             onPopOut={setPopOut}
             onQuickAdd={() => setQuickOpen(true)}
             notify={notify}
+            onTopbar={narrow ? setTopbarAway : undefined}
           />
         )}
 

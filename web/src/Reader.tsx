@@ -45,6 +45,39 @@ export interface ReaderProps {
   onPopOut: (node: Node) => void;
   onQuickAdd: () => void;
   notify: (message: string) => void;
+  /** Told when scrolling the card should hide (true) or bring back (false) the app's top bar. */
+  onTopbar?: (hidden: boolean) => void;
+}
+
+/** Scroll travel, px, in one direction before the top bar follows it. */
+const TOPBAR_TRAVEL = 24;
+/** Hiding the top bar grows the body and can clamp its scroll; ignore that echo. */
+const TOPBAR_SETTLE_MS = 300;
+
+export interface TopbarScroll { anchor: number; last: number; settleUntil: number }
+
+/**
+ * Whether a scroll to `y` should hide (true) or show (false) the top bar, or leave
+ * it (null). Direction is measured from where it last turned, so a slow drag still
+ * counts; `room` is how far the body can scroll, and a card that barely overflows
+ * never hides it, or the bar would flap as the body grows and shrinks.
+ */
+export function topbarAfterScroll(s: TopbarScroll, y: number, room: number, now: number): boolean | null {
+  // The top always brings the bar back, settling or not: nothing later would.
+  if (y <= TOPBAR_TRAVEL) {
+    s.anchor = 0;
+    s.last = y;
+    return false;
+  }
+  if (now < s.settleUntil) {
+    s.anchor = s.last = y;
+    return null;
+  }
+  if ((y - s.last) * (s.last - s.anchor) < 0) s.anchor = s.last;
+  s.last = y;
+  if (y - s.anchor > TOPBAR_TRAVEL) return room > 4 * TOPBAR_TRAVEL ? true : null;
+  if (s.anchor - y > TOPBAR_TRAVEL) return false;
+  return null;
 }
 
 /** Whether something between `start` and `stop` scrolls sideways, and so owns the swipe. */
@@ -145,6 +178,56 @@ export function Reader(props: ReaderProps) {
   // events while an upward one still scrolls the card natively.
 
   const stage = useRef<HTMLDivElement>(null);
+  // An html card scrolls inside its sandboxed frame, so the frame's own scroll
+  // reports (Card.tsx) drive the bar too. Each source keeps its own direction.
+  const frame = useRef<HTMLElement | null>(null);
+  const bindFrame = useCallback((el: HTMLElement | null) => { frame.current = el; }, []);
+  const bodyScroll = useRef<TopbarScroll>({ anchor: 0, last: 0, settleUntil: 0 });
+  const frameScroll = useRef<TopbarScroll>({ anchor: 0, last: 0, settleUntil: 0 });
+  const topbarHidden = useRef(false);
+  // Read through a ref so a new callback (crossing the narrow breakpoint) is not
+  // mistaken for a new card below.
+  const onTopbar = useRef(props.onTopbar);
+  onTopbar.current = props.onTopbar;
+  const setTopbar = useCallback((hidden: boolean) => {
+    if (topbarHidden.current === hidden) return;
+    topbarHidden.current = hidden;
+    const until = performance.now() + TOPBAR_SETTLE_MS;
+    bodyScroll.current.settleUntil = frameScroll.current.settleUntil = until;
+    onTopbar.current?.(hidden);
+  }, []);
+  const followScroll = useCallback((s: TopbarScroll, y: number, room: number) => {
+    if (!onTopbar.current) return;
+    const want = topbarAfterScroll(s, y, room, performance.now());
+    if (want !== null) setTopbar(want);
+  }, [setTopbar]);
+  const onScroll = (event: React.UIEvent<HTMLDivElement>) => {
+    const el = event.currentTarget;
+    followScroll(bodyScroll.current, el.scrollTop, el.scrollHeight - el.clientHeight);
+  };
+  useEffect(() => {
+    const onMessage = (event: MessageEvent) => {
+      const el = frame.current;
+      if (!(el instanceof HTMLIFrameElement) || event.source !== el.contentWindow) return;
+      const d = event.data;
+      if (d?.type !== "analog-scroll" || typeof d.sy !== "number") return;
+      followScroll(frameScroll.current, d.sy, Number(d.ch) - Number(d.vh));
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [followScroll]);
+  // Every card starts at its top, with the bar back.
+  useEffect(() => {
+    stage.current?.scrollTo?.(0, 0);
+    for (const s of [bodyScroll.current, frameScroll.current]) s.anchor = s.last = 0;
+    setTopbar(false);
+  }, [node?.id, setTopbar]);
+  // A callback that comes back (narrow again) may still hold a state this reader
+  // has since dropped, say a card changed while wide; tell it the current one.
+  useEffect(() => {
+    props.onTopbar?.(topbarHidden.current);
+  }, [props.onTopbar]);
+  useEffect(() => () => onTopbar.current?.(false), []);
   const swipe = useRef<{ id: number; x: number; y: number } | null>(null);
 
   const onPointerDown = (event: React.PointerEvent) => {
@@ -255,43 +338,6 @@ export function Reader(props: ReaderProps) {
         </button>
       )}
 
-      <div className="reader-title">
-        <h1>{node.sp_title || node.id}</h1>
-        <span className="card-kind">{kind}</span>
-        {(node.sp_rev ?? 1) > 1 && <span className="badge">rev {node.sp_rev}</span>}
-        {kind === "html" && (
-          <button className="icon" title="Open full window" onClick={() => props.onPopOut(node)}>⤢</button>
-        )}
-      </div>
-
-      {superseded && (
-        <div className="superseded-note">
-          <span>superseded — read only</span>
-          {successor && (
-            <button className="linkish" onClick={() => props.onNavigate(successor.id)}>
-              go to the current revision →
-            </button>
-          )}
-        </div>
-      )}
-      {(change || diff) && (
-        <div className={`change-note ${change?.kind ?? "last"}`}>
-          <span className="what">{change ? describeChange(change) : diff!.label}</span>
-          {diff && (
-            <span className="diff-toggle">
-              <button className={view === "content" ? "on" : ""} onClick={() => setView("content")}>content</button>
-              <button className={view === "diff" ? "on" : ""} onClick={() => setView("diff")}
-                      title={`Show ${diff.label}`}>diff</button>
-            </span>
-          )}
-          {change && (
-            <button className="seen" onClick={() => { setView("content"); props.onMarkSeen(node.id); }}>
-              ✓ seen
-            </button>
-          )}
-        </div>
-      )}
-
       <div
         ref={stage}
         className="reader-body"
@@ -300,10 +346,49 @@ export function Reader(props: ReaderProps) {
         onPointerMove={onPointerMove}
         onPointerUp={endSwipe}
         onPointerCancel={endSwipe}
+        onScroll={onScroll}
       >
+        {/* The title scrolls with the card: on a phone a fixed title row is one bar too many. */}
+        <div className="reader-title">
+          <h1>{node.sp_title || node.id}</h1>
+          <span className="card-kind">{kind}</span>
+          {(node.sp_rev ?? 1) > 1 && <span className="badge">rev {node.sp_rev}</span>}
+          {kind === "html" && (
+            <button className="icon" title="Open full window" onClick={() => props.onPopOut(node)}>⤢</button>
+          )}
+        </div>
+
+        {superseded && (
+          <div className="superseded-note">
+            <span>superseded — read only</span>
+            {successor && (
+              <button className="linkish" onClick={() => props.onNavigate(successor.id)}>
+                go to the current revision →
+              </button>
+            )}
+          </div>
+        )}
+        {(change || diff) && (
+          <div className={`change-note ${change?.kind ?? "last"}`}>
+            <span className="what">{change ? describeChange(change) : diff!.label}</span>
+            {diff && (
+              <span className="diff-toggle">
+                <button className={view === "content" ? "on" : ""} onClick={() => setView("content")}>content</button>
+                <button className={view === "diff" ? "on" : ""} onClick={() => setView("diff")}
+                        title={`Show ${diff.label}`}>diff</button>
+              </span>
+            )}
+            {change && (
+              <button className="seen" onClick={() => { setView("content"); props.onMarkSeen(node.id); }}>
+                ✓ seen
+              </button>
+            )}
+          </div>
+        )}
+
         {view === "diff" && diff
           ? <DiffView before={diff.before} after={diff.after} same={diff.same} />
-          : <Body key={node.id} node={node} mdTheme={loadMdTheme(node.id)} bodyRef={NOOP} onHTMLLoad={NOOP} />}
+          : <Body key={node.id} node={node} mdTheme={loadMdTheme(node.id)} bodyRef={bindFrame} onHTMLLoad={NOOP} />}
 
         {links.length > 0 && (
           <nav className="reader-links" aria-label="Linked cards">

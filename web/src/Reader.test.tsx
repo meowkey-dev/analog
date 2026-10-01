@@ -3,7 +3,7 @@
 import { act, type ComponentProps } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { Reader } from "./Reader";
+import { Reader, topbarAfterScroll } from "./Reader";
 import type { Node } from "./api";
 
 beforeAll(() => {
@@ -132,5 +132,99 @@ describe("Reader", () => {
       el.querySelector<HTMLFormElement>(".reader-editor")!.requestSubmit();
     });
     expect(p.onEdit).toHaveBeenCalledWith("c_a", "first, revised", "C_A");
+  });
+});
+
+describe("topbarAfterScroll", () => {
+  const fresh = () => ({ anchor: 0, last: 0, settleUntil: 0 });
+
+  it("hides on a sustained scroll down and shows on the way back up", () => {
+    const s = fresh();
+    const seen = [10, 20, 40].map((y) => topbarAfterScroll(s, y, 1000, 0));
+    expect(seen).toEqual([false, false, true]);
+    expect(topbarAfterScroll(s, 300, 1000, 0)).toBe(true);
+    // turning back measures from the turn, not from the top
+    expect(topbarAfterScroll(s, 290, 1000, 0)).toBeNull();
+    expect(topbarAfterScroll(s, 270, 1000, 0)).toBe(false);
+  });
+
+  it("brings the bar back at the top even while settling", () => {
+    const s = { anchor: 200, last: 200, settleUntil: 100 };
+    expect(topbarAfterScroll(s, 0, 1000, 50)).toBe(false);
+  });
+
+  it("keeps the bar for a card that barely overflows", () => {
+    const s = fresh();
+    expect(topbarAfterScroll(s, 60, 70, 0)).toBeNull();
+  });
+
+  it("ignores the scroll the bar itself causes while it moves", () => {
+    const s = { anchor: 200, last: 200, settleUntil: 100 };
+    expect(topbarAfterScroll(s, 150, 1000, 50)).toBeNull();
+    // after settling, direction is measured from where the body came to rest
+    expect(topbarAfterScroll(s, 140, 1000, 200)).toBeNull();
+  });
+});
+
+describe("Reader top bar", () => {
+  it("resets the scroll for a new card, not for a new callback", () => {
+    const scrollTo = vi.fn();
+    const original = HTMLElement.prototype.scrollTo;
+    HTMLElement.prototype.scrollTo = scrollTo as typeof original;
+    try {
+      const p = props({ onTopbar: vi.fn() });
+      render(p);
+      scrollTo.mockClear();
+      // crossing the narrow breakpoint swaps the callback
+      act(() => root!.render(<Reader {...p} onTopbar={undefined} />));
+      expect(scrollTo).not.toHaveBeenCalled();
+      act(() => root!.render(<Reader {...p} onTopbar={undefined} currentId="c_b" />));
+      expect(scrollTo).toHaveBeenCalledWith(0, 0);
+    } finally {
+      HTMLElement.prototype.scrollTo = original;
+    }
+  });
+
+  it("follows an html card scrolling inside its frame", () => {
+    const onTopbar = vi.fn();
+    const el = render(props({
+      nodes: [card("c_h", 0, "<p>hi</p>", { sp_kind: "html" })],
+      edges: [],
+      currentId: "c_h",
+      onTopbar,
+    }));
+    const frame = el.querySelector("iframe")!;
+    const report = (sy: number) => act(() => {
+      window.dispatchEvent(new MessageEvent("message", {
+        data: { type: "analog-scroll", sy, ch: 2000, vh: 600 },
+        source: frame.contentWindow,
+      }));
+    });
+    report(300);
+    expect(onTopbar).toHaveBeenLastCalledWith(true);
+  });
+
+  it("syncs the bar when the narrow callback returns after a card change", () => {
+    const onTopbar = vi.fn();
+    const p = props({
+      nodes: [card("c_h", 0, "<p>hi</p>", { sp_kind: "html" }), card("c_b", 400, "second")],
+      edges: [],
+      currentId: "c_h",
+      onTopbar,
+    });
+    const el = render(p);
+    const frame = el.querySelector("iframe")!;
+    act(() => {
+      window.dispatchEvent(new MessageEvent("message", {
+        data: { type: "analog-scroll", sy: 300, ch: 2000, vh: 600 },
+        source: frame.contentWindow,
+      }));
+    });
+    expect(onTopbar).toHaveBeenLastCalledWith(true);
+    // widen, move on to the next card, narrow again
+    act(() => root!.render(<Reader {...p} onTopbar={undefined} />));
+    act(() => root!.render(<Reader {...p} onTopbar={undefined} currentId="c_b" />));
+    act(() => root!.render(<Reader {...p} onTopbar={onTopbar} currentId="c_b" />));
+    expect(onTopbar).toHaveBeenLastCalledWith(false);
   });
 });

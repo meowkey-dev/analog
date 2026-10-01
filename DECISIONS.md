@@ -585,6 +585,12 @@ agent runtime.
   toolbar, and svg drawings stay a desktop affair. Comments from the reader are
   whole-card (`selector: null`); pinning a point or region stays on the canvas,
   where there is room to aim.
+- **On a phone, reading a card gets the screen.** The reader stacked three fixed
+  rows (space bar, reader nav, card title) above the content. The title now
+  scrolls with the card, and scrolling a card down folds the space bar away
+  until you scroll back up, open a card, or reach the top; the reader's own nav
+  stays, since position and order are what you reach for mid-read. Auto-hiding
+  rather than a toggle button: a button would itself be one more thing in the bar.
 
 ## Toolchain
 
