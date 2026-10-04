@@ -316,3 +316,35 @@ describe("revision depth", () => {
     expect(lookups).toBeLessThan(long.length * 20);
   });
 });
+
+describe("the text editor", () => {
+  // Blur used to be the only way to save; the bar makes it explicit.
+  function openEditor() {
+    const onEditCard = vi.fn();
+    const container = renderCanvas({ onEditCard });
+    const card = container.querySelector(`[data-card-id="${node.id}"]`)!;
+    act(() => card.dispatchEvent(new MouseEvent("dblclick", { bubbles: true })));
+    container.querySelector<HTMLTextAreaElement>("textarea.editor")!.value = "edited by hand";
+    const button = (label: string) =>
+      [...container.querySelectorAll<HTMLButtonElement>(".text-editor-bar button")]
+        .find((b) => b.textContent === label)!;
+    return { container, onEditCard, button };
+  }
+
+  it("saves from the save button", () => {
+    const { container, onEditCard, button } = openEditor();
+    act(() => button("save").click());
+    expect(onEditCard).toHaveBeenCalledWith(node.id, "edited by hand");
+    expect(container.querySelector("textarea.editor")).toBeNull();
+  });
+
+  it("discards from the cancel button without blurring the textarea into a save", () => {
+    const { container, onEditCard, button } = openEditor();
+    const down = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
+    act(() => button("cancel").dispatchEvent(down));
+    expect(down.defaultPrevented).toBe(true);
+    act(() => button("cancel").click());
+    expect(onEditCard).not.toHaveBeenCalled();
+    expect(container.querySelector("textarea.editor")).toBeNull();
+  });
+});
