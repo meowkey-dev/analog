@@ -595,23 +595,29 @@ function CardView(props: CardProps) {
   );
 }
 
-/** The text editor. Blur still saves (a click elsewhere keeps the edit), but
- *  that was the only cue: the bar makes save and cancel explicit. Its buttons
- *  swallow mousedown so the textarea keeps focus — otherwise cancel would blur,
- *  and blur would save the very edit it meant to discard. */
+/** The text editor. Leaving it still saves (a click elsewhere keeps the edit),
+ *  but that was the only cue: the bar makes save and cancel explicit. Blur is
+ *  judged for the whole editor, not the textarea, so tabbing to cancel does not
+ *  save on the way there. The buttons also swallow mousedown so a click keeps
+ *  the textarea focused: browsers that do not focus a clicked button would
+ *  otherwise report a blur to nowhere, and save the edit cancel meant to discard. */
 function TextEditor(props: { text: string; onCommit: (text: string) => void; onCancel: () => void }) {
   const area = useRef<HTMLTextAreaElement>(null);
+  const value = () => area.current?.value ?? props.text;
   const keepFocus = (e: React.MouseEvent) => e.preventDefault();
   return (
-    <div className="text-editor" onPointerDown={(e) => e.stopPropagation()}>
+    <div className="text-editor"
+         onPointerDown={(e) => e.stopPropagation()}
+         onBlur={(e) => {
+           if (!e.currentTarget.contains(e.relatedTarget as Element | null)) props.onCommit(value());
+         }}
+         onKeyDown={(e) => { if (e.key === "Escape") props.onCancel(); }}>
       <textarea
         ref={area}
         className="card-body editor"
         defaultValue={props.text}
         autoFocus
-        onBlur={(e) => props.onCommit(e.currentTarget.value)}
         onKeyDown={(e) => {
-          if (e.key === "Escape") props.onCancel();
           if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) props.onCommit(e.currentTarget.value);
         }}
       />
@@ -619,8 +625,7 @@ function TextEditor(props: { text: string; onCommit: (text: string) => void; onC
         <span className="hint">⌘/Ctrl-Enter saves · Esc cancels</span>
         <span className="spacer" />
         <button type="button" className="ghost" onMouseDown={keepFocus} onClick={props.onCancel}>cancel</button>
-        <button type="button" onMouseDown={keepFocus}
-                onClick={() => props.onCommit(area.current?.value ?? props.text)}>save</button>
+        <button type="button" onMouseDown={keepFocus} onClick={() => props.onCommit(value())}>save</button>
       </div>
     </div>
   );

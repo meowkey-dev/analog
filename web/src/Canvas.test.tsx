@@ -347,4 +347,24 @@ describe("the text editor", () => {
     expect(onEditCard).not.toHaveBeenCalled();
     expect(container.querySelector("textarea.editor")).toBeNull();
   });
+
+  it("keeps editing while focus moves within the editor, so tabbing to cancel does not save", () => {
+    const { container, onEditCard, button } = openEditor();
+    act(() => button("cancel").focus());
+    expect(onEditCard).not.toHaveBeenCalled();
+    act(() => button("cancel").click());
+    expect(onEditCard).not.toHaveBeenCalled();
+    expect(container.querySelector("textarea.editor")).toBeNull();
+  });
+
+  it("saves when focus leaves the editor", () => {
+    const { container, onEditCard, button } = openEditor();
+    act(() => button("cancel").focus());
+    const outside = document.createElement("button");
+    document.body.append(outside);
+    act(() => outside.focus());
+    outside.remove();
+    expect(onEditCard).toHaveBeenCalledWith(node.id, "edited by hand");
+    expect(container.querySelector("textarea.editor")).toBeNull();
+  });
 });
