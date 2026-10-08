@@ -228,6 +228,18 @@ input, textarea, select {
 /* HTML cards scroll, they do not scale (SPEC §10). */
 .card-body.html { border: none; width: 100%; background: #fff; padding: 0; }
 .card-body.editor { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; border: none; border-radius: 0; resize: none; }
+/* min-width: 0, or the bar's content sets a floor wider than a narrow card
+   and .body-zone clips save and cancel off its edge. */
+.text-editor { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.text-editor .card-body.editor { flex: 1; min-height: 0; }
+.text-editor-bar {
+  display: flex; align-items: center; gap: 4px; flex: none;
+  padding: 4px 6px; border-top: 1px solid var(--line);
+  background: var(--card-head);
+}
+.text-editor-bar button { font-size: 11px; padding: 2px 9px; }
+.text-editor-bar .hint { font-size: 11px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.text-editor-bar .spacer { flex: 1; min-width: 8px; }
 
 /* Markdown text scale (#14): one knob in the topbar, relative sizes inside .md follow.
    Themes (#41) are --md-* vars scoped per body class; `default` sets none and

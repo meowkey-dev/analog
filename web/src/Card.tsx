@@ -533,18 +533,10 @@ function CardView(props: CardProps) {
             onCancel={props.onCancelEdit}
           />
         ) : editing ? (
-          <textarea
-            className="card-body editor"
-            defaultValue={node.text ?? ""}
-            autoFocus
-            onPointerDown={(e) => e.stopPropagation()}
-            onBlur={(e) => props.onCommitEdit(node.id, e.currentTarget.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Escape") props.onCancelEdit();
-              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                props.onCommitEdit(node.id, e.currentTarget.value);
-              }
-            }}
+          <TextEditor
+            text={node.text ?? ""}
+            onCommit={(text) => props.onCommitEdit(node.id, text)}
+            onCancel={props.onCancelEdit}
           />
         ) : (
           <Body node={node} mdTheme={mdTheme} bodyRef={setBody} onHTMLLoad={onHTMLLoad} />
@@ -598,6 +590,42 @@ function CardView(props: CardProps) {
       <div className="card-foot">
         <span>{node.sp_created_by}</span>
         <span>rev {node.sp_rev ?? 1}</span>
+      </div>
+    </div>
+  );
+}
+
+/** The text editor. Leaving it still saves (a click elsewhere keeps the edit),
+ *  but that was the only cue: the bar makes save and cancel explicit. Blur is
+ *  judged for the whole editor, not the textarea, so tabbing to cancel does not
+ *  save on the way there. The buttons also swallow mousedown so a click keeps
+ *  the textarea focused: browsers that do not focus a clicked button would
+ *  otherwise report a blur to nowhere, and save the edit cancel meant to discard. */
+function TextEditor(props: { text: string; onCommit: (text: string) => void; onCancel: () => void }) {
+  const area = useRef<HTMLTextAreaElement>(null);
+  const value = () => area.current?.value ?? props.text;
+  const keepFocus = (e: React.MouseEvent) => e.preventDefault();
+  return (
+    <div className="text-editor"
+         onPointerDown={(e) => e.stopPropagation()}
+         onBlur={(e) => {
+           if (!e.currentTarget.contains(e.relatedTarget as Element | null)) props.onCommit(value());
+         }}
+         onKeyDown={(e) => { if (e.key === "Escape") props.onCancel(); }}>
+      <textarea
+        ref={area}
+        className="card-body editor"
+        defaultValue={props.text}
+        autoFocus
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) props.onCommit(e.currentTarget.value);
+        }}
+      />
+      <div className="text-editor-bar">
+        <span className="hint">⌘/Ctrl-Enter saves · Esc cancels</span>
+        <span className="spacer" />
+        <button type="button" className="ghost" onMouseDown={keepFocus} onClick={props.onCancel}>cancel</button>
+        <button type="button" onMouseDown={keepFocus} onClick={() => props.onCommit(value())}>save</button>
       </div>
     </div>
   );
