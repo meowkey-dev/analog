@@ -5,10 +5,12 @@ import {
   extendStroke,
   extractStrokes,
   hitStroke,
+  inkOutline,
   parseViewBox,
   pointsToPath,
   serializeDrawing,
   svgBackground,
+  type InkPoint,
   type Stroke,
 } from "./draw";
 
@@ -97,5 +99,41 @@ describe("clientToViewBox", () => {
     const vb = { x: 0, y: 0, w: 200, h: 200 };
     expect(clientToViewBox(200, 100, rect, vb)).toEqual([100, 100]);
     expect(clientToViewBox(100, 0, rect, vb)).toEqual([0, 0]);
+  });
+});
+
+describe("ink strokes", () => {
+  const line: InkPoint[] = [[0, 10, 0.5], [10, 10, 0.5], [20, 10, 0.5], [30, 10, 0.5], [40, 10, 0.5]];
+
+  it("outlines a pen stroke as a closed M/L polygon", () => {
+    const d = inkOutline(line, 4, { pressure: false, last: true });
+    expect(d).toMatch(/^M[\d.-]+ [\d.-]+(L[\d.-]+ [\d.-]+)+Z$/);
+    expect(inkOutline([], 4, { pressure: false, last: true })).toBe("");
+  });
+
+  it("paints a lone tap as a dot rather than nothing", () => {
+    expect(inkOutline([[5, 5, 0.5]], 4, { pressure: false, last: true })).not.toBe("");
+  });
+
+  it("thickens with stylus pressure", () => {
+    const span = (p: number) => {
+      const d = inkOutline(line.map(([x, y]) => [x, y, p] as InkPoint), 8, { pressure: true, last: true });
+      const ys = Array.from(d.matchAll(/[ML]([\d.-]+) ([\d.-]+)/g), (m) => Number(m[2]));
+      return Math.max(...ys) - Math.min(...ys);
+    };
+    expect(span(1)).toBeGreaterThan(span(0.1));
+  });
+
+  it("round-trips as a filled path with its nominal width", () => {
+    const stroke: Stroke = { d: inkOutline(line, 4, { pressure: false, last: true }), color: "#6ea8fe", width: 4, ink: true };
+    const svg = serializeDrawing(chart, [stroke, ink]);
+    expect(svg).toContain('fill="#6ea8fe" stroke="none"');
+    expect(extractStrokes(svg)).toEqual([stroke, ink]);
+  });
+
+  it("is hit inside the ink and missed beside it", () => {
+    const stroke: Stroke = { d: inkOutline(line, 4, { pressure: false, last: true }), color: "#fff", width: 4, ink: true };
+    expect(hitStroke([stroke], 20, 10)).toBe(0);
+    expect(hitStroke([stroke], 20, 40)).toBe(-1);
   });
 });
