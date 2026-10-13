@@ -536,12 +536,30 @@ agent runtime.
   and in a branch-mode space that would leave two cards with one title and a
   Brief pointing at the superseded one, so the mode is always spelled out. A
   `409` is merged, not overwritten, because the other writer may be the human.
-- **Nothing about compaction.** The triggers are start, checkpoint and pick
-  up, and none of them asks why the work was interrupted. Pick up folds in any
+- **~~Nothing about compaction.~~ Reversed below (2026-10-03).** The triggers
+  are start, checkpoint and pick up, and none of them asks why the work was
+  interrupted. Pick up folds in any
   newer notes the reader holds — a summary, a handoff someone else's tooling
   left — so the space composes with such tools without naming them, and
   promoting durable learnings to the repo's docs is left to whoever owns them;
   a finding only carries a `(durable)` hint.
+
+## Context writes on request (2026-10-03)
+
+- **The `⌂` cards are written at start, checkpoint and pick up, and before a
+  compaction the agent knows is coming; never otherwise.** CONTEXT.md used to
+  say "write at the moment it happens", with a table of events that each
+  touched a card. Agents read that as a rewrite every turn, and each rewrite
+  re-reads and re-sends a card: the cost scaled with the conversation, not with
+  what changed. The human chose to pay for writes only when they ask for them.
+- **A known compaction is a checkpoint trigger, so the space now names it.**
+  It is the one interruption an agent sees coming that the human may not, and a
+  harness summary keeps less than the cards would. The triggers are the
+  harness's warning, a nearly spent context, or the human saying the
+  conversation is about to be cut.
+- **An unwarned cut loses what followed the last checkpoint.** That is the
+  accepted trade. The remedy is the human asking for checkpoints more often, not
+  the agent adding writes it judges prudent.
 
 ## Phones, the reader and "what changed" (2026-09-27)
 

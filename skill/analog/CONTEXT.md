@@ -76,7 +76,7 @@ A reversed decision keeps its line and points at what replaced it: why the
 first answer was wrong is part of the context. The ledger settles questions —
 a reader does not reopen a line without the human.
 
-### `⌂ State` — where the work is, changes constantly
+### `⌂ State` — where the work is, changes at every checkpoint
 
 ```md
 **Resume here:** the single next action, specific enough to start on.
@@ -126,20 +126,24 @@ other words.
 5. `analog open <slug>` and ask the human to read the Brief. A wrong goal costs
    one annotation now and the whole piece of work later.
 
-## Keep it current
+## When to write
 
-Write at the moment it happens, not at the end. The context can be cut at any
-point, without warning; whatever was only in the conversation is gone.
+Only at four moments: **start**, **checkpoint** and **pick up**, each when the
+human asks, and **before a compaction** you know is coming. Not every turn, not
+after every step. Each write costs tokens to read the card, rewrite it and
+send it back, and the human has chosen to pay that at the moments above and no
+others. Between them the conversation holds the context; a checkpoint gathers
+what it collected.
 
-| when | card |
-| --- | --- |
-| The human gives an instruction or a preference in chat | Brief or Decisions, now — chat is the first thing lost |
-| A decision is made | Decisions |
-| A step starts or finishes | State |
-| Something fails in a way worth knowing | Findings |
-| A question for the human comes up | Open threads |
-| A thread closes | remove it from Open threads; the outcome goes on Decisions |
-| Before anything long-running or hard to undo | State, with an exact **Resume here** |
+A compaction is coming when your harness warns of one or announces it is
+about to summarize, when your remaining context is nearly spent, or when the
+human says the conversation is about to be cleared or cut. Then run the
+checkpoint below before anything else; a summary keeps less than the cards
+would.
+
+A context cut with no warning loses what came after the last checkpoint. That
+is the trade the human made for fewer writes. If they want a safety margin,
+they ask for checkpoints more often; you do not add writes on your own.
 
 Every write replaces the card in place, against the rev you read:
 
@@ -170,11 +174,13 @@ them.
 
 Triggered by "checkpoint the space", "sync the space" or the same in other
 words — the human may ask before a break, before handing the work on, or
-before anything else that interrupts it. Why does not change what you do.
+before anything else that interrupts it — and by a compaction you know is
+coming (see **When to write**). Why does not change what you do.
 
 1. Go back over the conversation since the last checkpoint and ask the two
-   questions of everything in it. Small writes drift; this is where they are
-   reconciled.
+   questions of everything in it: instructions given in chat, decisions and
+   what was rejected, steps started and finished, failures worth knowing,
+   questions for the human, threads that closed.
 2. Update every `⌂` card that is behind. Prune what stopped mattering.
 3. Make **Resume here** exact: a reader starts on it without asking anything.
 4. Tell the human in one line which cards changed.
@@ -203,6 +209,9 @@ yourself pointed at a space with a `⌂ Brief` you do not remember writing.
 
 ## Don't
 
+- Update the cards on your own between checkpoints — after a step, at the end
+  of a turn, "to keep them current". Only start, checkpoint, pick up and a
+  coming compaction write.
 - Copy what the repo already holds: diffs, file contents, test output, logs.
 - Narrate. The context is five cards; there is no sixth.
 - Update a `⌂` card without `--mode replace`, duplicate a `⌂` title, or use
@@ -211,7 +220,7 @@ yourself pointed at a space with a `⌂ Brief` you do not remember writing.
 - Rewrite a card over open annotations you have not acted on.
 - Let **Resume here** describe the step before last.
 
-## Before you stop
+## Before a checkpoint is done
 
 - Could an agent with only this space and the repo take the next step
   correctly? If not, the missing piece belongs on a card.
