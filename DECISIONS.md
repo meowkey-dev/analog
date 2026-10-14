@@ -296,6 +296,12 @@ board to someone who is not running analog-server.
   Without Chrome, save HTML and Print to PDF.
 - **Annotations, handles, and the rest of the chrome stay off the snapshot.**
   The export is the board, not the conversation.
+- **One card exports through the same button.** With a card selected on the
+  canvas, the topbar Export becomes "export card" (HTML or PDF of that card
+  alone, framed to its box); the whole board stays in the same menu, so there
+  is one export control rather than one in every card head. The CLI spells it
+  `analog export <slug> --card <id>` (repeatable, every format). Links are kept
+  only between exported cards; one pointing at a card left out would dangle.
 
 ## HTML card network boundary (2026-09-04, #62/#64)
 

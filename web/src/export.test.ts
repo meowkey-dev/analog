@@ -189,6 +189,48 @@ describe("ExportMenu", () => {
   });
 });
 
+describe("buildExportHTML for one card", () => {
+  afterEach(() => {
+    document.body.replaceChildren();
+  });
+
+  const board = () => {
+    document.body.innerHTML = `
+      <main class="canvas"><div class="viewport">
+        <svg class="links"><g class="edge"><path class="edge-line"/></g></svg>
+        <article class="card" data-card-id="c_1" style="left:0px;top:0px">
+          <div class="card-body plain">first</div></article>
+        <article class="card" data-card-id="c_2" style="left:400px;top:300px">
+          <div class="card-body plain">second</div></article>
+      </div></main>`;
+    document.querySelectorAll<HTMLElement>("[data-card-id]").forEach((card) => {
+      Object.defineProperty(card, "offsetWidth", { configurable: true, value: 200 });
+      Object.defineProperty(card, "offsetHeight", { configurable: true, value: 100 });
+    });
+  };
+
+  it("keeps only that card, drops the links, and frames the page around it", async () => {
+    board();
+    const html = await buildExportHTML({ title: "Second", slug: "redesign", cardId: "c_2" });
+    const parsed = new DOMParser().parseFromString(html, "text/html");
+    const cards = [...parsed.querySelectorAll<HTMLElement>("[data-card-id]")].map((c) => c.dataset.cardId);
+    expect(cards).toEqual(["c_2"]);
+    expect(parsed.querySelector("svg.links")).toBeNull();
+    expect(parsed.title).toBe("Second — analog");
+    const frame = parsed.querySelector<HTMLElement>(".export-board")!;
+    expect(frame.style.width).toBe("296px");
+    expect(frame.style.height).toBe("196px");
+    expect(parsed.querySelector<HTMLElement>(".export-world")!.style.transform)
+      .toBe("translate(-352px, -252px)");
+  });
+
+  it("fails loudly when the card is not on the canvas", async () => {
+    board();
+    await expect(buildExportHTML({ title: "x", slug: "redesign", cardId: "c_gone" }))
+      .rejects.toThrow("not on the canvas");
+  });
+});
+
 describe("svgFileText", () => {
   function body(markup: string, style = ""): HTMLElement {
     const el = document.createElement("div");
