@@ -247,6 +247,7 @@ func unlinkCmd() *cobra.Command {
 func exportCmd() *cobra.Command {
 	var deleted bool
 	var format string
+	var cards []string
 	cmd := &cobra.Command{
 		Use:   "export <slug>",
 		Short: "Write the space on stdout: JSON Canvas (default), HTML, or PDF.",
@@ -254,6 +255,8 @@ func exportCmd() *cobra.Command {
 			"  --format canvas  JSON Canvas 1.0; opens in Obsidian (default)\n" +
 			"  --format html    a portable page; Analog media inlined as data URIs\n" +
 			"  --format pdf     the HTML, printed through Chrome/Chromium\n\n" +
+			"--card <id> (repeatable) exports just those cards, and only the links\n" +
+			"between them, in any format.\n\n" +
 			"PDF needs a chrome binary (ANALOG_CHROME overrides). Without one, save\n" +
 			"HTML and use Print to PDF, or Export in the board UI.",
 		Args: cobra.ExactArgs(1),
@@ -263,6 +266,11 @@ func exportCmd() *cobra.Command {
 			if err != nil {
 				return fail(err)
 			}
+			if len(cards) > 0 {
+				if canvas, err = onlyCards(canvas, cards); err != nil {
+					return err
+				}
+			}
 			switch strings.ToLower(format) {
 			case "", "canvas":
 				return out(canvas)
@@ -270,6 +278,13 @@ func exportCmd() *cobra.Command {
 				title := args[0]
 				if space, err := c.GetSpace(args[0]); err == nil && space.Title != "" {
 					title = space.Title
+				}
+				// One card is the document, so it names the file; the slug still
+				// says which board it came from.
+				if len(cards) > 0 && len(canvas.Nodes) == 1 {
+					if t, _ := canvas.Nodes[0]["sp_title"].(string); t != "" {
+						title = t
+					}
 				}
 				page, err := portable.HTML(canvas, portable.Options{
 					Title: title, Slug: args[0],
@@ -299,7 +314,46 @@ func exportCmd() *cobra.Command {
 	}
 	cmd.Flags().BoolVar(&deleted, "deleted", false, "include deleted cards")
 	cmd.Flags().StringVar(&format, "format", "canvas", "canvas, html, or pdf")
+	cmd.Flags().StringSliceVar(&cards, "card", nil, "export only this card id (repeatable)")
 	return cmd
+}
+
+// onlyCards narrows a canvas to the given card ids. A link survives only when
+// both ends do: one pointing at a card the export left out would dangle.
+func onlyCards(canvas client.Canvas, ids []string) (client.Canvas, error) {
+	want := map[string]bool{}
+	for _, id := range ids {
+		want[id] = true
+	}
+	kept := client.Canvas{Nodes: []client.Node{}, Edges: []client.Edge{}}
+	for _, node := range canvas.Nodes {
+		if id, _ := node["id"].(string); want[id] {
+			kept.Nodes = append(kept.Nodes, node)
+			delete(want, id)
+		}
+	}
+	if len(want) > 0 {
+		missing := make([]string, 0, len(want))
+		for _, id := range ids {
+			if want[id] {
+				missing = append(missing, id)
+				delete(want, id)
+			}
+		}
+		return kept, usage("no such card: %s", strings.Join(missing, ", "))
+	}
+	have := map[string]bool{}
+	for _, node := range kept.Nodes {
+		have[node["id"].(string)] = true
+	}
+	for _, edge := range canvas.Edges {
+		from, _ := edge["fromNode"].(string)
+		to, _ := edge["toNode"].(string)
+		if have[from] && have[to] {
+			kept.Edges = append(kept.Edges, edge)
+		}
+	}
+	return kept, nil
 }
 
 func importCmd() *cobra.Command {

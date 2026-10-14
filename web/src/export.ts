@@ -156,10 +156,14 @@ ${opts.body}
 `;
 }
 
-export async function buildExportHTML(opts: { title: string; slug: string }): Promise<string> {
+/** With `cardId`, the snapshot is that one card alone, still in its canvas frame. */
+export async function buildExportHTML(opts: { title: string; slug: string; cardId?: string }): Promise<string> {
   const viewport = document.querySelector<HTMLElement>(".canvas .viewport");
-  const cards = Array.from(document.querySelectorAll<HTMLElement>("[data-card-id]"));
-  await waitForExportResources(viewport ?? document);
+  const only = opts.cardId;
+  const cards = Array.from(document.querySelectorAll<HTMLElement>("[data-card-id]"))
+    .filter((card) => only === undefined || card.dataset.cardId === only);
+  if (only !== undefined && cards.length === 0) throw new Error("that card is not on the canvas");
+  await waitForExportResources((only !== undefined ? cards[0] : viewport) ?? document);
   const css = await inlineCssUrls(collectCss());
   const mdScale = getComputedStyle(document.documentElement).getPropertyValue("--md-scale") || "1";
 
@@ -172,6 +176,13 @@ export async function buildExportHTML(opts: { title: string; slug: string }): Pr
   }
 
   const clone = viewport.cloneNode(true) as HTMLElement;
+  if (only !== undefined) {
+    clone.querySelectorAll<HTMLElement>("[data-card-id]").forEach((card) => {
+      if (card.dataset.cardId !== only) card.remove();
+    });
+    // Every link has an end on some other card, which the file no longer holds.
+    clone.querySelector("svg.links")?.remove();
+  }
   replaceEditors(clone);
   clone.querySelectorAll(STRIP).forEach((el) => el.remove());
   clone.querySelectorAll(".selected").forEach((el) => el.classList.remove("selected"));

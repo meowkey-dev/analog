@@ -689,6 +689,50 @@ func TestExportHTMLInlinesFileNodes(t *testing.T) {
 	}
 }
 
+func TestExportCardKeepsOnlyThatCardAndItsInnerLinks(t *testing.T) {
+	h := newHarness(t)
+	h.run("new", "redesign")
+	a := h.addCard("redesign", "A", "first")
+	b := h.addCard("redesign", "B", "second")
+	c := h.addCard("redesign", "C", "third")
+	h.run("link", "redesign", a["id"].(string), b["id"].(string), "--label", "a-b")
+	h.run("link", "redesign", b["id"].(string), c["id"].(string), "--label", "b-c")
+
+	one := decodeJSON[map[string]any](t, h.run("export", "redesign", "--card", b["id"].(string)))
+	if nodes := one["nodes"].([]any); len(nodes) != 1 || nodes[0].(map[string]any)["sp_title"] != "B" {
+		t.Errorf("nodes = %v, want just B", nodes)
+	}
+	if edges := one["edges"].([]any); len(edges) != 0 {
+		t.Errorf("edges = %v, want none: their other ends were left out", edges)
+	}
+
+	two := decodeJSON[map[string]any](t, h.run("export", "redesign",
+		"--card", a["id"].(string), "--card", b["id"].(string)))
+	if edges := two["edges"].([]any); len(edges) != 1 || edges[0].(map[string]any)["label"] != "a-b" {
+		t.Errorf("edges = %v, want just a-b", edges)
+	}
+
+	html := h.run("export", "redesign", "--card", b["id"].(string), "--format", "html")
+	if !strings.Contains(html, "second") || strings.Contains(html, "first") || strings.Contains(html, "third") {
+		t.Errorf("html carried other cards:\n%s", html)
+	}
+	if !strings.Contains(html, "<title>B — analog</title>") {
+		t.Error("a single-card export is not titled after its card")
+	}
+}
+
+func TestExportUnknownCardFails(t *testing.T) {
+	h := newHarness(t)
+	h.run("new", "redesign")
+	r := h.invoke(options{}, "export", "redesign", "--card", "c_nope")
+	if r.code == 0 {
+		t.Fatal("exporting a missing card succeeded")
+	}
+	if !strings.Contains(r.stderr, "c_nope") {
+		t.Errorf("stderr = %q", r.stderr)
+	}
+}
+
 func TestExportRejectsAnUnknownFormat(t *testing.T) {
 	h := newHarness(t)
 	h.run("new", "redesign")

@@ -737,6 +737,13 @@ export default function App() {
   }
 
   const draftCard = draft ? canvas.nodes.find((n) => n.id === draft.cardId) : null;
+  // Export follows the selection, but only on the canvas: it snapshots the
+  // canvas DOM, and the reader does not render the board there.
+  // liveNodes, not canvas.nodes: a card someone else deleted stays in the
+  // latter but is no longer drawn, so there would be nothing to snapshot.
+  const selectedNode = view === "canvas" && selectedCard
+    ? liveNodes.find((n) => n.id === selectedCard) : undefined;
+  const exportCard = selectedNode ? { id: selectedNode.id, title: selectedNode.sp_title } : undefined;
   const openCount = annotations.filter((a) => !a.resolved).length;
   const togglePanel = (panel: "comments" | "activity" | "changes") =>
     setRightPanel(rightPanel === panel ? null : panel);
@@ -773,6 +780,7 @@ export default function App() {
       <ExportMenu
         title={space?.title ?? slug}
         slug={slug}
+        card={exportCard}
         onError={notify}
         onBusy={(message) => setToast(message)}
       />
