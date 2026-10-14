@@ -1,3 +1,5 @@
+import { getStroke } from "perfect-freehand";
+
 /**
  * drawing cards are svg text nodes authored with a pen (#61). strokes append as
  * tagged <path>s so an agent chart stays intact when the human marks it up; the
@@ -5,6 +7,8 @@
  */
 
 export type Point = [number, number];
+/** a pen sample: x, y and pointer pressure in 0..1. */
+export type InkPoint = [number, number, number];
 
 export interface ViewBox {
   x: number;
@@ -17,6 +21,12 @@ export interface Stroke {
   d: string;
   color: string;
   width: number;
+  /**
+   * `d` is a filled perfect-freehand outline rather than a centreline. strokes
+   * drawn before ink are centrelines and stay that way, so old sketches render
+   * exactly as they did.
+   */
+  ink?: boolean;
 }
 
 export const DRAW_WIDTH = 480;
@@ -31,6 +41,7 @@ export const DRAW_COLORS = [
 export const DRAW_WIDTHS = [2, 4, 8] as const;
 
 const STROKE_TAG = 'data-analog-stroke="1"';
+const INK_TAG = 'data-analog-ink="1"';
 const STROKE_PATTERN = String.raw`<path\b[^>]*data-analog-stroke="1"[^>]*\/?>`;
 
 export function emptyDrawing(width = DRAW_WIDTH, height = DRAW_VIEW_H): string {
@@ -62,11 +73,10 @@ export function extractStrokes(svg: string): Stroke[] {
     const tag = match[0];
     const d = attr(tag, "d");
     if (!d) continue;
-    strokes.push({
-      d,
-      color: attr(tag, "stroke") || DRAW_COLORS[0] || "#dfe3ec",
-      width: Number(attr(tag, "stroke-width") || DRAW_WIDTHS[0]) || DRAW_WIDTHS[0] || 2,
-    });
+    const ink = attr(tag, "data-analog-ink") === "1";
+    const width = Number(attr(tag, ink ? "data-analog-width" : "stroke-width") || DRAW_WIDTHS[0]) || DRAW_WIDTHS[0] || 2;
+    const color = attr(tag, ink ? "fill" : "stroke") || DRAW_COLORS[0] || "#dfe3ec";
+    strokes.push(ink ? { d, color, width, ink } : { d, color, width });
   }
   return strokes;
 }
@@ -90,6 +100,10 @@ function escapeAttr(value: string): string {
 }
 
 export function strokeTag(stroke: Stroke): string {
+  if (stroke.ink) {
+    // the nominal width rides along so a re-opened sketch erases with the same slop.
+    return `<path ${STROKE_TAG} ${INK_TAG} class="analog-stroke" fill="${escapeAttr(stroke.color)}" stroke="none" data-analog-width="${stroke.width}" d="${escapeAttr(stroke.d)}"/>`;
+  }
   return `<path ${STROKE_TAG} class="analog-stroke" fill="none" stroke="${escapeAttr(stroke.color)}" stroke-width="${stroke.width}" stroke-linecap="round" stroke-linejoin="round" d="${escapeAttr(stroke.d)}"/>`;
 }
 
@@ -118,8 +132,29 @@ export function pointsToPath(points: Point[]): string {
   return points.map((p, i) => `${i === 0 ? "M" : "L"}${fmt(p[0])} ${fmt(p[1])}`).join("");
 }
 
+/**
+ * a filled outline of a pen stroke, as a closed M/L polygon. `pressure` is false
+ * for a mouse or a finger, which report a flat pressure; perfect-freehand then
+ * thins the line by speed instead. `last` is false while the pen is still down,
+ * so the live end is not tapered.
+ */
+export function inkOutline(points: InkPoint[], width: number, opts: { pressure: boolean; last: boolean }): string {
+  if (points.length === 0) return "";
+  const outline = getStroke(points, {
+    size: width * 1.5,
+    thinning: 0.5,
+    smoothing: 0.5,
+    streamline: 0.5,
+    simulatePressure: !opts.pressure,
+    last: opts.last,
+  });
+  if (outline.length === 0) return "";
+  // M/L only, so parsePathPoints and hitStroke read it like any other stroke.
+  return outline.map((p, i) => `${i === 0 ? "M" : "L"}${fmt(p[0]!)} ${fmt(p[1]!)}`).join("") + "Z";
+}
+
 /** drop points that would not move the pen by a viewBox unit, so a stroke stays small. */
-export function extendStroke(points: Point[], next: Point, minDist = 1.2): Point[] {
+export function extendStroke<P extends Point | InkPoint>(points: P[], next: P, minDist = 1.2): P[] {
   const last = points[points.length - 1];
   if (!last) return [next];
   const dx = next[0] - last[0];

@@ -26,7 +26,7 @@
             npmDeps = pkgs.fetchNpmDeps {
               name = "analog-web-${version}-npm-deps";
               src = ./web;
-              hash = "sha256-JyuhKyIaE8ry9O4EVUU3445PDBQap3gRIBOgQuXv6Ds=";
+              hash = "sha256-jsLIQ+SqpwM+U07kYTXwRlYlfFWEnX8VmWfrqoq9Rvc=";
             };
             npmRoot = "web";
             buildPhase = ''

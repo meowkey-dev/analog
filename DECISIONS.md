@@ -231,6 +231,15 @@ still opens in Obsidian.
   later edit can find them without a second `sp_kind`.
 - **Escape discards, clicking outside commits, ⌘Z undoes a stroke** while the pen
   is down. Analog's own undo then takes the whole edit back after commit.
+- **Ink is perfect-freehand, not tldraw.** tldraw would put a second canvas
+  engine inside a card, and it needs a host-bound licence key in production that
+  a self-hosted server on anyone's domain cannot carry. perfect-freehand is the
+  stroke model tldraw itself uses, MIT and a few KB. A stroke is stored as its
+  filled outline (`data-analog-ink`, `fill`, nominal `data-analog-width`), so the
+  card is still plain SVG an agent can read and any viewer can paint. A stylus
+  sets the thickness by pressure; a mouse or finger reports a flat pressure, so
+  speed stands in for it. Strokes drawn before ink stay centrelines and render
+  as they did.
 
 ## Markdown math (2026-09-02, #68)
 
