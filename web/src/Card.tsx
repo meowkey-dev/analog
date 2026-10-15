@@ -632,3 +632,51 @@ function TextEditor(props: { text: string; onCommit: (text: string) => void; onC
 }
 
 export const Card = memo(CardView);
+
+const noop = () => {};
+
+/**
+ * An html card opened to the full window (#1). It renders through Body, not a
+ * bare frame, so the scroll reporter is injected and the same annotation overlay
+ * sits above it: commenting must not stop at the card's size on the canvas.
+ */
+export function PopOut(props: {
+  node: Node;
+  annotations: Annotation[];
+  annotateMode: boolean;
+  draft: DraftAnnotation | null;
+  selectedAnnotation: string | null;
+  onToggleAnnotate: () => void;
+  onSelectAnnotation: (id: string) => void;
+  onDraft: (draft: DraftAnnotation) => void;
+  onClose: () => void;
+}) {
+  const { node } = props;
+  const bodyRef = useRef<HTMLElement | null>(null);
+  const setBody = useCallback((el: HTMLElement | null) => { bodyRef.current = el; }, []);
+  return (
+    <div className="popout" onClick={props.onClose}>
+      <div className="popout-inner" onClick={(e) => e.stopPropagation()}>
+        <header>
+          <span className="popout-title">{node.sp_title || node.id}</span>
+          <button className={props.annotateMode ? "on" : ""} onClick={props.onToggleAnnotate}
+                  title="Click the card to drop a pin, shift-drag for a region (c)">comment</button>
+          <button onClick={props.onClose}>close</button>
+        </header>
+        <div className="body-zone popout-body">
+          <Body node={node} mdTheme="default" bodyRef={setBody} onHTMLLoad={noop} />
+          <AnnotationOverlay
+            node={node}
+            bodyRef={bodyRef}
+            annotations={props.annotations}
+            active={props.annotateMode}
+            draft={props.draft}
+            selectedId={props.selectedAnnotation}
+            onSelect={props.onSelectAnnotation}
+            onDraft={props.onDraft}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
