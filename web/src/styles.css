@@ -389,7 +389,14 @@ input, textarea, select {
   background: var(--warn); border: 2px solid #1a1206; box-shadow: 0 0 0 2px rgba(224,163,90,.3);
 }
 .pin.rect { border: 2px solid var(--warn); background: rgba(224, 163, 90, .13); border-radius: 4px; }
-.pin.whole { inset: 0; border: 2px dashed var(--warn); border-radius: 8px; background: transparent; }
+/* A whole-card comment covers the card, so only its corner marker takes the
+   pointer: the outline must not swallow clicks meant for the card (an html
+   card's controls) or for a new pin. Clicks on ::before land on the pin. */
+.pin.whole { inset: 0; border: 2px dashed var(--warn); border-radius: 8px; background: transparent; pointer-events: none; }
+.pin.whole::before {
+  content: ""; position: absolute; top: 6px; right: 6px; width: 14px; height: 14px;
+  border-radius: 50%; background: var(--warn); border: 2px solid #1a1206; pointer-events: auto;
+}
 .pin.stale { filter: grayscale(1); opacity: .55; }
 .pin.selected { box-shadow: 0 0 0 3px var(--accent); }
 .pin.draft { border-color: var(--accent); background: rgba(110,168,254,.15); }
