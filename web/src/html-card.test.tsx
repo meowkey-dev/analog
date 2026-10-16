@@ -5,7 +5,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { HTMLCardFrame, serverVendorSource } from "./html-card";
 import { setConnection } from "./api";
-import { withScrollReporter } from "./Card";
+import { PopOut, withScrollReporter } from "./Card";
+import type { Node } from "./api";
 
 describe("HTMLCardFrame", () => {
   it("loads vendor scripts from the connected server in a remote shell", () => {
@@ -38,5 +39,25 @@ describe("HTMLCardFrame", () => {
 
     expect(script?.textContent).toContain("analog-search-result");
     expect(() => new Function(script?.textContent ?? "")).not.toThrow();
+  });
+});
+
+describe("PopOut", () => {
+  const node = { id: "c_1", type: "text", sp_kind: "html", text: "<p>hi</p>", x: 0, y: 0, width: 100, height: 100 } as Node;
+  const render = (annotateMode: boolean) => renderToStaticMarkup(createElement(PopOut, {
+    node, annotations: [], annotateMode, draft: null, selectedAnnotation: null,
+    onToggleAnnotate: () => {}, onSelectAnnotation: () => {}, onDraft: () => {}, onClose: () => {},
+  }));
+
+  it("can be annotated at full window, like the card on the canvas", () => {
+    const html = render(true);
+    expect(html).toContain("annotation-layer active");
+    // Pins track the frame's scroll only if the reporter is injected here too.
+    expect(html).toContain("analog-scroll");
+    expect(html).toContain('sandbox="allow-scripts"');
+  });
+
+  it("leaves the card interactive outside comment mode", () => {
+    expect(render(false)).not.toContain("annotation-layer active");
   });
 });

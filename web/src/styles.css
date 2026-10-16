@@ -389,7 +389,14 @@ input, textarea, select {
   background: var(--warn); border: 2px solid #1a1206; box-shadow: 0 0 0 2px rgba(224,163,90,.3);
 }
 .pin.rect { border: 2px solid var(--warn); background: rgba(224, 163, 90, .13); border-radius: 4px; }
-.pin.whole { inset: 0; border: 2px dashed var(--warn); border-radius: 8px; background: transparent; }
+/* A whole-card comment covers the card, so only its corner marker takes the
+   pointer: the outline must not swallow clicks meant for the card (an html
+   card's controls) or for a new pin. Clicks on ::before land on the pin. */
+.pin.whole { inset: 0; border: 2px dashed var(--warn); border-radius: 8px; background: transparent; pointer-events: none; }
+.pin.whole::before {
+  content: ""; position: absolute; top: 6px; right: 6px; width: 14px; height: 14px;
+  border-radius: 50%; background: var(--warn); border: 2px solid #1a1206; pointer-events: auto;
+}
 .pin.stale { filter: grayscale(1); opacity: .55; }
 .pin.selected { box-shadow: 0 0 0 3px var(--accent); }
 .pin.draft { border-color: var(--accent); background: rgba(110,168,254,.15); }
@@ -397,7 +404,7 @@ input, textarea, select {
 
 .composer {
   position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
-  width: min(520px, 92vw); z-index: 60;
+  width: min(520px, 92vw); z-index: 72; /* above a full-window card */
   background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
   padding: 10px; box-shadow: 0 12px 40px rgba(0,0,0,.5);
   display: flex; flex-direction: column; gap: 8px;
@@ -413,7 +420,7 @@ input, textarea, select {
 .composer textarea { min-height: 72px; resize: vertical; }
 .composer-foot { display: flex; gap: 8px; align-items: center; }
 .composer-foot .hint { flex: 1; color: var(--dim); font-size: 11px; }
-.link-composer { z-index: 61; }
+.link-composer { z-index: 73; }
 .composer-foot select { flex: 1; }
 
 .swatches { display: flex; gap: 6px; align-items: center; }
@@ -514,13 +521,12 @@ input, textarea, select {
   background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
   display: flex; flex-direction: column; overflow: hidden;
 }
-.popout-inner header { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+.popout-inner header { display: flex; gap: 8px; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+.popout-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Keep a full-window HTML card readable on a wide display without reaching into
-   or restyling its sandboxed document (#82). */
-.popout-inner iframe {
-  flex: 1; width: min(1200px, 100%); align-self: center;
-  border: none; border-inline: 1px solid var(--line); background: #fff;
-}
+   or restyling its sandboxed document (#82). The zone, not the frame, is sized:
+   the annotation overlay must cover exactly the frame. */
+.popout-body { width: min(1200px, 100%); align-self: center; border-inline: 1px solid var(--line); }
 
 .toast {
   position: fixed; left: 50%; top: 56px; transform: translateX(-50%);

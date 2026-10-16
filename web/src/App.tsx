@@ -11,7 +11,7 @@ import { ExportMenu } from "./ExportMenu";
 import { acceptFile, cardSizeForFile, FILE_CASCADE, isFileDrag, MEDIA_ACCEPT, titleOf } from "./upload";
 import { Connect, adopt, attempt, type Connected } from "./Connect";
 import { clearConnection, describe, loadConnection } from "./connection";
-import { HTMLCardFrame } from "./html-card";
+import { PopOut } from "./Card";
 import { Reader } from "./Reader";
 import { Changes } from "./Changes";
 import { endOfBoard, type ReadingOrder } from "./reading-order";
@@ -665,6 +665,11 @@ export default function App() {
         setMenuOpen(false);
         setQuickOpen(false);
       }
+      // A full-window card covers the board: only commenting reaches through it.
+      if (popOut) {
+        if (event.key === "c" && !event.metaKey && !event.ctrlKey) setAnnotateMode((on) => !on);
+        return;
+      }
       if (event.key === "r" && !event.metaKey && !event.ctrlKey && !event.altKey) {
         switchView(view === "reader" ? "canvas" : "reader");
         return;
@@ -737,6 +742,15 @@ export default function App() {
   }
 
   const draftCard = draft ? canvas.nodes.find((n) => n.id === draft.cardId) : null;
+  // Follow the live card, so an edit landing while it is open shows up there too.
+  const popOutNode = popOut ? liveNodes.find((n) => n.id === popOut.id) ?? popOut : null;
+  const popOutPins = popOutNode
+    ? annotations.filter((a) => a.card_id === popOutNode.id && !a.resolved) : [];
+  // The reader has no pins, so comment mode opened for the popout ends with it.
+  const closePopOut = () => {
+    setPopOut(null);
+    if (view === "reader") setAnnotateMode(false);
+  };
   // Export follows the selection, but only on the canvas: it snapshots the
   // canvas DOM, and the reader does not render the board there.
   // liveNodes, not canvas.nodes: a card someone else deleted stays in the
@@ -1017,16 +1031,18 @@ export default function App() {
         />
       )}
 
-      {popOut && (
-        <div className="popout" onClick={() => setPopOut(null)}>
-          <div className="popout-inner" onClick={(e) => e.stopPropagation()}>
-            <header>
-              {popOut.sp_title || popOut.id}
-              <button onClick={() => setPopOut(null)}>close</button>
-            </header>
-            <HTMLCardFrame srcDoc={popOut.text ?? ""} title={popOut.sp_title ?? popOut.id} />
-          </div>
-        </div>
+      {popOutNode && (
+        <PopOut
+          node={popOutNode}
+          annotations={popOutPins}
+          annotateMode={annotateMode}
+          draft={draft}
+          selectedAnnotation={selectedAnnotation}
+          onToggleAnnotate={() => setAnnotateMode((on) => !on)}
+          onSelectAnnotation={setSelectedAnnotation}
+          onDraft={setDraft}
+          onClose={closePopOut}
+        />
       )}
 
       {commander && (
