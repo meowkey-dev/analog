@@ -143,9 +143,10 @@ beats above are the content, the shape is the arrangement:
   number leads.
 - **Comparison** when the human's real question is "which", or when two things
   are confusable and the confusion is the obstacle. Same slots, same order.
-- **Diagram** (`svg`) for anything with parts and arrows — flow, state,
-  structure, dependency. It is sanitized, it renders on the card ground, and
-  the human can draw on it.
+- **Diagram** for anything with parts and arrows — flow, state, structure,
+  dependency. A ` ```mermaid ` fence in an `md` card when it is a standard
+  diagram; hand-written `svg` when it is not, or when the human should draw
+  on it.
 
 A concept card with no number and no parts is still an ELI5 with a picture,
 never a wall of prose. "There is nothing to draw" almost always means the
@@ -155,7 +156,8 @@ mechanism is not yet understood well enough to explain.
 
 The last card is where the human does the work:
 
-- **The whole route**, as one `svg`: the rungs, the concepts, the dependencies.
+- **The whole route**, as one diagram — a mermaid flowchart usually fits: the
+  rungs, the concepts, the dependencies.
 - **Three to five explain-back prompts.** "Without looking, tell me why X
   happens." These are the actual assessment.
 - **The stall points.** The three places you expect them to dry up, each with

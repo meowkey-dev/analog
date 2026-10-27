@@ -9,6 +9,7 @@ import { api, getConnection, resolveUrl } from "./api";
 import type { Annotation, Node } from "./api";
 import { HTMLCardFrame } from "./html-card";
 import { mdRemarkPlugins, mdRehypePlugins } from "./markdown";
+import { mdComponents } from "./mermaid";
 import { clearTextRange, findTextRanges, selectTextRange } from "./card-search";
 import { downloadText, fileStem, svgFileText } from "./export";
 import "katex/dist/katex.min.css";
@@ -77,7 +78,7 @@ const RESIZE_DIRS: ResizeDir[] = ["n", "s", "e", "w", "ne", "nw", "se", "sw"];
 /**
  * Renders one card body by sp_kind (SPEC §5).
  *
- *   plain -> <pre>            md -> react-markdown + KaTeX (#68)
+ *   plain -> <pre>            md -> react-markdown + KaTeX (#68) + Mermaid via Pele
  *   svg   -> inlined, sanitized; double-click / ✎ opens a pen (#61), not a textarea
  *   html  -> <iframe sandbox="allow-scripts"> with NO allow-same-origin, so agent
  *            HTML can neither read the parent document nor forge an annotation.
@@ -111,7 +112,7 @@ export const Body = memo(function Body({ node, mdTheme, bodyRef, onHTMLLoad }: {
     case "md":
       return (
         <div ref={bodyRef} className={`card-body md md-theme-${mdTheme}`}>
-          <Markdown remarkPlugins={mdRemarkPlugins} rehypePlugins={mdRehypePlugins}>{node.text ?? ""}</Markdown>
+          <Markdown remarkPlugins={mdRemarkPlugins} rehypePlugins={mdRehypePlugins} components={mdComponents}>{node.text ?? ""}</Markdown>
         </div>
       );
     case "svg":

@@ -433,7 +433,19 @@ export async function waitForExportResources(root: ParentNode): Promise<void> {
     }
     waits.push(withTimeout(waitForLoad(element)));
   });
+  // A Mermaid block still loading its Pele chunk shows source; snapshotting then
+  // would export the code block instead of the diagram.
+  if (root.querySelector("[data-mermaid-pending]")) waits.push(diagramsSettled(root));
   await Promise.all(waits);
+}
+
+function diagramsSettled(root: ParentNode): Promise<void> {
+  const deadline = Date.now() + RESOURCE_TIMEOUT;
+  return new Promise((resolve) => {
+    const poll = () => (root.querySelector("[data-mermaid-pending]") && Date.now() < deadline
+      ? setTimeout(poll, 50) : resolve());
+    poll();
+  });
 }
 
 /** Wait for the readiness marker in a freshly opened print window. */

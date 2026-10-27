@@ -56,9 +56,12 @@ annotations are how the human tracks what you've ignored.
 
 - **One idea per card.** A wall of text in a single card cannot be annotated
   usefully, which defeats the point.
-- Markdown cards render GFM and LaTeX (`$...$`, `$$...$$`). Use `--kind html`
-  or `--kind svg` for anything visual — it renders, and the human can pin
-  comments on specific regions of it.
+- Markdown cards render GFM, LaTeX (`$...$`, `$$...$$`) and Mermaid
+  (a ` ```mermaid ` fence). Mermaid is the quickest route to a flow,
+  sequence, state, class or ER diagram: the layout is done for you and the
+  card stays readable text. Use `--kind html` or `--kind svg` for anything
+  else visual — it renders, and the human can pin comments on specific
+  regions of it.
 - Before writing an `html` or `svg` card, read `STYLE.md` next to this file.
   It is the card flavour that reviews well — infographic, ELI5, comparison,
   diagram — and what the sandbox forces: paint your own colours, real text
