@@ -713,6 +713,43 @@ the fence natively) all read.
   `prefers-reduced-motion: reduce` every animation and transition is off, and
   frames swap with no fade.
 
+## Comment by selecting (2026-10-27, #125)
+
+- **Selecting text is the default way to comment; comment mode stays for the
+  rest.** A selection on an `md`, `plain` or `html` card offers a Comment button
+  when the gesture ends, with no mode to enter. Points and shift-drag regions
+  keep comment mode, since images and charts have no text to select. Modelled
+  on claude.ai Artifacts, whose comment layer anchors to a selection or a
+  clicked element; the probe that showed how is summarised in #125.
+- **A selection is stored as the shapes we already had.** Its bounding box
+  becomes a `rect` selector over the content region and its text the quote in
+  the body, exactly as a shift-drag region with a captured quote. No contract
+  change, and agents read it the way they read any quoted region. Artifacts
+  stores a CSS element path instead; we keep fractions, because they survive
+  the card scrolling and `card_rev` already tells us when content moved under
+  them, whereas Artifacts re-points a positional path at the wrong element
+  after a republish.
+- **The html bridge reports a selection out, nothing comes in but clear and
+  scroll.** The script injected into html cards (#23) posts the selection's
+  text and box when a mouse, touch or shift-key gesture ends, and answers two
+  requests: drop its selection, and scroll to a pin. It still grants the frame
+  nothing: a forged report can only offer a button the human has to press.
+- **The button appears when the gesture ends, not on `selectionchange`.** A
+  button that chases the pointer mid-drag is noise. A gesture counts only if it
+  began in the card body, so the in-card search, which selects its matches,
+  never offers one.
+- **A region on a text card draws as a highlight; only its marker takes the
+  pointer.** It covers the text it is about, so a clickable band would stop
+  that text from being selected again or an html card's controls from being
+  used. On image and svg cards it stays an outlined box.
+- **The composer opens beside the gesture, and Enter sends.** Shift-Enter is
+  the line break; an IME's Enter only commits its candidate. On a phone the
+  composer stays docked at the bottom, where the keyboard does not hide it.
+  `motivation` became three chips, so the choice is visible before sending.
+- **The list and the highlights point at each other.** Choosing a comment in
+  the list scrolls its card's body to the pin; clicking a highlight's marker
+  opens the list on its entry (not on a phone, where the list is a sheet).
+
 ## Toolchain
 
 - Go **1.23+**. `CGO_ENABLED=0` everywhere.

@@ -9,7 +9,11 @@ import { isPending } from "./optimistic";
  * html card's iframe. Because the iframe is sandboxed without allow-same-origin,
  * agent HTML can neither read the annotations nor forge one. The overlay only
  * accepts pointer events while annotate mode is on, so cards stay interactive
- * the rest of the time.
+ * the rest of the time — and text stays selectable, which is how most comments
+ * start (#125): selecting text offers a Comment button, with no mode to enter.
+ * A selection becomes an ordinary rect selector plus its quote, so the wire
+ * shape is unchanged; points and regions stay in comment mode, for images and
+ * charts where there is no text to select.
  *
  * Selectors are fractions of the card's *content*, not the visible box (issue #23),
  * so a pin stays on the words it was placed on when the body scrolls. The overlay
@@ -37,7 +41,25 @@ export interface DraftAnnotation {
   quote?: string;
   /** What the composer starts with: the words of a save that failed (#127). */
   body?: string;
+  /** Where the gesture ended, client px: the composer opens beside it. */
+  at?: { x: number; y: number };
+  /** Made from a text selection rather than a pin or a dragged region. */
+  fromSelection?: boolean;
 }
+
+/** A text selection on one card, waiting for its Comment button to be pressed. */
+interface PendingSelection {
+  selector: Exclude<Selector, null | { type: "point" }>;
+  quote: string;
+}
+
+/**
+ * One selection at a time across every card. A parent-rendered card loses its
+ * selection when another is made, but each html card is its own document and
+ * keeps one: the overlay that takes the selection announces it so the others
+ * drop theirs.
+ */
+const SELECTION_OWNER = "analog-selection-owner";
 
 interface OverlayProps {
   node: Node;
@@ -62,6 +84,39 @@ function toContent(frac: { x: number; y: number }, m: ScrollMetrics | null): { x
     y: clamp01((frac.y * vh + (m?.sy ?? 0)) / ch),
   };
 }
+
+/**
+ * A selection's bounding box, as fractions of the visible box, becomes a rect
+ * selector over the content — the same shape a shift-drag region produces.
+ */
+export function selectionSelector(
+  view: { x: number; y: number; w: number; h: number },
+  m: ScrollMetrics | null,
+): PendingSelection["selector"] {
+  const a = toContent({ x: view.x, y: view.y }, m);
+  const b = toContent({ x: view.x + view.w, y: view.y + view.h }, m);
+  return { type: "rect", x: a.x, y: a.y, w: b.x - a.x, h: b.y - a.y };
+}
+
+/**
+ * Where the Comment button sits: just under the selection's end, kept inside
+ * the visible box so a selection that runs off the bottom still offers it.
+ */
+export function selectionButtonStyle(
+  s: { x: number; y: number; w: number; h: number },
+  m: ScrollMetrics | null,
+): React.CSSProperties {
+  if (!m) return { left: `${(s.x + s.w) * 100}%`, top: `${(s.y + s.h) * 100}%` };
+  const left = (s.x + s.w) * m.cw - m.sx;
+  const top = (s.y + s.h) * m.ch - m.sy + 4;
+  return {
+    left: Math.min(Math.max(left, 72), m.vw - 4),
+    top: Math.min(Math.max(top, 4), m.vh - 30),
+  };
+}
+
+const reducedMotion = () =>
+  typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 /**
  * Map a content-relative selector to inline position styles. Point selectors
@@ -118,12 +173,93 @@ export function AnnotationOverlay(props: OverlayProps) {
   const { node, annotations, active, draft, selectedId, bodyRef } = props;
   const [rect, setRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const [metrics, setMetrics] = useState<ScrollMetrics | null>(null);
+  const [pending, setPending] = useState<PendingSelection | null>(null);
+  const layerRef = useRef<HTMLDivElement>(null);
   // Handlers fire between renders; the mirrors are what they read.
   const metricsRef = useRef<ScrollMetrics | null>(null);
   const draftRef = useRef<DraftAnnotation | null>(draft);
   draftRef.current = draft;
 
   const kind = node.type === "file" ? "file" : (node.sp_kind ?? "plain");
+  // Text kinds read a region as a passage, so it draws as a highlight; on an
+  // image or a drawing it stays an outlined box.
+  const highlights = kind === "md" || kind === "plain" || kind === "html";
+
+  // Holding a selection claims it; any other card's is dropped.
+  const offer = (next: PendingSelection | null) => {
+    setPending(next);
+    if (next) window.dispatchEvent(new CustomEvent(SELECTION_OWNER, { detail: node.id }));
+  };
+
+  useEffect(() => {
+    const onOwner = (event: Event) => {
+      if ((event as CustomEvent<string>).detail === node.id) return;
+      setPending(null);
+      const el = bodyRef.current;
+      if (el instanceof HTMLIFrameElement) {
+        el.contentWindow?.postMessage({ type: "analog-selection-clear" }, "*");
+      }
+    };
+    window.addEventListener(SELECTION_OWNER, onOwner);
+    return () => window.removeEventListener(SELECTION_OWNER, onOwner);
+  }, [bodyRef, node.id]);
+
+  // Parent-rendered text is selected in this document. The button is offered
+  // when the gesture ends, not on every selectionchange, so it does not chase
+  // the pointer mid-drag; only a gesture that began in this body counts, so
+  // the in-card search, which selects its matches, never offers one.
+  // The body is looked up per event: it remounts when the card toggles to its
+  // diff and back, and a listener bound to the old element would go deaf.
+  useEffect(() => {
+    if (kind === "file") return;
+    const body = () => {
+      const el = bodyRef.current;
+      return el && !(el instanceof HTMLIFrameElement) ? el : null;
+    };
+    let armed = false;
+    const arm = (event: PointerEvent) => {
+      armed = Boolean(body()?.contains(event.target as globalThis.Node));
+    };
+    const settle = () => {
+      if (!armed) return;
+      armed = false;
+      // After the click that ends a selection has been applied to it.
+      setTimeout(() => {
+        const el = body();
+        const layer = layerRef.current;
+        const sel = window.getSelection();
+        if (!el || !layer || !sel || sel.isCollapsed || !sel.rangeCount) return offer(null);
+        const range = sel.getRangeAt(0);
+        const quote = cleanQuote(sel.toString());
+        if (!quote || !el.contains(range.commonAncestorContainer)) return offer(null);
+        const box = layer.getBoundingClientRect();
+        const r = range.getBoundingClientRect();
+        if (!box.width || !box.height) return offer(null);
+        offer({
+          quote,
+          selector: selectionSelector({
+            x: (r.left - box.left) / box.width, y: (r.top - box.top) / box.height,
+            w: r.width / box.width, h: r.height / box.height,
+          }, metricsRef.current),
+        });
+      }, 0);
+    };
+    const onChange = () => {
+      const el = body();
+      if (!el) return; // an html card's selection is its frame's to report
+      const sel = window.getSelection();
+      if (!sel || sel.isCollapsed || !sel.rangeCount ||
+          !el.contains(sel.getRangeAt(0).commonAncestorContainer)) setPending(null);
+    };
+    document.addEventListener("pointerdown", arm, true);
+    document.addEventListener("pointerup", settle);
+    document.addEventListener("selectionchange", onChange);
+    return () => {
+      document.removeEventListener("pointerdown", arm, true);
+      document.removeEventListener("pointerup", settle);
+      document.removeEventListener("selectionchange", onChange);
+    };
+  }, [bodyRef, kind, node.id]);
 
   useEffect(() => {
     const el = bodyRef.current;
@@ -148,6 +284,25 @@ export function AnnotationOverlay(props: OverlayProps) {
           };
           metricsRef.current = next;
           setMetrics(next);
+          return;
+        }
+        // An html card's selection, reported from inside its sandbox in the
+        // frame's own px; the frame's visible extent turns them into fractions.
+        // A forged one can only offer a button the human then has to press.
+        if (d.type === "analog-selection") {
+          const m = metricsRef.current;
+          const text = typeof d.text === "string" ? cleanQuote(d.text) : "";
+          if (!text || !m?.vw || !m.vh) {
+            setPending(null);
+            return;
+          }
+          offer({
+            quote: text,
+            selector: selectionSelector({
+              x: Number(d.vx) / m.vw, y: Number(d.vy) / m.vh,
+              w: Number(d.vw) / m.vw, h: Number(d.vh) / m.vh,
+            }, m),
+          });
           return;
         }
         if (d.type === "analog-quote" && typeof d.text === "string" && d.text) {
@@ -178,6 +333,46 @@ export function AnnotationOverlay(props: OverlayProps) {
       ro.disconnect();
     };
   }, [bodyRef, node.id, kind]);
+
+  // Choosing a comment elsewhere (the list, a thread) brings its pin into view
+  // inside the card, not just the card onto the screen.
+  useEffect(() => {
+    const target = annotations.find((a) => a.id === selectedId)?.selector;
+    const el = bodyRef.current;
+    const m = metricsRef.current;
+    if (!target || !el || !m || m.ch <= m.vh) return;
+    const y = target.y * m.ch;
+    const bottom = target.type === "rect" ? (target.y + target.h) * m.ch : y;
+    if (y >= m.sy && bottom <= m.sy + m.vh) return;
+    const top = Math.max(0, y - m.vh / 3);
+    const behavior: ScrollBehavior = reducedMotion() ? "auto" : "smooth";
+    if (el instanceof HTMLIFrameElement) {
+      el.contentWindow?.postMessage(
+        { type: "analog-scroll-to", sx: m.sx, sy: top, smooth: behavior === "smooth" }, "*");
+    } else if (typeof el.scrollTo === "function") {
+      el.scrollTo({ top, behavior });
+    }
+    // Only a change of selection scrolls; a scroll must not re-trigger it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId]);
+
+  const takeSelection = (event: React.MouseEvent) => {
+    if (!pending) return;
+    offer(null);
+    props.onDraft({
+      cardId: node.id,
+      selector: pending.selector,
+      quote: pending.quote,
+      at: { x: event.clientX, y: event.clientY },
+      fromSelection: true,
+    });
+    const el = bodyRef.current;
+    if (el instanceof HTMLIFrameElement) {
+      el.contentWindow?.postMessage({ type: "analog-selection-clear" }, "*");
+    } else {
+      window.getSelection()?.removeAllRanges();
+    }
+  };
 
   const fracIn = (box: DOMRect, clientX: number, clientY: number) => ({
     x: Math.min(1, Math.max(0, (clientX - box.left) / box.width)),
@@ -216,7 +411,7 @@ export function AnnotationOverlay(props: OverlayProps) {
     // Shift-drag draws a rect; a plain click drops a point.
     if (!event.shiftKey) {
       const selector: Selector = { type: "point", ...start };
-      props.onDraft(attachQuote({ cardId: node.id, selector },
+      props.onDraft(attachQuote({ cardId: node.id, selector, at: { x: event.clientX, y: event.clientY } },
         new DOMRect(event.clientX - 1, event.clientY - 1, 2, 2)));
       return;
     }
@@ -251,7 +446,8 @@ export function AnnotationOverlay(props: OverlayProps) {
         Math.abs(endFrac.x - startFrac.x) * upBox.width,
         Math.abs(endFrac.y - startFrac.y) * upBox.height,
       );
-      props.onDraft(attachQuote({ cardId: node.id, selector }, quoteTarget));
+      props.onDraft(attachQuote(
+        { cardId: node.id, selector, at: { x: upEvent.clientX, y: upEvent.clientY } }, quoteTarget));
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
@@ -265,7 +461,7 @@ export function AnnotationOverlay(props: OverlayProps) {
   ];
 
   return (
-    <div className={`annotation-layer${active ? " active" : ""}`} onPointerDown={onPointerDown}>
+    <div ref={layerRef} className={`annotation-layer${active ? " active" : ""}`} onPointerDown={onPointerDown}>
       {pins.map(({ annotation, selector }, index) => {
         if (!selector) {
           return annotation ? (
@@ -291,11 +487,28 @@ export function AnnotationOverlay(props: OverlayProps) {
                style={pinStyle({ x: selector.x, y: selector.y }, metrics)}
                title={annotation?.body ?? "new comment"} onPointerDown={onDown} />
         ) : (
-          <div key={key} className={`pin rect ${classes}`}
+          // A highlight covers the very text it is about, so outside comment
+          // mode only its marker takes the pointer: the text under it stays
+          // selectable and an html card's controls stay clickable.
+          <div key={key} className={`pin rect${highlights ? " highlight" : ""} ${classes}`}
                style={pinStyle(selector, metrics)}
-               title={annotation?.body ?? "new comment"} onPointerDown={onDown} />
+               title={annotation?.body ?? "new comment"} onPointerDown={onDown}
+               data-annotation-id={annotation?.id}>
+            {annotation && <span className="pin-marker" title={annotation.body} onPointerDown={onDown} />}
+          </div>
         );
       })}
+      {pending && !active && !(draft && draft.cardId === node.id) && (
+        <button type="button" className="selection-comment"
+                style={selectionButtonStyle(pending.selector, metrics)}
+                title="Comment on the selected text"
+                // Pressing must not collapse the selection it is about to quote.
+                onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={takeSelection}>
+          Comment
+        </button>
+      )}
       {rect && (
         <div className="pin rect draft"
              style={{
@@ -307,7 +520,33 @@ export function AnnotationOverlay(props: OverlayProps) {
   );
 }
 
-/** The composer that appears once a pin has been dropped. */
+const MOTIVATIONS: { id: Motivation; hint: string }[] = [
+  { id: "commenting", hint: "context, no action" },
+  { id: "assessing", hint: "a verdict" },
+  { id: "editing", hint: "an instruction" },
+];
+
+const COMPOSER_W = 440;
+const COMPOSER_H = 230;
+
+/**
+ * Beside the gesture that made the draft: below it where there is room, else
+ * above, and always on screen. Null leaves the composer docked at the bottom,
+ * which is also where it stays on a phone.
+ */
+export function composerPosition(
+  at: { x: number; y: number } | undefined,
+  viewport: { w: number; h: number },
+): { left: number; top: number } | null {
+  if (!at || viewport.w <= 760) return null;
+  const w = Math.min(COMPOSER_W, viewport.w - 16);
+  const left = Math.min(Math.max(at.x - 24, 8), viewport.w - w - 8);
+  const below = at.y + 14;
+  const top = below + COMPOSER_H <= viewport.h - 8 ? below : Math.max(8, at.y - COMPOSER_H - 14);
+  return { left, top };
+}
+
+/** The composer that appears once a pin has been dropped or text selected. */
 export function AnnotationComposer(props: {
   draft: DraftAnnotation;
   cardTitle: string;
@@ -319,18 +558,24 @@ export function AnnotationComposer(props: {
   const [motivation, setMotivation] = useState<Motivation>("commenting");
   const where = props.draft.selector === null
     ? "whole card"
+    : props.draft.fromSelection ? "selected text"
     : props.draft.selector.type === "point" ? "a point" : "a region";
   const quote = props.draft.quote;
   // The quote travels in the body: agents read bodies, and no client needs to
   // learn a new field. The human sees exactly what will be sent.
   const withQuote = (text: string) => (quote ? `> ${quote}\n\n${text}` : text);
+  const submit = () => {
+    if (body.trim()) props.onSubmit(withQuote(body.trim()), motivation);
+  };
+  const place = composerPosition(props.draft.at, { w: window.innerWidth, h: window.innerHeight });
 
   return (
     <form
-      className="composer"
+      className={`composer${place ? " anchored" : ""}`}
+      style={place ?? undefined}
       onSubmit={(event) => {
         event.preventDefault();
-        if (body.trim()) props.onSubmit(withQuote(body.trim()), motivation);
+        submit();
       }}
     >
       <div className="composer-head">
@@ -347,19 +592,28 @@ export function AnnotationComposer(props: {
                 onChange={(e) => setBody(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Escape") props.onCancel();
-                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && body.trim()) {
-                    props.onSubmit(withQuote(body.trim()), motivation);
+                  // Enter sends, as in a chat; Shift-Enter is the line break. An
+                  // IME's Enter only commits its candidate.
+                  if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                    e.preventDefault();
+                    submit();
                   }
                 }} />
       <div className="composer-foot">
-        <select value={motivation} onChange={(e) => setMotivation(e.target.value as Motivation)}>
-          <option value="commenting">commenting — context, no action</option>
-          <option value="assessing">assessing — a verdict</option>
-          <option value="editing">editing — an instruction</option>
-        </select>
+        <div className="motivation-chips" role="radiogroup" aria-label="Kind of comment">
+          {MOTIVATIONS.map((m) => (
+            <button key={m.id} type="button" role="radio" aria-checked={motivation === m.id}
+                    className={`chip ${m.id}${motivation === m.id ? " on" : ""}`}
+                    title={`${m.id} — ${m.hint}`}
+                    onClick={() => setMotivation(m.id)}>
+              {m.id}
+            </button>
+          ))}
+        </div>
         <button type="button" className="ghost" onClick={props.onCancel}>Cancel</button>
         <button type="submit" disabled={!body.trim()}>Comment</button>
       </div>
+      <div className="composer-hint">Enter to comment · Shift-Enter for a new line · Esc to cancel</div>
     </form>
   );
 }
@@ -377,7 +631,19 @@ export function AnnotationPanel(props: {
   onClose?: () => void;
 }) {
   const [replies, setReplies] = useState<Record<string, string>>({});
+  const listRef = useRef<HTMLUListElement>(null);
   const shown = props.annotations.filter((a) => props.showResolved || !a.resolved);
+
+  // A comment chosen on a card is brought into view here, the other half of
+  // the list → pin link.
+  useEffect(() => {
+    if (!props.selectedId) return;
+    const item = Array.from(listRef.current?.querySelectorAll<HTMLElement>("[data-annotation-id]") ?? [])
+      .find((el) => el.dataset.annotationId === props.selectedId);
+    if (item && typeof item.scrollIntoView === "function") {
+      item.scrollIntoView({ block: "nearest", behavior: reducedMotion() ? "auto" : "smooth" });
+    }
+  }, [props.selectedId]);
 
   return (
     <div className="panel comments-panel">
@@ -393,10 +659,10 @@ export function AnnotationPanel(props: {
           )}
         </span>
       </header>
-      {shown.length === 0 && <p className="empty">No comments yet. Turn on comment mode and click a card.</p>}
-      <ul>
+      {shown.length === 0 && <p className="empty">No comments yet. Select text on a card to comment on it, or use comment mode to pin a point.</p>}
+      <ul ref={listRef}>
         {shown.map((a) => (
-          <li key={a.id}
+          <li key={a.id} data-annotation-id={a.id}
               className={`comment${a.resolved ? " resolved" : ""}${a.stale ? " stale" : ""}${props.selectedId === a.id ? " selected" : ""}${isPending(a) ? " pending" : ""}`}
               onClick={() => props.onSelect(a.id)}>
             <div className="comment-head">
