@@ -19,8 +19,10 @@ const Instructions = `A shared canvas you and a human both write to.
 Call get_feedback(slug) at the start of every turn: it returns exactly what the
 human changed, already diffed. Nothing back means nothing changed.
 
-One idea per card — a wall of text cannot be annotated usefully. Use kind="html"
-or kind="svg" for anything visual; the human can pin comments on regions of it.
+One idea per card — a wall of text cannot be annotated usefully. kind="md"
+renders GFM, $TeX$ and ` + "```mermaid" + ` fences: use mermaid for flow, sequence,
+state, class and ER diagrams. Use kind="html" or kind="svg" for anything else
+visual; the human can pin comments on regions of it.
 Always label links. Set geometry when your card needs a deliberate size or position,
 but don't rearrange cards the human positioned. Don't edit or delete the human's
 cards, and don't resolve annotations you haven't acted on.

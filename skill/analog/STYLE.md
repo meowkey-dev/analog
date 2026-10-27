@@ -56,11 +56,19 @@ Pick the shape from the idea:
   with a source line: the human is reviewing, and will ask where it came from.
 - **Comparison.** Every option gets the same slots in the same order, so the
   eye can move across rows. Same edges, same baselines, same inner padding.
-- **Diagram.** Prefer `--kind svg`. It is sanitized (no scripts, no external
-  references), inlined on the dark card ground rather than on white, and the
-  human can draw on it. Give it a `viewBox`, an explicit fill on every shape,
-  `<text>` for every label, and leave room inside the viewBox for the
-  outermost labels.
+- **Diagram.** Boxes and arrows — flow, sequence, state, class, ER, gantt —
+  go in a ` ```mermaid ` fence in an `md` card. Layout is done for you, the
+  diagram takes the card's markdown theme, and a revision is a text edit
+  rather than redrawn coordinates. Size the card for the picture (`--width
+  480 --height 360` or more); the diagram scales down to fit, and at the
+  default 320×200 its labels get small. A sentence above or below the fence
+  says what the reader should see in it. Hand-write `--kind svg` when the
+  picture is not a standard diagram (a spatial layout, an annotated mockup,
+  a bespoke chart) or the human should draw on it. An svg card is sanitized
+  (no scripts, no external references), inlined on the dark card ground
+  rather than on white, and the human can draw on it. Give it a `viewBox`,
+  an explicit fill on every shape, `<text>` for every label, and leave room
+  inside the viewBox for the outermost labels.
 
 Split when parts could get different verdicts. Three linked cards with
 labelled edges review better than one long page; one card with three regions

@@ -267,6 +267,22 @@ input, textarea, select {
   overflow-x: auto;
   overflow-y: hidden;
 }
+/* Mermaid diagrams take their palette from the markdown theme, so a theme change
+   repaints them without a re-render. --pele-bg masks lines under edge labels. */
+.card-body.md .mermaid .pele {
+  --pele-bg: var(--md-bg, var(--card));
+  --pele-fg: var(--md-ink, var(--ink));
+  --pele-muted: var(--md-quote-ink, var(--dim));
+  --pele-line: var(--md-quote-ink, var(--dim));
+  --pele-surface: var(--md-code-bg, #12151c);
+  --pele-surface-alt: var(--md-rule, var(--line));
+  --pele-border: var(--md-quote, var(--dim));
+  --pele-accent: var(--md-link, var(--accent));
+  --pele-error: var(--danger);
+}
+.card-body.md .mermaid { margin: .6em 0; overflow-x: auto; }
+.card-body.md .mermaid svg { display: block; margin: 0 auto; max-width: 100%; height: auto; }
+.card-body.md .mermaid-error { color: var(--danger); font-size: .85em; white-space: pre-wrap; }
 
 .md-theme-nord {
   --md-bg: #2e3440; --md-ink: #d8dee9; --md-head: #88c0d0; --md-link: #81a1c1;

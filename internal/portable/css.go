@@ -65,6 +65,8 @@ body { min-height: 100vh; }
 .card-body.md ul, .card-body.md ol { margin: .4em 0; padding-left: 1.2em; }
 .card-body.md code { background: #12151c; padding: 1px 4px; border-radius: 4px; }
 .card-body.md pre { background: #12151c; padding: 8px; border-radius: 6px; overflow: auto; }
+.card-body.md img.mermaid { display: block; margin: .6em auto; max-width: 100%; height: auto; }
+.card-body.md .mermaid-error { color: #e06c75; font-size: .85em; white-space: pre-wrap; }
 .card-foot {
   display: flex; justify-content: space-between; flex: none;
   font-size: 10px; color: var(--dim);

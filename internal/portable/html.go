@@ -18,6 +18,7 @@ import (
 
 	"github.com/meowkey-dev/analog/client"
 	"github.com/meowkey-dev/analog/internal/chartlib"
+	"github.com/meowkey-dev/analog/internal/diagramlib"
 )
 
 const pad = 48.0
@@ -45,11 +46,13 @@ func HTML(canvas client.Canvas, opt Options) (string, error) {
 
 	var world strings.Builder
 	world.WriteString(renderLinks(canvas.Edges, nodes, minX, minY, width, height))
+	diagrams := false
 	for _, node := range nodes {
 		body, err := renderBody(node, opt.Fetch)
 		if err != nil {
 			return "", err
 		}
+		diagrams = diagrams || (kindOf(node) == "md" && diagramlib.Uses(body))
 		world.WriteString(renderCard(node, body))
 	}
 
@@ -89,7 +92,11 @@ func HTML(canvas client.Canvas, opt Options) (string, error) {
 	fmt.Fprintf(&b, "<div class=\"world\" style=\"transform:translate(%spx,%spx)\">",
 		px(pad-minX), px(pad-minY))
 	b.WriteString(world.String())
-	b.WriteString("</div></div></body></html>\n")
+	b.WriteString("</div></div>")
+	if diagrams {
+		b.WriteString(diagramlib.Script())
+	}
+	b.WriteString("</body></html>\n")
 	return b.String(), nil
 }
 
