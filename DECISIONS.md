@@ -649,6 +649,42 @@ agent runtime.
   Loopback CORS entry above decided. The `+` form exists because "allow one more
   origin" was quietly also "cut off every desktop app".
 
+## Mermaid diagrams (2026-10-27)
+
+Agents draw boxes and arrows far more reliably as Mermaid than as hand-placed
+SVG coordinates. Same call as math (#68): a ` ```mermaid ` fence in an `md` card
+is a renderer plugin, not a new `sp_kind`, so the contract is untouched and the
+card text stays source that diff, the editor, agents and Obsidian (which renders
+the fence natively) all read.
+
+- **Pele, not mermaid.js.** [Pele](https://pele.run) (Obsidian, MIT) covers the
+  Mermaid 12.1 syntax, is synchronous, has no dependencies and paints with
+  `--pele-*` CSS variables. Those map onto the markdown theme vars, so
+  nord/paper/solar repaint a diagram without re-rendering it. mermaid.js would
+  bring a DOM-bound async renderer several times the size.
+- **Loaded on first use, one chunk per diagram type** (`pele/lazy`). The main
+  bundle grows by about 1 KB gzipped; a board with no diagrams fetches nothing.
+  Once a type's chunk is loaded, rendering is synchronous, so a remount does not
+  flash the source.
+- **Sanitized like an svg card.** Pele escapes labels and filters URLs, and the
+  output still goes through DOMPurify's svg profile before it reaches the parent
+  document. `links: false`: a `click` URL inside a diagram would navigate the
+  board away from a gesture meant to select or drag the card.
+- **A broken diagram shows its source and `line N: reason`**, never a blank
+  card. Export waits on `data-mermaid-pending` so a snapshot does not catch a
+  code block mid-load.
+- **The CLI export carries one pinned copy** (`internal/diagramlib`, the
+  single-file `pele.global.js` at the version `web/package.json` pins; a test
+  keeps the two in step). It is embedded only when a rendered md card holds a
+  fence, and it runs at the end of the body so the diagrams exist before Chrome
+  prints. Each diagram becomes an `<img>` of its SVG with the palette baked in:
+  the exported file is opened outside any sandbox with no sanitizer, and an
+  image cannot run script whatever the card text said. The fence's source stays
+  in the file for a reader without script.
+- **HTML cards do not get Pele at `/vendor/`.** They can already use an md card
+  for a diagram, and the Plotly frame bootstrap (#101) is not worth repeating
+  for a second library until a card needs both.
+
 ## Toolchain
 
 - Go **1.23+**. `CGO_ENABLED=0` everywhere.

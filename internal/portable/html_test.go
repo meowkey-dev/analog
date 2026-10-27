@@ -3,6 +3,7 @@ package portable
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -276,4 +277,74 @@ func loadCanvas(t *testing.T) client.Canvas {
 		t.Fatal(err)
 	}
 	return canvas
+}
+
+func mermaidCard(id, text string) client.Node {
+	return client.Node{
+		"id": id, "type": "text", "x": 0, "y": 0, "width": 400, "height": 300,
+		"sp_kind": "md", "sp_title": id, "text": text,
+	}
+}
+
+func TestHTMLCarriesDiagramRendererOnlyWhenUsed(t *testing.T) {
+	fence := "```mermaid\nflowchart LR\n  A --> B\n```\n"
+	page, err := HTML(client.Canvas{Nodes: []client.Node{
+		mermaidCard("a", fence), mermaidCard("b", "intro\n\n"+fence),
+	}}, Options{Slug: "s"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Count(page, "/*! Pele ") != 1 {
+		t.Fatal("diagram renderer must be embedded once per export")
+	}
+	if strings.Count(page, `<code class="language-mermaid">`) != 2 {
+		t.Fatal("the source must stay in the file, for a reader without script")
+	}
+
+	plain, err := HTML(client.Canvas{Nodes: []client.Node{
+		mermaidCard("c", "```go\nfunc main() {}\n```\n"),
+		{"id": "d", "type": "text", "x": 0, "y": 0, "width": 100, "height": 80,
+			"sp_kind": "plain", "text": fence},
+	}}, Options{Slug: "s"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(plain, "/*! Pele ") {
+		t.Fatal("a board without a diagram must not carry the renderer")
+	}
+}
+
+// Chrome runs the bootstrap the same way --print-to-pdf does: the diagram has to
+// be in the DOM by the time the page has loaded.
+func TestHTMLDrawsDiagramsWhenChromeIsAvailable(t *testing.T) {
+	if os.Getenv("ANALOG_TEST_CHROME") == "" || ChromePath() == "" {
+		t.Skip("set ANALOG_TEST_CHROME=1 to run the diagram bootstrap in chrome")
+	}
+	page, err := HTML(client.Canvas{Nodes: []client.Node{
+		mermaidCard("ok", "```mermaid\nflowchart LR\n  A[Draft] --> B[Review]\n```\n"),
+		mermaidCard("broken", "```mermaid\nflowchart TD\n  A -->\n```\n"),
+	}}, Options{Slug: "s"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	in := filepath.Join(dir, "board.html")
+	if err := os.WriteFile(in, []byte(page), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out, err := exec.Command(ChromePath(), "--headless", "--disable-gpu", "--no-first-run",
+		"--user-data-dir="+filepath.Join(dir, "profile"), "--dump-dom", fileURL(in)).Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	dom := string(out)
+	if strings.Count(dom, `<img class="mermaid"`) != 1 {
+		t.Fatalf("want one drawn diagram, got dom:\n%s", trim(dom, 2000))
+	}
+	if !strings.Contains(dom, `src="data:image/svg+xml`) {
+		t.Fatal("diagram is not an image")
+	}
+	if !strings.Contains(dom, `class="mermaid-error">line 3:`) {
+		t.Fatal("a broken diagram must keep its source and say why")
+	}
 }
