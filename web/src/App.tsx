@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas } from "./Canvas";
 import { Activity } from "./Activity";
 import { AnnotationComposer, AnnotationPanel, type DraftAnnotation } from "./Annotations";
-import { PENDING_PREFIX, confirmed, withPending, type PendingWrite } from "./optimistic";
+import { PENDING_PREFIX, confirmed, inOrder, withPending, type PendingWrite } from "./optimistic";
 import { Commander } from "./Commander";
 import { SpaceIndex, SpaceSwitcher } from "./Spaces";
 import { api, subscribe, ApiError, getIdentity } from "./api";
@@ -85,9 +85,13 @@ export default function App() {
   // Comment writes shown before the server confirms them (optimistic.ts).
   const [pendingWrites, setPendingWrites] = useState<PendingWrite[]>([]);
   const annotations = useMemo(
-    () => withPending(serverAnnotations, pendingWrites),
-    [serverAnnotations, pendingWrites],
+    () => withPending(serverAnnotations, pendingWrites, slug),
+    [serverAnnotations, pendingWrites, slug],
   );
+  const serverAnnotationsRef = useRef(serverAnnotations);
+  serverAnnotationsRef.current = serverAnnotations;
+  const slugRef = useRef(slug);
+  slugRef.current = slug;
   const [events, setEvents] = useState<AnalogEvent[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -206,6 +210,7 @@ export default function App() {
     }
     if (!slug || boot.phase !== "ready") return;   // "/" renders the space index
     setError(null);
+    refreshes.current += 1;   // a refresh still out for the last space must not land here
     (async () => {
       try {
         const [nextSpace, nextCanvas, nextAnnotations, log] = await Promise.all([
@@ -619,6 +624,7 @@ export default function App() {
   // A comment write shows at once (#127). Its request settling takes it out of
   // the pending layer: the server's copy is merged in on success, and on
   // failure dropping it is the rollback.
+  const writeQueues = useRef(new Map<string, Promise<unknown>>());
   const optimistic = (write: PendingWrite, work: () => Promise<Annotation>, rollback?: () => void) => {
     if (fixtureMode) {
       notify("Fixture mode is read-only.");
@@ -626,15 +632,18 @@ export default function App() {
     }
     setPendingWrites((pending) => [...pending, write]);
     const settle = () => setPendingWrites((pending) => pending.filter((w) => w !== write));
-    work().then(
+    const run = write.op === "create" ? work() : inOrder(writeQueues.current, write.id, work);
+    run.then(
       (annotation) => {
-        setAnnotations((list) => confirmed(list, annotation));
         settle();
+        // The list now shows another space; this write's own refreshes it.
+        if (slugRef.current !== write.slug) return;
+        setAnnotations((list) => confirmed(list, annotation));
         void refresh();
       },
       (exc) => {
         settle();
-        rollback?.();
+        if (slugRef.current === write.slug) rollback?.();
         failed(exc);
       },
     );
@@ -661,7 +670,7 @@ export default function App() {
       created_at: new Date().toISOString(),
     };
     optimistic(
-      { op: "create", annotation: shown },
+      { slug, op: "create", annotation: shown, known: new Set(serverAnnotationsRef.current.map((a) => a.id)) },
       () => api.createAnnotation(slug, submitted.cardId, body, submitted.selector, motivation),
       // The words come back to the composer: a failed save must not lose them.
       // The body already carries its quote, so the draft no longer does.
@@ -671,12 +680,12 @@ export default function App() {
   };
 
   const reopenAnnotation = (id: string) => {
-    optimistic({ op: "reopen", id }, () => api.resolveAnnotation(slug, id, undefined, false));
+    optimistic({ slug, op: "reopen", id }, () => api.resolveAnnotation(slug, id, undefined, false));
   };
 
   const resolveAnnotation = (id: string, reply: string) => {
     pushUndo({ label: "resolve", run: () => reopenAnnotation(id) });
-    optimistic({ op: "resolve", id, reply: reply || null },
+    optimistic({ slug, op: "resolve", id, reply: reply || null },
       () => api.resolveAnnotation(slug, id, reply || undefined));
   };
 

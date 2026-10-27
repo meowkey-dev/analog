@@ -701,8 +701,11 @@ the fence natively) all read.
   The HTTP response confirms a write, not the SSE event, because reopen emits
   none. The server's copy is merged in, and on an error the write is dropped,
   which rolls it back. A failed comment returns its words to the composer.
-  Only the latest refresh is applied, so an older one that answers late cannot
-  undo a confirmed write.
+  Each write belongs to its space and shows only there. Writes to one comment
+  are sent one after another, so a resolve cannot overtake a later reopen. A
+  new comment that a refresh lists before its POST answers stands in for the
+  pending copy, so it never shows twice. Only the latest refresh is applied,
+  so an older one that answers late cannot undo a confirmed write.
 - **Motion is short and opt-out.** A card that arrives while the board is open
   fades in. The board as it loads does not, and a board with no card in common
   with the last one is treated as a new space. A pan to a card glides, and any
