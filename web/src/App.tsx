@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas } from "./Canvas";
 import { Activity } from "./Activity";
 import { AnnotationComposer, AnnotationPanel, type DraftAnnotation } from "./Annotations";
+import { PENDING_PREFIX, confirmed, withPending, type PendingWrite } from "./optimistic";
 import { Commander } from "./Commander";
 import { SpaceIndex, SpaceSwitcher } from "./Spaces";
 import { api, subscribe, ApiError, getIdentity } from "./api";
@@ -80,7 +81,13 @@ export default function App() {
   const [boot, setBoot] = useState<Boot>({ phase: "checking" });
   const [space, setSpace] = useState<Space | null>(null);
   const [canvas, setCanvas] = useState<CanvasData>(EMPTY);
-  const [annotations, setAnnotations] = useState<Annotation[]>([]);
+  const [serverAnnotations, setAnnotations] = useState<Annotation[]>([]);
+  // Comment writes shown before the server confirms them (optimistic.ts).
+  const [pendingWrites, setPendingWrites] = useState<PendingWrite[]>([]);
+  const annotations = useMemo(
+    () => withPending(serverAnnotations, pendingWrites),
+    [serverAnnotations, pendingWrites],
+  );
   const [events, setEvents] = useState<AnalogEvent[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -146,13 +153,18 @@ export default function App() {
 
   // --- loading ---------------------------------------------------------------
 
+  // Only the latest refresh lands: an older one answering late would put back
+  // a comment state that a write has already confirmed past.
+  const refreshes = useRef(0);
   const refresh = useCallback(async () => {
     if (fixtureMode) return;
+    const ticket = ++refreshes.current;
     try {
       const [nextCanvas, nextAnnotations] = await Promise.all([
         api.getCanvas(slug, true),
         api.listAnnotations(slug),
       ]);
+      if (ticket !== refreshes.current) return;
       setCanvas(nextCanvas);
       setAnnotations(nextAnnotations);
     } catch (exc) {
@@ -604,36 +616,68 @@ export default function App() {
     }
   };
 
+  // A comment write shows at once (#127). Its request settling takes it out of
+  // the pending layer: the server's copy is merged in on success, and on
+  // failure dropping it is the rollback.
+  const optimistic = (write: PendingWrite, work: () => Promise<Annotation>, rollback?: () => void) => {
+    if (fixtureMode) {
+      notify("Fixture mode is read-only.");
+      return;
+    }
+    setPendingWrites((pending) => [...pending, write]);
+    const settle = () => setPendingWrites((pending) => pending.filter((w) => w !== write));
+    work().then(
+      (annotation) => {
+        setAnnotations((list) => confirmed(list, annotation));
+        settle();
+        void refresh();
+      },
+      (exc) => {
+        settle();
+        rollback?.();
+        failed(exc);
+      },
+    );
+  };
+
   const submitAnnotation = (body: string, motivation: Motivation) => {
     if (!draft) return;
-    guard(async () => {
-      await api.createAnnotation(slug, draft.cardId, body, draft.selector, motivation);
-      await refresh();
-    });
+    const submitted = draft;
+    const card = canvas.nodes.find((n) => n.id === submitted.cardId);
+    const who = getIdentity();
+    const shown: Annotation = {
+      id: `${PENDING_PREFIX}${Date.now()}`,
+      card_id: submitted.cardId,
+      card_title: card?.sp_title,
+      card_rev: card?.sp_rev ?? 1,
+      selector: submitted.selector,
+      body,
+      motivation,
+      creator: who.actor,
+      creator_kind: who.actor_kind,
+      resolved: false,
+      resolved_reply: null,
+      stale: false,
+      created_at: new Date().toISOString(),
+    };
+    optimistic(
+      { op: "create", annotation: shown },
+      () => api.createAnnotation(slug, submitted.cardId, body, submitted.selector, motivation),
+      // The words come back to the composer: a failed save must not lose them.
+      // The body already carries its quote, so the draft no longer does.
+      () => setDraft((current) => current ?? { ...submitted, quote: undefined, body }),
+    );
     setDraft(null);
   };
 
-  const resolveAnnotation = (id: string, reply: string) => {
-    pushUndo({
-      label: "resolve",
-      run: () => {
-        guard(async () => {
-          await api.resolveAnnotation(slug, id, undefined, false);
-          await refresh();
-        });
-      },
-    });
-    guard(async () => {
-      await api.resolveAnnotation(slug, id, reply || undefined);
-      await refresh();
-    });
+  const reopenAnnotation = (id: string) => {
+    optimistic({ op: "reopen", id }, () => api.resolveAnnotation(slug, id, undefined, false));
   };
 
-  const reopenAnnotation = (id: string) => {
-    guard(async () => {
-      await api.resolveAnnotation(slug, id, undefined, false);
-      await refresh();
-    });
+  const resolveAnnotation = (id: string, reply: string) => {
+    pushUndo({ label: "resolve", run: () => reopenAnnotation(id) });
+    optimistic({ op: "resolve", id, reply: reply || null },
+      () => api.resolveAnnotation(slug, id, reply || undefined));
   };
 
   // --- keyboard --------------------------------------------------------------
