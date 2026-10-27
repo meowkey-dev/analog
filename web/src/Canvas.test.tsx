@@ -368,3 +368,35 @@ describe("the text editor", () => {
     expect(container.querySelector("textarea.editor")).toBeNull();
   });
 });
+
+describe("motion (#127)", () => {
+  it("fades in a card that arrives while the board is open, not the board as it loads", () => {
+    const container = renderCanvas();
+    expect(container.querySelector(".card.arrived")).toBeNull();
+
+    const later = { ...node, id: "c_two", x: 400 };
+    act(() => root!.render(<Canvas {...props} nodes={[node, later]} allNodes={[node, later]} />));
+    expect(container.querySelector('[data-card-id="c_one"]')!.classList.contains("arrived")).toBe(false);
+    expect(container.querySelector('[data-card-id="c_two"]')!.classList.contains("arrived")).toBe(true);
+  });
+
+  it("takes a wholly different board as a new baseline", () => {
+    const container = renderCanvas();
+    const other = { ...node, id: "c_elsewhere" };
+    act(() => root!.render(<Canvas {...props} nodes={[other]} allNodes={[other]} />));
+    expect(container.querySelector(".card.arrived")).toBeNull();
+  });
+
+  it("glides only while panning to a focused card", () => {
+    vi.useFakeTimers();
+    try {
+      const container = renderCanvas();
+      act(() => root!.render(<Canvas {...props} focus={{ id: node.id, nonce: 1 }} />));
+      expect(container.querySelector(".viewport.gliding")).not.toBeNull();
+      act(() => { vi.advanceTimersByTime(400); });
+      expect(container.querySelector(".viewport.gliding")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

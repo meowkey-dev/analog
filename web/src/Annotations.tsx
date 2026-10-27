@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { Annotation, Motivation, Node, Selector } from "./api";
+import { isPending } from "./optimistic";
 
 /**
  * The annotation layer (SPEC §5).
@@ -34,6 +35,8 @@ export interface DraftAnnotation {
   selector: Selector;
   /** Text under the pin at drop time, quoted into the comment body on submit. */
   quote?: string;
+  /** What the composer starts with: the words of a save that failed (#127). */
+  body?: string;
 }
 
 interface OverlayProps {
@@ -131,8 +134,10 @@ export function AnnotationOverlay(props: OverlayProps) {
       // is opaque — proves the message came from this frame. A forged value can
       // only displace pins or alter a quote the human still reviews before
       // submitting; it cannot create or read an annotation.
+      // Read at message time: an updated card swaps in a new frame (html-card.tsx).
       const onMessage = (event: MessageEvent) => {
-        if (event.source !== el.contentWindow) return;
+        const frame = bodyRef.current;
+        if (!(frame instanceof HTMLIFrameElement) || event.source !== frame.contentWindow) return;
         const d = event.data as Record<string, unknown> | null;
         if (!d) return;
         if (d.type === "analog-scroll" && typeof d.cw === "number") {
@@ -310,7 +315,7 @@ export function AnnotationComposer(props: {
   onDismissQuote?: () => void;
   onSubmit: (body: string, motivation: Motivation) => void;
 }) {
-  const [body, setBody] = useState("");
+  const [body, setBody] = useState(props.draft.body ?? "");
   const [motivation, setMotivation] = useState<Motivation>("commenting");
   const where = props.draft.selector === null
     ? "whole card"
@@ -392,7 +397,7 @@ export function AnnotationPanel(props: {
       <ul>
         {shown.map((a) => (
           <li key={a.id}
-              className={`comment${a.resolved ? " resolved" : ""}${a.stale ? " stale" : ""}${props.selectedId === a.id ? " selected" : ""}`}
+              className={`comment${a.resolved ? " resolved" : ""}${a.stale ? " stale" : ""}${props.selectedId === a.id ? " selected" : ""}${isPending(a) ? " pending" : ""}`}
               onClick={() => props.onSelect(a.id)}>
             <div className="comment-head">
               <span className={`motivation ${a.motivation}`}>{a.motivation}</span>
@@ -408,7 +413,8 @@ export function AnnotationPanel(props: {
               <span className={`comment-author ${a.creator_kind}`}>{a.creator}</span>
               {" · "}{new Date(a.created_at).toLocaleString()}
             </div>
-            {a.resolved ? (
+            {/* A comment the server has not named yet has nothing to resolve. */}
+            {isPending(a) ? null : a.resolved ? (
               <div className="comment-reply">
                 {a.resolved_reply && (
                   <div className="reply-bubble">

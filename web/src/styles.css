@@ -143,6 +143,8 @@ input, textarea, select {
 }
 .card.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 8px 22px rgba(0,0,0,.4); }
 .card.superseded { opacity: .82; border-style: dashed; }
+/* A card that arrives while the board is open fades in; the board itself does not. */
+.card.arrived { animation: card-in .22s ease-out; }
 .card.stub { height: auto; }
 
 .card-head {
@@ -227,6 +229,11 @@ input, textarea, select {
 .card-body.file img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 4px; }
 /* HTML cards scroll, they do not scale (SPEC §10). */
 .card-body.html { border: none; width: 100%; background: #fff; padding: 0; }
+/* An updated html card swaps frames instead of reloading one (#127): the next
+   document loads invisibly over the live frame, then the old frame fades out
+   over it. Both overlays are placed over the live frame by html-card.tsx. */
+.card-body.html.html-frame-incoming { opacity: 0; pointer-events: none; }
+.card-body.html.html-frame-retiring { pointer-events: none; animation: fade-out .16s ease forwards; }
 .card-body.editor { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; border: none; border-radius: 0; resize: none; }
 /* min-width: 0, or the bar's content sets a floor wider than a narrow card
    and .body-zone clips save and cancel off its edge. */
@@ -780,7 +787,9 @@ a.brand { text-decoration: none; }
 }
 .reader .linkish { background: transparent; border: none; color: var(--accent); font-size: 12px; padding: 0; }
 /* The body scrolls vertically on its own; a sideways drag is a swipe (Reader.tsx). */
+/* Positioned so an html card's replacement frame is placed against it (#127). */
 .reader-body {
+  position: relative;
   flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: auto;
   touch-action: pan-y pinch-zoom;
   transition: transform .12s ease-out;
@@ -968,4 +977,27 @@ a.brand { text-decoration: none; }
   .handle.link { width: 22px; height: 22px; right: -11px; margin-top: -11px; opacity: .8; }
   .zoom button { min-width: 36px; min-height: 34px; }
   .panel .comment-actions button, .panel .comment-reply button { min-height: 36px; }
+}
+
+/* --- motion (#127) ----------------------------------------------------------
+   Short and quiet: things arrive rather than appear. `translate` and `scale`
+   are their own properties, so popovers centred with transform keep their
+   placement while easing in. */
+
+@keyframes fade-out { to { opacity: 0; } }
+@keyframes card-in { from { opacity: 0; scale: .97; } }
+@keyframes pop-in { from { opacity: 0; translate: 0 -4px; } }
+@keyframes rise-in { from { opacity: 0; translate: 0 8px; } }
+
+.theme-menu, .export-menu, .switcher-menu, .overflow-menu, .card-search {
+  animation: pop-in .14s ease-out;
+}
+.composer, .action-sheet-inner, .sheet { animation: rise-in .16s ease-out; }
+.commander-box, .popout-inner { animation: card-in .16s ease-out; }
+.comment.pending, .thread-item.pending { opacity: .6; }
+/* A pan to a card glides; the class is on only while Canvas.tsx is panning. */
+.viewport.gliding { transition: transform .32s cubic-bezier(.2, .7, .2, 1); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
 }

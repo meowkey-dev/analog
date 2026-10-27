@@ -685,6 +685,34 @@ the fence natively) all read.
   for a diagram, and the Plotly frame bootstrap (#101) is not worth repeating
   for a second library until a card needs both.
 
+## UI smoothness (2026-10-27, #127)
+
+- **An updated html card swaps frames.** Setting `srcdoc` on the live iframe
+  blanks it and scrolls the reader to the top. The new document loads into a
+  second, invisible frame over the first. The sandbox keeps the parent out of
+  that frame, so the injected reporter restores the old scroll offset on
+  `analog-scroll-to` and acknowledges it. Then the new frame takes the layout
+  and the old one fades out over it and is removed. If a frame never
+  acknowledges, it is shown after 400 ms anyway. Only the newest pending update
+  loads. Pins, search and the reader read the live frame from the ref when each
+  message arrives, never a frame captured earlier.
+- **Comment create, resolve and reopen are optimistic.** Pending writes are a
+  layer over the server's list, applied at render (`web/src/optimistic.ts`).
+  The HTTP response confirms a write, not the SSE event, because reopen emits
+  none. The server's copy is merged in, and on an error the write is dropped,
+  which rolls it back. A failed comment returns its words to the composer.
+  Each write belongs to its space and shows only there. Writes to one comment
+  are sent one after another, so a resolve cannot overtake a later reopen. A
+  new comment that a refresh lists before its POST answers stands in for the
+  pending copy, so it never shows twice. Only the latest refresh is applied,
+  so an older one that answers late cannot undo a confirmed write.
+- **Motion is short and opt-out.** A card that arrives while the board is open
+  fades in. The board as it loads does not, and a board with no card in common
+  with the last one is treated as a new space. A pan to a card glides, and any
+  wheel or pointer input cuts the glide short. Popovers ease in. Under
+  `prefers-reduced-motion: reduce` every animation and transition is off, and
+  frames swap with no fade.
+
 ## Toolchain
 
 - Go **1.23+**. `CGO_ENABLED=0` everywhere.

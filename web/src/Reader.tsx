@@ -5,6 +5,7 @@ import type { DraftAnnotation } from "./Annotations";
 import type { AnalogEvent, Annotation, Edge, Node } from "./api";
 import { boardOrder, neighbors, ORDERS, readingOrder, type ReadingOrder } from "./reading-order";
 import { describeChange, type CardChange } from "./seen";
+import { isPending } from "./optimistic";
 
 /**
  * One card at a time, full width, prev/next by swipe, arrow keys or the bar.
@@ -463,7 +464,7 @@ function Thread(props: {
   return (
     <ul className="sheet-list">
       {sorted.map((a) => (
-        <li key={a.id} className={`comment${a.resolved ? " resolved" : ""}${a.stale ? " stale" : ""}`}>
+        <li key={a.id} className={`comment${a.resolved ? " resolved" : ""}${a.stale ? " stale" : ""}${isPending(a) ? " pending" : ""}`}>
           <div className="comment-head">
             <span className={`motivation ${a.motivation}`}>{a.motivation}</span>
             <span className={`comment-author ${a.creator_kind}`}>{a.creator}</span>
@@ -471,7 +472,7 @@ function Thread(props: {
             {a.stale && <span className="badge stale">content changed since</span>}
           </div>
           <p className="comment-body">{a.body}</p>
-          {a.resolved ? (
+          {isPending(a) ? null : a.resolved ? (
             <div className="comment-reply">
               {a.resolved_reply && (
                 <div className="reply-bubble"><span className="who">reply</span>{a.resolved_reply}</div>

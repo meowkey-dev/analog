@@ -8,6 +8,7 @@ import { AnnotationOverlay, type DraftAnnotation } from "./Annotations";
 import { api, getConnection, resolveUrl } from "./api";
 import type { Annotation, Node } from "./api";
 import { HTMLCardFrame } from "./html-card";
+import { isPending } from "./optimistic";
 import { mdRemarkPlugins, mdRehypePlugins } from "./markdown";
 import { mdComponents } from "./mermaid";
 import { clearTextRange, findTextRanges, selectTextRange } from "./card-search";
@@ -138,6 +139,8 @@ export const Body = memo(function Body({ node, mdTheme, bodyRef, onHTMLLoad }: {
  * Prepended into html card content at render time (issue #23). Reports the
  * document's scroll/size metrics so the parent can anchor pins to the content
  * rather than the visible box, and quotes the text under a pin on request.
+ * A replacement frame is scrolled to where its predecessor was through
+ * `analog-scroll-to`, acknowledged with the restored metrics (#127).
  * Kept dependency-free and read-only: it observes the frame's own document and
  * talks to the parent that put it there.
  */
@@ -178,6 +181,8 @@ const SCROLL_REPORTER = [
   "var d=e.data;",
   "if(!d)return;",
   "if(d.type==='analog-search'){searchFor(String(d.query||''),Number(d.index)||0);return;}",
+  "if(d.type==='analog-scroll-to'){scrollTo(Number(d.sx)||0,Number(d.sy)||0);var m=metrics();m.type='analog-scroll';m.ack=d.ack;parent.postMessage(m,'*');return;}",
+  "if(d.type==='analog-report'){send();return;}",
   "if(d.type==='analog-quote'){var t=quoteFor(d.vx||0,d.vy||0,d.vw||0,d.vh||0);if(t)parent.postMessage({type:'analog-quote',text:t},'*');}});",
   "send();",
   "})();</script>",
@@ -242,6 +247,8 @@ export interface CardProps {
   /** The text before the last change this browser acknowledged, if kept. */
   lastChangeBefore?: string;
   onMarkSeen?: (id: string) => void;
+  /** Created while the board was open, so it fades in (#127). */
+  arrived?: boolean;
 }
 
 function CardView(props: CardProps) {
@@ -378,7 +385,7 @@ function CardView(props: CardProps) {
   // A superseded card collapses to a stub so a long chain doesn't swamp the canvas.
   if (superseded && collapsed) {
     return (
-      <div className={`card stub${selected ? " selected" : ""}`} style={style}
+      <div className={`card stub${selected ? " selected" : ""}${props.arrived ? " arrived" : ""}`} style={style}
            data-card-id={node.id} onPointerDown={() => props.onSelect(node.id)}>
         <div className="card-head" onPointerDown={(e) => props.onPointerDownHeader(e, node)}>
           <span className="card-title">{node.sp_title || node.id}</span>
@@ -395,7 +402,7 @@ function CardView(props: CardProps) {
 
   return (
     <div
-      className={`card${selected ? " selected" : ""}${superseded ? " superseded" : ""}`}
+      className={`card${selected ? " selected" : ""}${superseded ? " superseded" : ""}${props.arrived ? " arrived" : ""}`}
       style={style}
       data-card-id={node.id}
       onPointerDown={() => {
@@ -559,7 +566,7 @@ function CardView(props: CardProps) {
         <div className="card-thread" onPointerDown={(e) => e.stopPropagation()}>
           {props.thread.map((a) => (
             <div key={a.id}
-                 className={`thread-item${a.resolved ? " resolved" : ""}${a.stale ? " stale" : ""}${props.selectedAnnotation === a.id ? " selected" : ""}`}
+                 className={`thread-item${a.resolved ? " resolved" : ""}${a.stale ? " stale" : ""}${props.selectedAnnotation === a.id ? " selected" : ""}${isPending(a) ? " pending" : ""}`}
                  onClick={() => props.onSelectAnnotation(a.id)}>
               <div className="thread-main">
                 <span className={`who ${a.creator_kind}`}>{a.creator}</span>

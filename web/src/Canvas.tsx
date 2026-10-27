@@ -171,6 +171,37 @@ export function Canvas(props: CanvasProps) {
     [props.nodes, ghost],
   );
   const nodeMap = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes]);
+
+  // Cards that arrive while the board is open fade in (#127); the board as it
+  // loads does not. A set that shares no card with the last one is a different
+  // board (another space), so it becomes the new baseline instead of arriving.
+  const known = useRef<Set<string> | null>(null);
+  const arrived = useRef(new Set<string>());
+  if (props.nodes.length > 0) {
+    const ids = props.nodes.map((n) => n.id);
+    const previous = known.current;
+    if (!previous || !ids.some((id) => previous.has(id))) {
+      known.current = new Set(ids);
+      arrived.current = new Set();
+    } else {
+      for (const id of ids) if (!previous.has(id)) { previous.add(id); arrived.current.add(id); }
+    }
+  }
+
+  // A pan to a card glides there (#127). Only that pan: the transform tracks a
+  // drag or a wheel directly, so any of those cuts the glide short.
+  const [gliding, setGliding] = useState(false);
+  const glideTimer = useRef(0);
+  const glide = useCallback(() => {
+    window.clearTimeout(glideTimer.current);
+    setGliding(true);
+    glideTimer.current = window.setTimeout(() => setGliding(false), 360);
+  }, []);
+  const stopGlide = useCallback(() => {
+    window.clearTimeout(glideTimer.current);
+    setGliding(false);
+  }, []);
+  useEffect(() => () => window.clearTimeout(glideTimer.current), []);
   const linkNodes = useMemo(() => {
     // Ghost positions ride along (#40): an edge must track its card while the
     // drag is in flight, not only once the drop commits.
@@ -288,6 +319,7 @@ export function Canvas(props: CanvasProps) {
     if (!node) return;
     const box = container.current.getBoundingClientRect();
     const width = container.current.parentElement?.clientWidth || box.width;
+    glide();
     setViewport((v) => ({
       ...v,
       x: width / 2 - (node.x + node.width / 2) * v.scale,
@@ -531,6 +563,7 @@ export function Canvas(props: CanvasProps) {
   const pinch = useRef<{ dist: number; mid: [number, number]; start: Viewport } | null>(null);
 
   const onPointerDownCapture = (event: React.PointerEvent) => {
+    if (gliding) stopGlide();
     if (event.pointerType !== "touch") return;
     touches.current.set(event.pointerId, [event.clientX, event.clientY]);
     if (touches.current.size !== 2) return;
@@ -599,6 +632,7 @@ export function Canvas(props: CanvasProps) {
   };
 
   const onWheel = (event: React.WheelEvent) => {
+    if (gliding) stopGlide();
     if (event.ctrlKey || event.metaKey) {
       const box = container.current!.getBoundingClientRect();
       const px = event.clientX - box.left;
@@ -720,7 +754,7 @@ export function Canvas(props: CanvasProps) {
         props.onCreateCardAt(Math.round(x), Math.round(y), event.shiftKey ? "draw" : "md");
       }}
     >
-      <div className="viewport"
+      <div className={`viewport${gliding ? " gliding" : ""}`}
            style={{ transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.scale})` }}>
         <Links
           edges={props.edges}
@@ -755,6 +789,7 @@ export function Canvas(props: CanvasProps) {
             onMarkSeen={props.onMarkSeen ? cardHandlers.onMarkSeen : undefined}
             change={changes.get(node.id)}
             lastChangeBefore={lastChanges.get(node.id)}
+            arrived={arrived.current.has(node.id)}
           />
         ))}
       </div>
