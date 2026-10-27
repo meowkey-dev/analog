@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Annotation } from "./api";
-import { PENDING_PREFIX, confirmed, inOrder, isPending, withPending } from "./optimistic";
+import { PENDING_PREFIX, confirmed, inOrder, isPending, pendingId, settle, withPending } from "./optimistic";
 
 const open: Annotation = {
   id: "a_1", card_id: "c_1", card_rev: 1, selector: null, body: "tighten this",
@@ -89,5 +89,41 @@ describe("optimistic writes under races (#128 review)", () => {
     const next = inOrder(queues, "a_1", async () => "sent");
     await expect(failedWrite).rejects.toThrow("boom");
     await expect(next).resolves.toBe("sent");
+  });
+});
+
+describe("optimistic creates as they settle (#128 review, round 2)", () => {
+  const twin = (id: string) => ({
+    slug: "s", op: "create" as const, known: new Set(["a_1"]),
+    annotation: { ...open, id, body: "same words", selector: { type: "point" as const, x: 0.5, y: 0.5 } },
+  });
+
+  it("does not let a confirmed comment stand in for an identical one still pending", () => {
+    const first = twin(pendingId()), second = twin(pendingId());
+    expect(first.annotation.id).not.toBe(second.annotation.id);
+    // The first POST answers; the refreshed list holds its comment, the second is still out.
+    const listed = { ...first.annotation, id: "a_2" };
+    const pending = settle([first, second], first, "a_2");
+    expect(pending).toHaveLength(1);
+    expect(withPending([open, listed], pending, "s").map((a) => a.id))
+      .toEqual(["a_1", "a_2", second.annotation.id]);
+    // Its own server copy still stands in for it once listed.
+    expect(withPending([open, listed, { ...listed, id: "a_3" }], pending, "s").map((a) => a.id))
+      .toEqual(["a_1", "a_2", "a_3"]);
+  });
+
+  it("keeps the same words on different pins apart", () => {
+    const write = twin(pendingId());
+    const elsewhere = { ...write.annotation, id: "a_2", selector: { type: "point" as const, x: 0.1, y: 0.9 } };
+    expect(withPending([open, elsewhere], [write], "s")).toHaveLength(3);
+    // Key order is not identity: the server may store the selector differently.
+    const same = { ...write.annotation, id: "a_3", selector: { y: 0.5, x: 0.5, type: "point" as const } };
+    expect(withPending([open, same], [write], "s")).toHaveLength(2);
+  });
+
+  it("removes a write that failed and changes no other", () => {
+    const first = twin(pendingId()), second = twin(pendingId());
+    expect(settle([first, second], first)).toEqual([second]);
+    expect(settle([first, second], first)[0]).toBe(second);
   });
 });

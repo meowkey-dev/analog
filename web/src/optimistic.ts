@@ -17,20 +17,33 @@ export type PendingWrite = { slug: string } & (
   | {
       op: "create";
       annotation: Annotation;
-      /** The server's comment ids when the write began: a new one may be this. */
+      /**
+       * Server comment ids that cannot be this one: those listed when the write
+       * began, and those other creates have since been confirmed as.
+       */
       known: ReadonlySet<string>;
     }
   | { op: "resolve"; id: string; reply: string | null }
   | { op: "reopen"; id: string }
 );
 
+/** Field by field: the server need not keep a selector's key order. */
+const samePlace = (a: Annotation["selector"], b: Annotation["selector"]) =>
+  a === b || (a !== null && b !== null && a.type === b.type && a.x === b.x && a.y === b.y &&
+    (a.type === "point" || (b.type === "rect" && a.w === b.w && a.h === b.h)));
+
 /** Whether a listed comment could be what a pending create became. */
 const becameThis = (listed: Annotation, shown: Annotation) =>
   listed.card_id === shown.card_id && listed.body === shown.body &&
-  listed.creator === shown.creator && listed.motivation === shown.motivation;
+  listed.creator === shown.creator && listed.motivation === shown.motivation &&
+  samePlace(listed.selector, shown.selector);
 
 /** Optimistic comments carry this id prefix until the server names them. */
 export const PENDING_PREFIX = "pending:";
+
+let pendingCount = 0;
+/** Unique per page, even for two comments sent within one millisecond. */
+export const pendingId = () => `${PENDING_PREFIX}${++pendingCount}`;
 
 export const isPending = (annotation: Annotation) => annotation.id.startsWith(PENDING_PREFIX);
 
@@ -58,6 +71,20 @@ export function withPending(server: Annotation[], pending: PendingWrite[], slug:
     }));
   }
   return shown;
+}
+
+/**
+ * A write leaves the layer once its request settles. A confirmed create's
+ * comment is its own from then on: no other pending create may stand in for
+ * it, even after this write has gone and is no longer there to claim it.
+ */
+export function settle(pending: PendingWrite[], write: PendingWrite, confirmedId?: string): PendingWrite[] {
+  const own = (w: PendingWrite) => w === write ||
+    (w.op === "create" && write.op === "create" && w.annotation.id === write.annotation.id);
+  return pending.filter((w) => !own(w)).map((w) =>
+    confirmedId && w.op === "create" && !w.known.has(confirmedId)
+      ? { ...w, known: new Set([...w.known, confirmedId]) }
+      : w);
 }
 
 /** The server's copy of one comment replaces the listed one, or joins the list. */

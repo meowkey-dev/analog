@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas } from "./Canvas";
 import { Activity } from "./Activity";
 import { AnnotationComposer, AnnotationPanel, type DraftAnnotation } from "./Annotations";
-import { PENDING_PREFIX, confirmed, inOrder, withPending, type PendingWrite } from "./optimistic";
+import { confirmed, inOrder, pendingId, settle, withPending, type PendingWrite } from "./optimistic";
 import { Commander } from "./Commander";
 import { SpaceIndex, SpaceSwitcher } from "./Spaces";
 import { api, subscribe, ApiError, getIdentity } from "./api";
@@ -631,18 +631,19 @@ export default function App() {
       return;
     }
     setPendingWrites((pending) => [...pending, write]);
-    const settle = () => setPendingWrites((pending) => pending.filter((w) => w !== write));
+    const done = (confirmedId?: string) =>
+      setPendingWrites((pending) => settle(pending, write, confirmedId));
     const run = write.op === "create" ? work() : inOrder(writeQueues.current, write.id, work);
     run.then(
       (annotation) => {
-        settle();
+        done(write.op === "create" ? annotation.id : undefined);
         // The list now shows another space; this write's own refreshes it.
         if (slugRef.current !== write.slug) return;
         setAnnotations((list) => confirmed(list, annotation));
         void refresh();
       },
       (exc) => {
-        settle();
+        done();
         if (slugRef.current === write.slug) rollback?.();
         failed(exc);
       },
@@ -655,7 +656,7 @@ export default function App() {
     const card = canvas.nodes.find((n) => n.id === submitted.cardId);
     const who = getIdentity();
     const shown: Annotation = {
-      id: `${PENDING_PREFIX}${Date.now()}`,
+      id: pendingId(),
       card_id: submitted.cardId,
       card_title: card?.sp_title,
       card_rev: card?.sp_rev ?? 1,
