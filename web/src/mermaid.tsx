@@ -39,9 +39,11 @@ type Result = { svg: string } | { error: string };
 /** Synchronous once Pele and the diagram's chunk are loaded, so a re-mount does not flash source. */
 function renderNow(source: string, idPrefix: string): Result | null {
   if (!pele) return null;
-  const type = pele.detectType(source);
-  if (type && !pele.registered(type)) return null;
+  // detectType parses front matter and throws on a malformed block. This runs
+  // during render, where an escaped throw would take the whole board down.
   try {
+    const type = pele.detectType(source);
+    if (type && !pele.registered(type)) return null;
     return { svg: sanitize(pele.render(source, options(idPrefix)).svg) };
   } catch (err) {
     return { error: describe(err) };

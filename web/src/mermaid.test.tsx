@@ -69,6 +69,24 @@ describe("mermaid in md cards", () => {
     expect(el.querySelector(".mermaid-error")?.textContent).toMatch(/^line 3: Expecting/);
   });
 
+  it("contains a front-matter error once Pele is already loaded", async () => {
+    // A rendered diagram means Pele is loaded, so the next source takes the
+    // synchronous path inside React's render.
+    const el = await mount(flowchart);
+    await settled(el);
+    const bad = "```mermaid\n---\nfoo: [\n---\nflowchart LR\nA-->B\n```";
+    await act(async () => {
+      root!.render(
+        <Markdown remarkPlugins={mdRemarkPlugins} rehypePlugins={mdRehypePlugins} components={mdComponents}>
+          {bad}
+        </Markdown>,
+      );
+    });
+    expect(el.querySelector(".mermaid svg")).toBeNull();
+    expect(el.querySelector("code.language-mermaid")?.textContent).toContain("foo: [");
+    expect(el.querySelector(".mermaid-error")?.textContent).toMatch(/front matter/i);
+  });
+
   it("does not let a diagram link navigate the board", async () => {
     const el = await mount("```mermaid\nflowchart LR\n  A --> B\n  click A \"https://example.com\"\n```");
     await settled(el);
