@@ -133,6 +133,60 @@ describe("comment by selecting (#125)", () => {
   });
 });
 
+describe("selecting with the keyboard (#129 review)", () => {
+  const textNode = (container: Element) =>
+    container.querySelector(".card-body.plain")!.firstChild as Text;
+  const select = (node: Text, end: number) => {
+    const range = document.createRange();
+    range.setStart(node, 0);
+    range.setEnd(node, end);
+    const sel = window.getSelection()!;
+    sel.removeAllRanges();
+    sel.addRange(range);
+  };
+  const keyUp = async (target: EventTarget) => {
+    target.dispatchEvent(new KeyboardEvent("keyup", { key: "ArrowRight", shiftKey: true, bubbles: true }));
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+  };
+
+  it("quotes the selection as extended with Shift, not as first offered", async () => {
+    const onDraft = vi.fn();
+    const container = render(<Canvas {...canvasProps} onDraft={onDraft} />);
+    const text = textNode(container);
+
+    select(text, 6);
+    text.parentElement!.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+    document.dispatchEvent(new Event("pointerup", { bubbles: true }));
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+    select(text, text.length);
+    await keyUp(text.parentElement!);
+
+    act(() => container.querySelector<HTMLButtonElement>(".selection-comment")!.click());
+    expect(onDraft.mock.calls[0]![0].quote).toBe("the axis is misleading");
+  });
+
+  it("offers Comment for a selection made with the keyboard alone", async () => {
+    const container = render(<Canvas {...canvasProps} />);
+    const text = textNode(container);
+
+    select(text, 8);
+    await keyUp(text.parentElement!);
+
+    expect(container.querySelector(".selection-comment")).not.toBeNull();
+  });
+
+  it("ignores Shift typed into a field, such as the in-card search", async () => {
+    const container = render(<Canvas {...canvasProps} />);
+    const field = document.createElement("input");
+    container.append(field);
+
+    select(textNode(container), 8);
+    await keyUp(field);
+
+    expect(container.querySelector(".selection-comment")).toBeNull();
+  });
+});
+
 describe("highlights", () => {
   it("draws a region on a text card as a highlight that leaves its text selectable", () => {
     const onSelect = vi.fn();
@@ -186,6 +240,24 @@ describe("the composer", () => {
 
     act(() => { key(area, { key: "Enter" }); });
     expect(onSubmit).toHaveBeenCalledWith("> the axis\n\nrebase at zero", "editing");
+  });
+
+  it("opens above the gesture when its measured height would run off the screen", () => {
+    // jsdom's window is 1024×768. A long quote makes the composer 400px tall:
+    // below a gesture at 700 it would end at 1114.
+    const height = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "offsetHeight");
+    Object.defineProperty(HTMLElement.prototype, "offsetHeight", { configurable: true, get: () => 400 });
+    try {
+      const container = render(
+        <AnnotationComposer
+          draft={{ cardId: plain.id, selector: null, at: { x: 300, y: 700 }, quote: "a long quote" }}
+          cardTitle="Option B" onCancel={vi.fn()} onSubmit={vi.fn()} />,
+      );
+      const form = container.querySelector<HTMLFormElement>(".composer.anchored")!;
+      expect(form.style.top).toBe(`${700 - 400 - 14}px`);
+    } finally {
+      if (height) Object.defineProperty(HTMLElement.prototype, "offsetHeight", height);
+    }
   });
 
   it("does not send an empty comment", () => {

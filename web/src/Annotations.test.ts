@@ -77,6 +77,20 @@ describe("composerPosition", () => {
     expect(place.left + 440).toBeLessThanOrEqual(desktop.w - 8);
   });
 
+  it("clamps against the measured height, not the usual one", () => {
+    // 230px fits below a gesture at 600; a 300px composer does not, so it opens above.
+    expect(composerPosition({ x: 500, y: 600 }, desktop)).toEqual({ left: 476, top: 614 });
+    const tall = composerPosition({ x: 500, y: 600 }, desktop, 300)!;
+    expect(tall.top).toBe(600 - 300 - 14);
+    expect(tall.top + 300).toBeLessThanOrEqual(desktop.h - 8);
+  });
+
+  it("stays on screen when it fits neither above nor below", () => {
+    const place = composerPosition({ x: 500, y: 300 }, { w: 1400, h: 500 }, 420)!;
+    expect(place.top).toBeGreaterThanOrEqual(8);
+    expect(place.top + 420).toBeLessThanOrEqual(500 - 8);
+  });
+
   it("stays docked without a gesture or on a phone", () => {
     expect(composerPosition(undefined, desktop)).toBeNull();
     expect(composerPosition({ x: 100, y: 100 }, { w: 390, h: 800 })).toBeNull();

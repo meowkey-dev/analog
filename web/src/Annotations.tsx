@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Annotation, Motivation, Node, Selector } from "./api";
 import { isPending } from "./optimistic";
 
@@ -207,7 +207,10 @@ export function AnnotationOverlay(props: OverlayProps) {
   // Parent-rendered text is selected in this document. The button is offered
   // when the gesture ends, not on every selectionchange, so it does not chase
   // the pointer mid-drag; only a gesture that began in this body counts, so
-  // the in-card search, which selects its matches, never offers one.
+  // the in-card search, which selects its matches, never offers one. A
+  // Shift-key gesture ends at its keyup: it may make the selection or extend
+  // one already offered, and either way the offer must quote what is selected
+  // now. Keys typed into a field (the search box) are not selection gestures.
   // The body is looked up per event: it remounts when the card toggles to its
   // diff and back, and a listener bound to the old element would go deaf.
   useEffect(() => {
@@ -220,10 +223,8 @@ export function AnnotationOverlay(props: OverlayProps) {
     const arm = (event: PointerEvent) => {
       armed = Boolean(body()?.contains(event.target as globalThis.Node));
     };
-    const settle = () => {
-      if (!armed) return;
-      armed = false;
-      // After the click that ends a selection has been applied to it.
+    const capture = () => {
+      // After the click or key that ends a selection has been applied to it.
       setTimeout(() => {
         const el = body();
         const layer = layerRef.current;
@@ -244,6 +245,20 @@ export function AnnotationOverlay(props: OverlayProps) {
         });
       }, 0);
     };
+    const settle = () => {
+      if (!armed) return;
+      armed = false;
+      capture();
+    };
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (!event.shiftKey && event.key !== "Shift") return;
+      const target = event.target as Element | null;
+      if (target?.closest?.("input, textarea, select, [contenteditable]")) return;
+      const el = body();
+      const sel = window.getSelection();
+      if (!el || !sel || !sel.rangeCount || !el.contains(sel.getRangeAt(0).commonAncestorContainer)) return;
+      capture();
+    };
     const onChange = () => {
       const el = body();
       if (!el) return; // an html card's selection is its frame's to report
@@ -253,10 +268,12 @@ export function AnnotationOverlay(props: OverlayProps) {
     };
     document.addEventListener("pointerdown", arm, true);
     document.addEventListener("pointerup", settle);
+    document.addEventListener("keyup", onKeyUp);
     document.addEventListener("selectionchange", onChange);
     return () => {
       document.removeEventListener("pointerdown", arm, true);
       document.removeEventListener("pointerup", settle);
+      document.removeEventListener("keyup", onKeyUp);
       document.removeEventListener("selectionchange", onChange);
     };
   }, [bodyRef, kind, node.id]);
@@ -527,23 +544,29 @@ const MOTIVATIONS: { id: Motivation; hint: string }[] = [
 ];
 
 const COMPOSER_W = 440;
+/** Its usual height, until the rendered composer has been measured. */
 const COMPOSER_H = 230;
 
 /**
  * Beside the gesture that made the draft: below it where there is room, else
- * above, and always on screen. Null leaves the composer docked at the bottom,
- * which is also where it stays on a phone.
+ * above, and always on screen. `height` is the composer's measured height: a
+ * long quote or a grown textarea makes it taller than usual. Null leaves the
+ * composer docked at the bottom, which is also where it stays on a phone.
  */
 export function composerPosition(
   at: { x: number; y: number } | undefined,
   viewport: { w: number; h: number },
+  height = COMPOSER_H,
 ): { left: number; top: number } | null {
   if (!at || viewport.w <= 760) return null;
   const w = Math.min(COMPOSER_W, viewport.w - 16);
   const left = Math.min(Math.max(at.x - 24, 8), viewport.w - w - 8);
   const below = at.y + 14;
-  const top = below + COMPOSER_H <= viewport.h - 8 ? below : Math.max(8, at.y - COMPOSER_H - 14);
-  return { left, top };
+  const above = at.y - height - 14;
+  const top = below + height <= viewport.h - 8 ? below
+    : above >= 8 ? above
+    : viewport.h - height - 8; // fits neither side: as low as stays on screen
+  return { left, top: Math.max(8, top) };
 }
 
 /** The composer that appears once a pin has been dropped or text selected. */
@@ -567,10 +590,25 @@ export function AnnotationComposer(props: {
   const submit = () => {
     if (body.trim()) props.onSubmit(withQuote(body.trim()), motivation);
   };
-  const place = composerPosition(props.draft.at, { w: window.innerWidth, h: window.innerHeight });
+  // Measured before paint and whenever it grows, so the position is clamped
+  // against the composer as rendered rather than its usual height.
+  const formRef = useRef<HTMLFormElement>(null);
+  const [height, setHeight] = useState<number | undefined>(undefined);
+  useLayoutEffect(() => {
+    const form = formRef.current;
+    if (!form) return;
+    const measure = () => setHeight(form.offsetHeight || undefined);
+    measure();
+    if (typeof ResizeObserver !== "function") return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(form);
+    return () => ro.disconnect();
+  }, []);
+  const place = composerPosition(props.draft.at, { w: window.innerWidth, h: window.innerHeight }, height);
 
   return (
     <form
+      ref={formRef}
       className={`composer${place ? " anchored" : ""}`}
       style={place ?? undefined}
       onSubmit={(event) => {
