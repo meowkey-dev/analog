@@ -813,6 +813,13 @@ export default function App() {
     ? liveNodes.find((n) => n.id === selectedCard) : undefined;
   const exportCard = selectedNode ? { id: selectedNode.id, title: selectedNode.sp_title } : undefined;
   const openCount = annotations.filter((a) => !a.resolved).length;
+  // A highlight clicked on a card opens its entry in the list, the other half
+  // of list → pin. Not on a phone, where the list is a sheet over the card.
+  const selectAnnotationOnCard = (id: string | null) => {
+    setSelectedAnnotation(id);
+    if (id && !narrow) setRightPanel("comments");
+  };
+
   const togglePanel = (panel: "comments" | "activity" | "changes") =>
     setRightPanel(rightPanel === panel ? null : panel);
   const boardEnd = () => endOfBoard(liveNodes.filter((n) => !n.sp_superseded_by));
@@ -854,7 +861,7 @@ export default function App() {
       />
       {view === "canvas" && (
         <button data-closes className={annotateMode ? "on" : ""} onClick={() => setAnnotateMode((on) => !on)}
-                title="Click a card to pin a comment; shift-drag for a region (c)">
+                title="Select text on a card to comment on it. This mode pins a point, or shift-drag for a region (c)">
           {annotateMode ? "commenting…" : "comment"}
         </button>
       )}
@@ -974,7 +981,7 @@ export default function App() {
             focus={focus}
             onSelectCard={setSelectedCard}
             onSelectEdge={setSelectedEdge}
-            onSelectAnnotation={setSelectedAnnotation}
+            onSelectAnnotation={selectAnnotationOnCard}
             onDraft={setDraft}
             onMoveCard={moveCard}
             onResizeCard={resizeCard}
@@ -1121,7 +1128,8 @@ export default function App() {
             double-click empty space for a card · <strong>shift-double-click for a
             sketch</strong> · drop or paste an image onto the board · drag the ◇ handle to link ·
             double-click a card to edit · ✎ on an svg card to draw · ⌘K to find a card ·
-            ⌘Z to undo · c to comment · r to read card by card</>
+            ⌘Z to undo · <strong>select text on a card to comment</strong> · c to pin a
+            comment · r to read card by card</>
           )}
         </footer>
       )}

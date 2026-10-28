@@ -420,10 +420,45 @@ input, textarea, select {
   content: ""; position: absolute; top: 6px; right: 6px; width: 14px; height: 14px;
   border-radius: 50%; background: var(--warn); border: 2px solid #1a1206; pointer-events: auto;
 }
+/* A region on a text card reads as a highlighted passage (#125). It lies over
+   the text it is about, so outside comment mode only its marker takes the
+   pointer and the text under it stays selectable. */
+.pin.rect.highlight {
+  border: none; border-bottom: 2px solid var(--warn); border-radius: 2px;
+  background: rgba(224, 163, 90, .22); pointer-events: none;
+}
+.annotation-layer.active .pin.rect.highlight { pointer-events: auto; }
+.pin-marker {
+  position: absolute; top: -5px; right: -5px; width: 10px; height: 10px;
+  border-radius: 50%; background: var(--warn); border: 2px solid #1a1206;
+  pointer-events: auto; cursor: pointer;
+}
 .pin.stale { filter: grayscale(1); opacity: .55; }
-.pin.selected { box-shadow: 0 0 0 3px var(--accent); }
+.pin.selected { box-shadow: 0 0 0 3px var(--accent); animation: pin-pulse 1.1s ease-out 2; }
+.pin.rect.highlight.selected { background: rgba(224, 163, 90, .36); }
+@keyframes pin-pulse {
+  0% { box-shadow: 0 0 0 3px var(--accent), 0 0 0 3px rgba(110,168,254,.55); }
+  100% { box-shadow: 0 0 0 3px var(--accent), 0 0 0 12px rgba(110,168,254,0); }
+}
 .pin.draft { border-color: var(--accent); background: rgba(110,168,254,.15); }
+.pin.rect.highlight.draft { border-bottom-color: var(--accent); background: rgba(110,168,254,.22); }
 .pin.point.draft { background: var(--accent); }
+
+/* Offered under a fresh selection; pressing it opens the composer there. */
+.selection-comment {
+  position: absolute; transform: translateX(-100%); pointer-events: auto; z-index: 1;
+  padding: 3px 10px; font-size: 12px; border-radius: 6px;
+  background: var(--accent); color: #0b1220; border: none;
+  box-shadow: 0 4px 14px rgba(0,0,0,.35);
+  animation: selection-comment-in .12s ease-out;
+}
+@keyframes selection-comment-in {
+  from { opacity: 0; transform: translate(-100%, -3px); }
+  to { opacity: 1; transform: translateX(-100%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pin.selected, .selection-comment { animation: none; }
+}
 
 .composer {
   position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
@@ -432,7 +467,16 @@ input, textarea, select {
   padding: 10px; box-shadow: 0 12px 40px rgba(0,0,0,.5);
   display: flex; flex-direction: column; gap: 8px;
 }
+/* Beside the selection or pin that made the draft (#125); left/top are inline. */
+.composer.anchored { bottom: auto; transform: none; width: min(440px, calc(100vw - 16px)); }
 .composer-head { color: var(--dim); }
+.composer-hint { color: var(--dim); font-size: 11px; }
+.motivation-chips { display: flex; gap: 4px; flex: 1; flex-wrap: wrap; }
+.motivation-chips .chip {
+  padding: 2px 8px; font-size: 11px; border-radius: 999px;
+  background: transparent; border: 1px solid var(--line); color: var(--dim);
+}
+.motivation-chips .chip.on { border-color: var(--accent); color: var(--ink); background: rgba(110,168,254,.15); }
 .composer-quote {
   display: flex; gap: 6px; align-items: baseline;
   border-left: 3px solid var(--warn); padding: 4px 8px;
@@ -444,7 +488,6 @@ input, textarea, select {
 .composer-foot { display: flex; gap: 8px; align-items: center; }
 .composer-foot .hint { flex: 1; color: var(--dim); font-size: 11px; }
 .link-composer { z-index: 73; }
-.composer-foot select { flex: 1; }
 
 .swatches { display: flex; gap: 6px; align-items: center; }
 .swatch {
@@ -950,7 +993,7 @@ a.brand { text-decoration: none; }
 
   .composer { bottom: calc(8px + env(safe-area-inset-bottom)); width: calc(100vw - 16px); }
   .composer-foot { flex-wrap: wrap; }
-  .composer-foot select { flex-basis: 100%; }
+  .composer-foot .motivation-chips { flex-basis: 100%; }
   .toast { top: auto; bottom: calc(80px + env(safe-area-inset-bottom)); max-width: calc(100vw - 24px); }
 
   .index { padding: 28px 16px 60px; }

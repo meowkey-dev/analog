@@ -39,6 +39,9 @@ describe("HTMLCardFrame", () => {
     const script = document.querySelector("script");
 
     expect(script?.textContent).toContain("analog-search-result");
+    // The selection bridge rides the same script (#125).
+    expect(script?.textContent).toContain("analog-selection");
+    expect(script?.textContent).toContain("analog-scroll-to");
     expect(() => new Function(script?.textContent ?? "")).not.toThrow();
   });
 });

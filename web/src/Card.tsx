@@ -138,11 +138,14 @@ export const Body = memo(function Body({ node, mdTheme, bodyRef, onHTMLLoad }: {
 /**
  * Prepended into html card content at render time (issue #23). Reports the
  * document's scroll/size metrics so the parent can anchor pins to the content
- * rather than the visible box, and quotes the text under a pin on request.
- * A replacement frame is scrolled to where its predecessor was through
- * `analog-scroll-to`, acknowledged with the restored metrics (#127).
- * Kept dependency-free and read-only: it observes the frame's own document and
- * talks to the parent that put it there.
+ * rather than the visible box, quotes the text under a pin on request, and
+ * reports a text selection when the gesture making it ends (#125), so the
+ * parent can offer to comment on it. `analog-scroll-to` scrolls the frame,
+ * acknowledged with the resulting metrics: a replacement frame is restored to
+ * where its predecessor was (#127), and a chosen comment's pin is brought into
+ * view, smoothly when asked (#125). Kept dependency-free and read-only: it
+ * observes the frame's own document and talks to the parent that put it there.
+ * The only things it changes on request are its own selection and scroll.
  */
 const SCROLL_REPORTER = [
   "<script>(function(){",
@@ -172,6 +175,16 @@ const SCROLL_REPORTER = [
   "index=ranges.length?((index%ranges.length)+ranges.length)%ranges.length:0;",
   "getSelection().removeAllRanges();if(ranges[index]){getSelection().addRange(ranges[index]);p=ranges[index].startContainer.parentElement;if(p)p.scrollIntoView({block:'center',inline:'nearest'});}",
   "parent.postMessage({type:'analog-search-result',count:ranges.length,index:index},'*');}",
+  "var selT=0;",
+  "function selection(){clearTimeout(selT);selT=setTimeout(function(){",
+  "var s=getSelection(),t=s&&!s.isCollapsed&&s.rangeCount?s.toString().replace(/\\s+/g,' ').trim():'',r;",
+  "if(!t){parent.postMessage({type:'analog-selection',text:''},'*');return;}",
+  "r=s.getRangeAt(0).getBoundingClientRect();",
+  "parent.postMessage({type:'analog-selection',text:t.length>240?t.slice(0,240)+'…':t,vx:r.left,vy:r.top,vw:r.width,vh:r.height},'*');},0);}",
+  "addEventListener('mouseup',selection);",
+  "addEventListener('touchend',selection);",
+  "addEventListener('keyup',function(e){if(e.shiftKey||e.key==='Shift')selection();});",
+  "document.addEventListener('selectionchange',function(){var s=getSelection();if(!s||s.isCollapsed)selection();});",
   "addEventListener('scroll',soon,true);",
   "addEventListener('resize',soon);",
   "addEventListener('load',send);",
@@ -181,8 +194,9 @@ const SCROLL_REPORTER = [
   "var d=e.data;",
   "if(!d)return;",
   "if(d.type==='analog-search'){searchFor(String(d.query||''),Number(d.index)||0);return;}",
-  "if(d.type==='analog-scroll-to'){scrollTo(Number(d.sx)||0,Number(d.sy)||0);var m=metrics();m.type='analog-scroll';m.ack=d.ack;parent.postMessage(m,'*');return;}",
+  "if(d.type==='analog-scroll-to'){scrollTo({left:Number(d.sx)||0,top:Number(d.sy)||0,behavior:d.smooth?'smooth':'auto'});var m=metrics();m.type='analog-scroll';m.ack=d.ack;parent.postMessage(m,'*');return;}",
   "if(d.type==='analog-report'){send();return;}",
+  "if(d.type==='analog-selection-clear'){getSelection().removeAllRanges();return;}",
   "if(d.type==='analog-quote'){var t=quoteFor(d.vx||0,d.vy||0,d.vw||0,d.vh||0);if(t)parent.postMessage({type:'analog-quote',text:t},'*');}});",
   "send();",
   "})();</script>",
@@ -668,7 +682,7 @@ export function PopOut(props: {
         <header>
           <span className="popout-title">{node.sp_title || node.id}</span>
           <button className={props.annotateMode ? "on" : ""} onClick={props.onToggleAnnotate}
-                  title="Click the card to drop a pin, shift-drag for a region (c)">comment</button>
+                  title="Select text to comment on it; this mode pins a point, or shift-drag for a region (c)">comment</button>
           <button onClick={props.onClose}>close</button>
         </header>
         <div className="body-zone popout-body">
