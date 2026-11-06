@@ -85,6 +85,18 @@ async function selectText(el: Element) {
 }
 
 describe("comment by selecting (#125)", () => {
+  it("dismisses the Comment offer when the empty board is pressed", async () => {
+    const container = render(<Canvas {...canvasProps} />);
+    await selectText(container.querySelector(".card-body")!);
+    expect(container.querySelector(".selection-comment")).not.toBeNull();
+
+    act(() => container.querySelector(".canvas")!.dispatchEvent(
+      new MouseEvent("pointerdown", { bubbles: true, cancelable: true, button: 0 }),
+    ));
+
+    expect(window.getSelection()!.isCollapsed).toBe(true);
+    expect(container.querySelector(".selection-comment")).toBeNull();
+  });
   it("offers Comment for selected card text, with no comment mode", async () => {
     const onDraft = vi.fn();
     const container = render(<Canvas {...canvasProps} onDraft={onDraft} />);
