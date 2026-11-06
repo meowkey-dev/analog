@@ -102,7 +102,7 @@ input, textarea, select {
 .canvas.panning { cursor: grabbing; }
 .canvas.annotating { cursor: crosshair; }
 /* A drag must never leave a text selection behind it (#18). */
-.canvas .card-body, .canvas .card-thread, .canvas .composer {
+.canvas .card-body, .canvas .diff, .canvas .card-thread, .canvas .composer {
   user-select: text; -webkit-user-select: text;
 }
 .canvas.dragging, .canvas.dragging * { user-select: none; -webkit-user-select: none; }
