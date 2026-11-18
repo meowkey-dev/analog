@@ -89,6 +89,9 @@ input, textarea, select {
   overflow: hidden;
   overflow: clip;
   touch-action: none;
+  /* Selection starts in readable content, never in board chrome or card footers. */
+  user-select: none;
+  -webkit-user-select: none;
   background-color: var(--bg);
   background-image:
     linear-gradient(var(--grid) 1px, transparent 1px),
@@ -99,7 +102,10 @@ input, textarea, select {
 .canvas.panning { cursor: grabbing; }
 .canvas.annotating { cursor: crosshair; }
 /* A drag must never leave a text selection behind it (#18). */
-.canvas.dragging { user-select: none; -webkit-user-select: none; }
+.canvas .card-body, .canvas .diff, .canvas .card-thread, .canvas .composer {
+  user-select: text; -webkit-user-select: text;
+}
+.canvas.dragging, .canvas.dragging * { user-select: none; -webkit-user-select: none; }
 /* drop an image onto the board (#67): a dashed frame, not a toast. */
 .canvas.drop-target::after {
   content: "drop to place on the board";

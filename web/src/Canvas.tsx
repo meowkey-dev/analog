@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Card, type ResizeDir } from "./Card";
 import { Links } from "./Links";
-import type { DraftAnnotation } from "./Annotations";
+import { clearCardSelections, type DraftAnnotation } from "./Annotations";
 import type { Annotation, Edge, Node } from "./api";
 import { filesFromDataTransfer, isFileDrag } from "./upload";
 import { Minimap } from "./Minimap";
@@ -331,6 +331,17 @@ export function Canvas(props: CanvasProps) {
 
   // --- pointer handling ------------------------------------------------------
 
+  useEffect(() => {
+    const escape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      const target = event.target;
+      if (target instanceof Element && target.closest("input, textarea, select, [contenteditable]")) return;
+      clearCardSelections();
+    };
+    window.addEventListener("keydown", escape);
+    return () => window.removeEventListener("keydown", escape);
+  }, []);
+
   const startPan = (event: React.PointerEvent) => {
     if (event.button !== 0 && event.button !== 1) return;
     const target = event.target;
@@ -341,6 +352,7 @@ export function Canvas(props: CanvasProps) {
     // CSS only sees the dragging class after React renders it. Cancel the native
     // gesture at pointerdown too, before the browser can begin a selection (#79).
     event.preventDefault();
+    clearCardSelections();
     props.onSelectCard(null);
     props.onSelectEdge(null);
     props.onSelectAnnotation(null);
@@ -360,6 +372,7 @@ export function Canvas(props: CanvasProps) {
     if (target instanceof Element && target.closest("button, input, textarea, select, a")) return;
     event.preventDefault();
     event.stopPropagation();
+    clearCardSelections();
     if (event.pointerType === "touch") {
       // A finger on a phone lands on card heads constantly while panning. Moving
       // a card needs a deliberate hold; moving before the hold pans the board.
@@ -407,6 +420,7 @@ export function Canvas(props: CanvasProps) {
   const startResize = (event: React.PointerEvent, node: Node, dir: ResizeDir) => {
     event.preventDefault();
     event.stopPropagation();
+    clearCardSelections();
     setDrag({
       kind: "resize", id: node.id, dir, node,
       startPointer: [event.clientX, event.clientY],
@@ -419,6 +433,7 @@ export function Canvas(props: CanvasProps) {
     // Canceling the pointerdown stops the drag from starting a text selection (#18).
     event.preventDefault();
     event.stopPropagation();
+    clearCardSelections();
     setLinkTo(toWorld(event.clientX, event.clientY));
     setDrag({
       kind: "link", id: node.id, node,

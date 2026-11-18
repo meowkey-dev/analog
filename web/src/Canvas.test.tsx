@@ -99,6 +99,39 @@ function pointerDown(target: Element): MouseEvent {
 }
 
 describe("Canvas drag gestures", () => {
+  it.each([".canvas", ".card-head", ".handle.resize.se", ".handle.link"])("clears a page-wide selection before dragging %s", (selector) => {
+    const container = renderCanvas();
+    const selection = window.getSelection()!;
+    const range = document.createRange();
+    range.selectNodeContents(container);
+    selection.addRange(range);
+    expect(selection.isCollapsed).toBe(false);
+
+    pointerDown(container.querySelector(selector)!);
+
+    expect(selection.isCollapsed).toBe(true);
+  });
+
+  it("clears selections inside sandboxed HTML cards when pressing the board", () => {
+    const html = { ...node, sp_kind: "html" as const, text: "<p>HTML text</p>" };
+    const container = renderCanvas({ nodes: [html], allNodes: [html] });
+    const frame = container.querySelector("iframe")!;
+    const post = vi.spyOn(frame.contentWindow!, "postMessage");
+
+    pointerDown(container.querySelector(".canvas")!);
+
+    expect(post).toHaveBeenCalledWith({ type: "analog-selection-clear" }, "*");
+  });
+
+  it("clears a native selection with Escape", () => {
+    const container = renderCanvas();
+    const range = document.createRange();
+    range.selectNodeContents(container);
+    window.getSelection()!.addRange(range);
+    act(() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })));
+    expect(window.getSelection()!.isCollapsed).toBe(true);
+  });
+
   it.each([
     ["board pan", ".canvas"],
     ["card move", ".card-head"],

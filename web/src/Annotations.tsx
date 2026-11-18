@@ -61,6 +61,12 @@ interface PendingSelection {
  */
 const SELECTION_OWNER = "analog-selection-owner";
 
+/** Dismiss native selections and comment offers, including sandboxed HTML cards. */
+export function clearCardSelections(): void {
+  window.getSelection()?.removeAllRanges();
+  window.dispatchEvent(new CustomEvent(SELECTION_OWNER, { detail: null }));
+}
+
 interface OverlayProps {
   node: Node;
   /** The scrollable body element (the iframe itself for html cards). */
